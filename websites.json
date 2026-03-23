@@ -1,0 +1,26 @@
+[
+    {
+        "name": "broadcom",
+        "url": "https://news.broadcom.com/apj",
+        "domain": "broadcom.com",
+        "base_selector": "div.post-grid-item-v2__text, div.post-featured-v2__text",
+        "title_selector": "a:nth-of-type(2)",
+        "url_selector": "a:nth-of-type(2)"
+    },
+    {
+        "name": "veeam",
+        "url": "https://www.veeam.com/blog/?ad=menu-resources",
+        "domain": "veeam.com",
+        "base_selector": "article.post-preview",
+        "title_selector": "a",
+        "url_selector": "a"
+    },
+    {
+        "name": "fastcompany",
+        "url": "https://www.fastcompany.com/news",
+        "domain": "fastcompany.com",
+        "base_selector": "article.post-preview",
+        "title_selector": "a",
+        "url_selector": "a"
+    }
+]
