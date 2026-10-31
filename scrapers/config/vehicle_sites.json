@@ -1,0 +1,39 @@
+[
+  {
+    "name": "ikman",
+    "url": "https://ikman.lk/en/ads/sri-lanka/vehicles",
+    "output_file": "vehicles_ikman.json",
+    "limit": 10,
+    "enabled": true,
+    "item_selector": "li.gtm-normal-ad, li[class*='normal--']",
+    "exclude_selector": "li.gtm-top-ad, li[class*='top-ad']",
+    "fields": {
+      "title":    {"selector": ["h2[class*='heading--']", "[class*='title--']"], "type": "text"},
+      "url":      {"selector": ["a.gtm-ad-item", "a[href*='/ad/']"], "type": "attribute", "attribute": "href"},
+      "price":    {"selector": ["[class*='price--']"], "type": "text"},
+      "location": {"selector": ["[class*='description--']"], "type": "text"},
+      "posted":   {"selector": ["[class*='updated-time--']"], "type": "text"},
+      "image":    {"selector": ["img"], "type": "attribute", "attribute": ["data-src", "src"]}
+    },
+    "crawl": {"magic": true, "delay_before_return_html": 2.0, "page_timeout": 60000}
+  },
+  {
+    "name": "riyasewana",
+    "url": "https://riyasewana.com/search/cars",
+    "output_file": "vehicles_riyasewana.json",
+    "limit": 10,
+    "enabled": true,
+    "item_selector": "li.item",
+    "exclude_selector": "li.item.promoted, li.item.featured",
+    "fields": {
+      "title":    {"selector": ["h2.more a", "h2 a"], "type": "text"},
+      "url":      {"selector": ["h2.more a", "h2 a"], "type": "attribute", "attribute": "href"},
+      "price":    {"selector": ["div.boxintxt.b"], "type": "text"},
+      "location": {"selector": ["div.boxintxt:first-child"], "type": "text"},
+      "mileage":  {"selector": ["div.boxintxt"], "type": "text", "contains": "km"},
+      "posted":   {"selector": ["div.boxintxt.s"], "type": "text"},
+      "image":    {"selector": ["div.imgbox img", "img"], "type": "attribute", "attribute": ["data-src", "src"]}
+    },
+    "crawl": {"magic": true, "delay_before_return_html": 2.0, "page_timeout": 60000}
+  }
+]
