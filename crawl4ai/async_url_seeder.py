@@ -53,6 +53,7 @@ except ImportError:
 # You might need to adjust this import based on your exact file structure
 # Import AsyncLogger for default if needed
 from .async_logger import AsyncLoggerBase, AsyncLogger
+from .egress_policy import proxy_url
 
 # Import SeedingConfig for type hints
 from typing import TYPE_CHECKING
@@ -303,7 +304,11 @@ class AsyncUrlSeeder:
     ):
         self.ttl = ttl
         self._owns_client = client is None  # Track if we created the client
-        self.client = client or httpx.AsyncClient(http2=True, timeout=20, headers={
+        # proxy=None unless an embedder installed one (the Docker server does).
+        # Every request in this class goes through self.client, so this single
+        # kwarg puts the seeder's whole fan-out -- sitemaps, robots, link heads,
+        # and each redirect hop -- behind the egress policy.
+        self.client = client or httpx.AsyncClient(http2=True, timeout=20, proxy=proxy_url(), headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) +AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         })
         self.logger = logger  # Store the logger instance
@@ -400,17 +405,19 @@ class AsyncUrlSeeder:
         if self.logger and hasattr(self.logger, 'verbose') and config.verbose is not None:
             self.logger.verbose = config.verbose
 
-        # ensure we have the latest CC collection id
-        if self.index_id is None:
-            self.index_id = await self._latest_index()
-
         # Parse source parameter - split by '+' to get list of sources
-        sources = source.split('+')
+        sources = [s.strip().lower() for s in source.split("+") if s.strip()]
+
         valid_sources = {"cc", "sitemap"}
         for s in sources:
             if s not in valid_sources:
                 raise ValueError(
                     f"Invalid source '{s}'. Valid sources are: {', '.join(valid_sources)}")
+
+            # ensure we have the latest CC collection id when the source is cc
+            if s == "cc" and self.index_id is None:
+                self.index_id = await self._latest_index()
+
 
         if hits_per_sec:
             if hits_per_sec <= 0:
@@ -448,16 +455,20 @@ class AsyncUrlSeeder:
         async def producer():
             try:
                 async for u in gen():
-                    if u in seen:
-                        self._log("debug", "Skipping duplicate URL: {url}",
-                                  params={"url": u}, tag="URL_SEED")
+                    try:
+                        if u in seen:
+                            self._log("debug", "Skipping duplicate URL: {url}",
+                                      params={"url": u}, tag="URL_SEED")
+                            continue
+                        if stop_event.is_set():
+                            self._log(
+                                "info", "Producer stopping due to max_urls limit.", tag="URL_SEED")
+                            break
+                        seen.add(u)
+                        await queue.put(u)  # Will block if queue is full, providing backpressure
+                    except UnicodeEncodeError:
+                        # Skip URLs that cause encoding errors (e.g. on Windows)
                         continue
-                    if stop_event.is_set():
-                        self._log(
-                            "info", "Producer stopping due to max_urls limit.", tag="URL_SEED")
-                        break
-                    seen.add(u)
-                    await queue.put(u)  # Will block if queue is full, providing backpressure
             except Exception as e:
                 self._log("error", "Producer encountered an error: {error}", params={
                           "error": str(e)}, tag="URL_SEED")
@@ -783,7 +794,8 @@ class AsyncUrlSeeder:
 
         Returns:
             * the same URL if it answers 2xx,
-            * the absolute redirect target if it answers 3xx,
+            * the verified absolute redirect target if it answers 3xx
+              and the target also answers 2xx,
             * None on any other status or network error.
         """
         try:
@@ -793,11 +805,23 @@ class AsyncUrlSeeder:
             if 200 <= r.status_code < 300:
                 return str(r.url)
 
-            # single level redirect
+            # single level redirect — verify target is alive
             if r.status_code in (301, 302, 303, 307, 308):
                 loc = r.headers.get("location")
                 if loc:
-                    return urljoin(url, loc)
+                    target = urljoin(url, loc)
+                    # Guard against self-redirects
+                    if target == url:
+                        return None
+                    try:
+                        r2 = await self.client.head(
+                            target, timeout=10, follow_redirects=False
+                        )
+                        if 200 <= r2.status_code < 300:
+                            return str(r2.url)
+                    except Exception:
+                        pass
+                    return None
 
             return None
 
@@ -985,7 +1009,8 @@ class AsyncUrlSeeder:
         def _normalize_loc(raw: Optional[str]) -> Optional[str]:
             if not raw:
                 return None
-            normalized = urljoin(base_url, raw.strip())
+            cleaned = raw.strip().replace("\u200b", "").replace("\ufeff", "")
+            normalized = urljoin(base_url, cleaned)
             if not normalized:
                 return None
             return normalized
@@ -1105,7 +1130,8 @@ class AsyncUrlSeeder:
         def _normalize_loc(raw: Optional[str]) -> Optional[str]:
             if not raw:
                 return None
-            normalized = urljoin(base_url, raw.strip())
+            cleaned = raw.strip().replace("\u200b", "").replace("\ufeff", "")
+            normalized = urljoin(base_url, cleaned)
             if not normalized:
                 return None
             return normalized
@@ -1290,6 +1316,7 @@ class AsyncUrlSeeder:
             head_data = await asyncio.to_thread(_parse_head, html) if ok else {}
             entry = {
                 "url": final or url,
+                "original_url": url,
                 "status": status,
                 "head_data": head_data,
             }
@@ -1750,7 +1777,7 @@ class AsyncUrlSeeder:
         self._log("info", "Fetching latest Common Crawl index from {url}",
                   params={"url": COLLINFO_URL}, tag="URL_SEED")
         try:
-            async with httpx.AsyncClient() as c:
+            async with httpx.AsyncClient(proxy=proxy_url()) as c:
                 j = await c.get(COLLINFO_URL, timeout=10)
                 j.raise_for_status()  # Raise an exception for bad status codes
                 idx = j.json()[0]["id"]

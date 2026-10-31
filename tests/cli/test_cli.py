@@ -1,9 +1,11 @@
 import pytest
 from click.testing import CliRunner
 from pathlib import Path
+from unittest.mock import patch
 import json
 import yaml
 from crawl4ai.cli import cli, load_config_file, parse_key_values
+from crawl4ai.models import CrawlResult, MarkdownGenerationResult
 import tempfile
 import os
 import click
@@ -128,6 +130,161 @@ class TestErrorHandling:
             '--schema', str(invalid_schema)
         ])
         assert result.exit_code != 0
+
+class TestDeepCrawlOutput:
+    """Tests for deep crawl output formatting"""
+
+    @pytest.fixture
+    def mock_crawl_results(self):
+        """Create mock CrawlResult objects simulating deep crawl results"""
+        def make_result(url, content):
+            markdown = MarkdownGenerationResult(
+                raw_markdown=content,
+                markdown_with_citations=content,
+                references_markdown="",
+                fit_markdown=content,
+            )
+            result = CrawlResult(
+                url=url,
+                html=f"<html>{content}</html>",
+                success=True,
+                metadata={"depth": 0},
+            )
+            result._markdown = markdown
+            return result
+
+        return [
+            make_result("https://example.com/", "# Homepage\n\nWelcome to the homepage."),
+            make_result("https://example.com/about", "# About\n\nAbout us page content."),
+            make_result("https://example.com/contact", "# Contact\n\nContact information."),
+        ]
+
+    def test_deep_crawl_markdown_output_includes_all_pages(self, runner, mock_crawl_results):
+        """Test that deep crawl with markdown output includes all pages, not just the first"""
+        with patch('crawl4ai.cli.anyio.run') as mock_anyio_run:
+            # Return list of results (simulating deep crawl)
+            mock_anyio_run.return_value = mock_crawl_results
+
+            result = runner.invoke(cli, [
+                'crawl',
+                'https://example.com',
+                '--deep-crawl', 'bfs',
+                '--max-pages', '3',
+                '-o', 'markdown'
+            ])
+
+            assert result.exit_code == 0, f"CLI failed with: {result.output}"
+            # Should contain content from ALL pages
+            assert 'https://example.com/' in result.output
+            assert 'https://example.com/about' in result.output
+            assert 'https://example.com/contact' in result.output
+            assert 'Homepage' in result.output
+            assert 'About us page content' in result.output
+            assert 'Contact information' in result.output
+
+    def test_deep_crawl_markdown_fit_output_includes_all_pages(self, runner, mock_crawl_results):
+        """Test that deep crawl with markdown-fit output includes all pages"""
+        with patch('crawl4ai.cli.anyio.run') as mock_anyio_run:
+            mock_anyio_run.return_value = mock_crawl_results
+
+            result = runner.invoke(cli, [
+                'crawl',
+                'https://example.com',
+                '--deep-crawl', 'bfs',
+                '--max-pages', '3',
+                '-o', 'markdown-fit'
+            ])
+
+            assert result.exit_code == 0, f"CLI failed with: {result.output}"
+            # Should contain all URLs
+            assert 'https://example.com/' in result.output
+            assert 'https://example.com/about' in result.output
+            assert 'https://example.com/contact' in result.output
+
+    def test_deep_crawl_file_output_includes_all_pages(self, runner, mock_crawl_results, tmp_path):
+        """Test that deep crawl with file output includes all pages"""
+        output_file = tmp_path / "output.md"
+
+        with patch('crawl4ai.cli.anyio.run') as mock_anyio_run:
+            mock_anyio_run.return_value = mock_crawl_results
+
+            result = runner.invoke(cli, [
+                'crawl',
+                'https://example.com',
+                '--deep-crawl', 'bfs',
+                '--max-pages', '3',
+                '-o', 'markdown',
+                '-O', str(output_file)
+            ])
+
+            assert result.exit_code == 0, f"CLI failed with: {result.output}"
+            content = output_file.read_text()
+            # Should contain content from ALL pages
+            assert 'https://example.com/' in content
+            assert 'https://example.com/about' in content
+            assert 'https://example.com/contact' in content
+
+    def test_single_crawl_markdown_output_unchanged(self, runner):
+        """Test that single (non-deep) crawl still works correctly"""
+        markdown = MarkdownGenerationResult(
+            raw_markdown="# Single Page\n\nContent here.",
+            markdown_with_citations="# Single Page\n\nContent here.",
+            references_markdown="",
+        )
+        single_result = CrawlResult(
+            url="https://example.com/",
+            html="<html>test</html>",
+            success=True,
+        )
+        single_result._markdown = markdown
+
+        with patch('crawl4ai.cli.anyio.run') as mock_anyio_run:
+            # Return single result (not a list)
+            mock_anyio_run.return_value = single_result
+
+            result = runner.invoke(cli, [
+                'crawl',
+                'https://example.com',
+                '-o', 'markdown'
+            ])
+
+            assert result.exit_code == 0, f"CLI failed with: {result.output}"
+            assert '# Single Page' in result.output
+            assert 'Content here' in result.output
+
+
+def test_json_output_without_extractor_fails_early(runner):
+    with patch("crawl4ai.cli.anyio.run") as run:
+        result = runner.invoke(cli, ["crawl", "https://example.com", "-o", "json"])
+    assert result.exit_code == 2
+    assert "-o json needs an extraction strategy" in result.output
+    run.assert_not_called()  # browser never started
+
+
+def test_json_output_with_question_is_allowed(runner):
+    with patch("crawl4ai.cli.anyio.run") as run, \
+         patch("crawl4ai.cli.setup_llm_config", return_value=("openai/gpt-4o", "x")):
+        runner.invoke(cli, ["crawl", "https://example.com", "-o", "json", "-q", "hi"])
+    run.assert_called()  # no early error
+
+
+def _crawler_cfg(runner, *args):
+    with patch("crawl4ai.cli.anyio.run") as run:
+        runner.invoke(cli, ["crawl", "https://example.com", "-o", "md", *args])
+    return run.call_args.args[3]
+
+
+def test_cache_bypassed_by_default(runner):
+    from crawl4ai import CacheMode
+    assert _crawler_cfg(runner).cache_mode == CacheMode.BYPASS
+
+
+def test_crawler_param_cache_mode_is_honored(runner):
+    # #2365: -c cache_mode=enabled was overridden and kept as a plain string
+    from crawl4ai import CacheMode
+    assert _crawler_cfg(runner, "-c", "cache_mode=enabled").cache_mode == CacheMode.ENABLED
+    assert _crawler_cfg(runner, "-c", "cache_mode=enabled", "-bc").cache_mode == CacheMode.BYPASS
+
 
 if __name__ == '__main__':
     pytest.main(['-v', '-s', '--tb=native', __file__])

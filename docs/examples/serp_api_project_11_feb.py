@@ -8,12 +8,13 @@ from crawl4ai import (
     BrowserConfig,
     CrawlerRunConfig,
     CacheMode,
+    LLMConfig,
     LLMExtractionStrategy,
     JsonCssExtractionStrategy,
     CrawlerHub,
     CrawlResult,
     DefaultMarkdownGenerator,
-    PruningContentFilter,
+    PruningContentFilterLXML,
 )
 from pathlib import Path
 from pydantic import BaseModel
@@ -34,7 +35,7 @@ async def hello_web():
         crawler_config = CrawlerRunConfig(
             cache_mode=CacheMode.BYPASS,
             markdown_generator=DefaultMarkdownGenerator(
-                content_filter=PruningContentFilter(
+                content_filter=PruningContentFilterLXML(
                     threshold=0.48, threshold_type="fixed", min_word_threshold=0
                 )
             ),        
@@ -63,8 +64,10 @@ async def extract_using_llm():
             snippet: str
             sitelinks: Optional[List[Sitelink]] = None        
 
-        llm_extraction_strategy = LLMExtractionStrategy(
-            provider = "openai/gpt-4o",
+    llm_extraction_strategy = LLMExtractionStrategy(
+            llm_config = LLMConfig(
+                provider = "openai/gpt-4o",
+            ),
             schema = GoogleSearchResult.model_json_schema(),
             instruction="""I want to extract the title, link, snippet, and sitelinks from a Google search result. I shared here the content of div#search from the search result page. We are just interested in organic search results.
             Example: 

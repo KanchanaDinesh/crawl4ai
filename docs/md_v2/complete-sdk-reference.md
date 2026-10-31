@@ -151,15 +151,15 @@ if __name__ == "__main__":
 ## 4. Generating Markdown Output
 - **`result.markdown`**:  
 - **`result.markdown.fit_markdown`**:  
-  The same content after applying any configured **content filter** (e.g., `PruningContentFilter`).
+  The same content after applying any configured **content filter** (e.g., `PruningContentFilterLXML`).
 ### Example: Using a Filter with `DefaultMarkdownGenerator`
 ```python
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 md_generator = DefaultMarkdownGenerator(
-    content_filter=PruningContentFilter(threshold=0.4, threshold_type="fixed")
+    content_filter=PruningContentFilterLXML(threshold=0.4, threshold_type="fixed")
 )
 
 config = CrawlerRunConfig(
@@ -172,7 +172,7 @@ async with AsyncWebCrawler() as crawler:
     print("Raw Markdown length:", len(result.markdown.raw_markdown))
     print("Fit Markdown length:", len(result.markdown.fit_markdown))
 ```
-**Note**: If you do **not** specify a content filter or markdown generator, you’ll typically see only the raw Markdown. `PruningContentFilter` may adds around `50ms` in processing time. We’ll dive deeper into these strategies in a dedicated **Markdown Generation** tutorial.
+**Note**: If you do **not** specify a content filter or markdown generator, you’ll typically see only the raw Markdown. `PruningContentFilterLXML` may adds around `50ms` in processing time. We’ll dive deeper into these strategies in a dedicated **Markdown Generation** tutorial.
 ## 5. Simple Data Extraction (CSS-based)
 ```python
 from crawl4ai import JsonCssExtractionStrategy
@@ -232,6 +232,7 @@ if __name__ == "__main__":
 - Great for repetitive page structures (e.g., item listings, articles).
 - No AI usage or costs.
 - The crawler returns a JSON string you can parse or store.
+- For sites where data is split across sibling elements (e.g. Hacker News), use the `"source"` field key to navigate to a sibling before extracting: `{"name": "score", "selector": "span.score", "type": "text", "source": "+ tr"}`.
 > Tips: You can pass raw HTML to the crawler instead of a URL. To do so, prefix the HTML with `raw://`.
 ## 6. Simple Data Extraction (LLM-based)
 - **Open-Source Models** (e.g., `ollama/llama3.3`, `no_token`)  
@@ -611,7 +612,7 @@ Each `arun()` returns a **`CrawlResult`** containing:
 - `url`: Final URL (if redirected).
 - `html`: Original HTML.
 - `cleaned_html`: Sanitized HTML.
-- `markdown_v2`: Deprecated. Instead just use regular `markdown`
+- `markdown_v2`: Removed in v0.5. Accessing it raises `AttributeError`. Use `markdown`.
 - `extracted_content`: If an extraction strategy was used (JSON for CSS/LLM strategies).
 - `screenshot`, `pdf`: If screenshots/PDF requested.
 - `media`, `links`: Information about discovered images/links.
@@ -739,10 +740,10 @@ run_config = CrawlerRunConfig(
     cache_mode=CacheMode.BYPASS
 )
 ```
-- `bypass_cache=True` acts like `CacheMode.BYPASS`.
-- `disable_cache=True` acts like `CacheMode.DISABLED`.
-- `no_cache_read=True` acts like `CacheMode.WRITE_ONLY`.
-- `no_cache_write=True` acts like `CacheMode.READ_ONLY`.
+- `CacheMode.BYPASS` — Skip cache entirely; always fetch fresh, write result to cache.
+- `CacheMode.DISABLED` — No caching at all; don't read or write.
+- `CacheMode.WRITE_ONLY` — Never read from cache, but write results.
+- `CacheMode.READ_ONLY` — Read from cache if available, never write.
 ## 3. Content Processing & Selection
 ### 3.1 Text Processing
 ```python
@@ -1005,7 +1006,7 @@ Instead of using one config for all URLs, provide a list of configs with `url_ma
 from crawl4ai import CrawlerRunConfig, MatchMode
 from crawl4ai.processors.pdf import PDFContentScrapingStrategy
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 # PDF files - specialized extraction
@@ -1018,7 +1019,7 @@ pdf_config = CrawlerRunConfig(
 blog_config = CrawlerRunConfig(
     url_matcher=["*/blog/*", "*/article/*", "*python.org*"],
     markdown_generator=DefaultMarkdownGenerator(
-        content_filter=PruningContentFilter(threshold=0.48)
+        content_filter=PruningContentFilterLXML(threshold=0.48)
     )
 )
 
@@ -1076,8 +1077,8 @@ class CrawlResult(BaseModel):
     success: bool
     cleaned_html: Optional[str] = None
     fit_html: Optional[str] = None  # Preprocessed HTML optimized for extraction
-    media: Dict[str, List[Dict]] = {}
-    links: Dict[str, List[Dict]] = {}
+    media: Dict[str, List[Dict]] = {"images": [], "videos": [], "audios": []}
+    links: Dict[str, List[Dict]] = {"internal": [], "external": []}
     downloaded_files: Optional[List[str]] = None
     screenshot: Optional[str] = None
     pdf : Optional[bytes] = None
@@ -1170,7 +1171,7 @@ print(result.markdown.raw_markdown[:200])
 print(result.markdown.fit_markdown)
 print(result.markdown.fit_html)
 ```
-**Important**: "Fit" content (in `fit_markdown`/`fit_html`) exists in result.markdown, only if you used a **filter** (like **PruningContentFilter** or **BM25ContentFilter**) within a `MarkdownGenerationStrategy`.
+**Important**: "Fit" content (in `fit_markdown`/`fit_html`) exists in result.markdown, only if you used a **filter** (like **PruningContentFilterLXML** or **BM25ContentFilter**) within a `MarkdownGenerationStrategy`.
 ## 4. Media & Links
 ### 4.1 **`media`** *(Dict[str, List[Dict]])*  
 **What**: Contains info about discovered images, videos, or audio. Typically keys: `"images"`, `"videos"`, `"audios"`.  
@@ -1359,10 +1360,10 @@ async def handle_result(result: CrawlResult):
 ```
 ## 9. Key Points & Future
 1. **Deprecated legacy properties of CrawlResult**  
-   - `markdown_v2` - Deprecated in v0.5. Just use `markdown`. It holds the `MarkdownGenerationResult` now!
-   - `fit_markdown` and `fit_html` - Deprecated in v0.5. They can now be accessed via `MarkdownGenerationResult` in `result.markdown`. eg: `result.markdown.fit_markdown` and `result.markdown.fit_html`
+   - `markdown_v2` - Removed in v0.5. Accessing it raises `AttributeError`. Use `markdown`.
+   - `fit_markdown` and `fit_html` - Removed as top-level `CrawlResult` properties in v0.5. Use `result.markdown.fit_markdown` and `result.markdown.fit_html`.
 2. **Fit Content**  
-   - **`fit_markdown`** and **`fit_html`** appear in MarkdownGenerationResult, only if you used a content filter (like **PruningContentFilter** or **BM25ContentFilter**) inside your **MarkdownGenerationStrategy** or set them directly.  
+   - **`fit_markdown`** and **`fit_html`** appear in MarkdownGenerationResult, only if you used a content filter (like **PruningContentFilterLXML** or **BM25ContentFilter**) inside your **MarkdownGenerationStrategy** or set them directly.  
    - If no filter is used, they remain `None`.
 3. **References & Citations**  
    - If you enable link citations in your `DefaultMarkdownGenerator` (`options={"citations": True}`), you’ll see `markdown_with_citations` plus a **`references_markdown`** block. This helps large language models or academic-like referencing.
@@ -1401,6 +1402,8 @@ class BrowserConfig:
         user_agent=None,
         text_mode=False,
         light_mode=False,
+        avoid_ads=False,
+        avoid_css=False,
         extra_args=None,
         enable_stealth=False,
         # ... other advanced parameters omitted here
@@ -1439,15 +1442,19 @@ class BrowserConfig:
 8. **`user_agent`**:  
    - Custom User-Agent string. If `None`, a default is used.  
    - You can also set `user_agent_mode="random"` for randomization (if you want to fight bot detection).
-9. **`text_mode`** & **`light_mode`**:  
-   - `text_mode=True` disables images, possibly speeding up text-only crawls.  
-   - `light_mode=True` turns off certain background features for performance.  
-10. **`extra_args`**:  
-    - Additional flags for the underlying browser.  
+9. **`text_mode`** & **`light_mode`**:
+   - `text_mode=True` disables images, possibly speeding up text-only crawls.
+   - `light_mode=True` turns off certain background features for performance.
+10. **`avoid_ads`** & **`avoid_css`**:
+    - `avoid_ads=True` blocks requests to common ad and tracker domains (Google Analytics, DoubleClick, Facebook, Hotjar, etc.) at the browser context level. Reduces network overhead and memory usage.
+    - `avoid_css=True` blocks loading of CSS files (`.css`, `.less`, `.scss`, `.sass`), useful when you only need text content and want faster, leaner crawls.
+    - Both default to `False` (opt-in). Can be combined with each other and with `text_mode`.
+11. **`extra_args`**:
+    - Additional flags for the underlying browser.
     - E.g. `["--disable-extensions"]`.
-11. **`enable_stealth`**:  
-    - If `True`, enables stealth mode using playwright-stealth.  
-    - Modifies browser fingerprints to avoid basic bot detection.  
+12. **`enable_stealth`**:
+    - If `True`, enables stealth mode using playwright-stealth.
+    - Modifies browser fingerprints to avoid basic bot detection.
     - Default is `False`. Recommended for sites with bot protection.
 ### Helper Methods
 Both configuration classes provide a `clone()` method to create modified copies:
@@ -1702,7 +1709,7 @@ browser_cfg = BrowserConfig(
     headless=True,
     viewport_width=1280,
     viewport_height=720,
-    proxy="http://user:pass@proxy:8080",
+    proxy_config="http://user:pass@proxy:8080",
     user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36",
 )
 ```
@@ -1780,13 +1787,17 @@ run_cfg = CrawlerRunConfig(
 ### D) **Page Interaction**
 | **Parameter**              | **Type / Default**            | **What It Does**                                                                                                                       |
 |----------------------------|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| **`js_code`**              | `str or list[str]` (None)      | JavaScript to run after load. E.g. `"document.querySelector('button')?.click();"`.                                                     |
-| **`js_only`**              | `bool` (False)                 | If `True`, indicates we’re reusing an existing session and only applying JS. No full reload.                                           |
+| **`js_code`**              | `str or list[str]` (None)      | JavaScript to run **after** `wait_for` and `delay_before_return_html`, on the fully-loaded page. E.g. `"document.querySelector('button')?.click();"`. |
+| **`js_code_before_wait`**  | `str or list[str]` (None)      | JavaScript to run **before** `wait_for`. Use for triggering loading that `wait_for` then checks.                                       |
+| **`js_only`**              | `bool` (False)                 | If `True`, indicates we're reusing an existing session and only applying JS. No full reload.                                           |
 | **`ignore_body_visibility`** | `bool` (True)                | Skip checking if `<body>` is visible. Usually best to keep `True`.                                                                     |
+| **`body_visibility_timeout`** | `int` (30000)               | Maximum time in milliseconds to wait for `<body>` to become visible. Must be positive.                                                  |
 | **`scan_full_page`**       | `bool` (False)                 | If `True`, auto-scroll the page to load dynamic content (infinite scroll).                                                              |
-| **`scroll_delay`**         | `float` (0.2)                  | Delay between scroll steps if `scan_full_page=True`.                                                                                   |
+| **`scroll_delay`**         | `float` (0.2)                  | Delay between scroll steps when scanning the full page (`scan_full_page=True`) or capturing full-page screenshots. |
 | **`process_iframes`**      | `bool` (False)                 | Inlines iframe content for single-page extraction.                                                                                     |
+| **`flatten_shadow_dom`**   | `bool` (False)                 | Flattens Shadow DOM content into the light DOM before HTML capture. Resolves slots, strips shadow-scoped styles, and force-opens closed shadow roots. Essential for sites built with Web Components. |
 | **`remove_overlay_elements`** | `bool` (False)              | Removes potential modals/popups blocking the main content.                                                                              |
+| **`remove_consent_popups`** | `bool` (False)               | Removes GDPR/cookie consent popups from known CMP providers (OneTrust, Cookiebot, TrustArc, Quantcast, Didomi, Sourcepoint, FundingChoices, etc.). Tries clicking "Accept All" first, then falls back to DOM removal. |
 | **`simulate_user`**        | `bool` (False)                 | Simulate user interactions (mouse movements) to avoid bot detection.                                                                    |
 | **`override_navigator`**   | `bool` (False)                 | Override `navigator` properties in JS for stealth.                                                                                      |
 | **`magic`**                | `bool` (False)                 | Automatic handling of popups/consent banners. Experimental.                                                                             |
@@ -1927,7 +1938,7 @@ async def main():
         headless=False,
         viewport_width=1280,
         viewport_height=720,
-        proxy="http://user:pass@myproxy:8080",
+        proxy_config="http://user:pass@myproxy:8080",
         text_mode=True
     )
 
@@ -2028,7 +2039,7 @@ The `arun()` method returns a `CrawlResult` object with several useful propertie
 ```python
 config = CrawlerRunConfig(
     markdown_generator=DefaultMarkdownGenerator(
-        content_filter=PruningContentFilter(threshold=0.6),
+        content_filter=PruningContentFilterLXML(threshold=0.6),
         options={"ignore_links": True}
     )
 )
@@ -2283,12 +2294,12 @@ config = CrawlerRunConfig(markdown_generator=md_generator)
 - **`bm25_threshold`**: Raise it to keep fewer blocks; lower it to keep more.  
 - **`use_stemming`** *(default `True`)*: Whether to apply stemming to the query and content.
 - **`language (str)`**: Language for stemming (default: 'english').
-### 5.2 PruningContentFilter
-If you **don’t** have a specific query, or if you just want a robust “junk remover,” use `PruningContentFilter`. It analyzes text density, link density, HTML structure, and known patterns (like “nav,” “footer”) to systematically prune extraneous or repetitive sections.
+### 5.2 PruningContentFilterLXML
+If you **don’t** have a specific query, or if you just want a robust “junk remover,” use `PruningContentFilterLXML`. It analyzes text density, link density, HTML structure, and known patterns (like “nav,” “footer”) to systematically prune extraneous or repetitive sections.
 ```python
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 
-prune_filter = PruningContentFilter(
+prune_filter = PruningContentFilterLXML(
     threshold=0.5,
     threshold_type="fixed",  # or "dynamic"
     min_word_threshold=50
@@ -2373,12 +2384,12 @@ When a content filter is active, the library produces two forms of markdown insi
 import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 
 async def main():
     config = CrawlerRunConfig(
         markdown_generator=DefaultMarkdownGenerator(
-            content_filter=PruningContentFilter(threshold=0.6),
+            content_filter=PruningContentFilterLXML(threshold=0.6),
             options={"ignore_links": True}
         )
     )
@@ -2414,14 +2425,14 @@ print("FIT:\n", md_obj.fit_markdown)
 - Or feed `fit_markdown` into a vector database to reduce token usage.  
 - `references_markdown` can help you keep track of link provenance.
 ## 8. Combining Filters (BM25 + Pruning) in Two Passes
-You might want to **prune out** noisy boilerplate first (with `PruningContentFilter`), and then **rank what’s left** against a user query (with `BM25ContentFilter`). You don’t have to crawl the page twice. Instead:
-1. **First pass**: Apply `PruningContentFilter` directly to the raw HTML from `result.html` (the crawler’s downloaded HTML).  
+You might want to **prune out** noisy boilerplate first (with `PruningContentFilterLXML`), and then **rank what’s left** against a user query (with `BM25ContentFilter`). You don’t have to crawl the page twice. Instead:
+1. **First pass**: Apply `PruningContentFilterLXML` directly to the raw HTML from `result.html` (the crawler’s downloaded HTML).  
 2. **Second pass**: Take the pruned HTML (or text) from step 1, and feed it into `BM25ContentFilter`, focusing on a user query.
 ### Two-Pass Example
 ```python
 import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
-from crawl4ai.content_filter_strategy import PruningContentFilter, BM25ContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML, BM25ContentFilter
 from bs4 import BeautifulSoup
 
 async def main():
@@ -2440,8 +2451,8 @@ async def main():
 
         raw_html = result.html
 
-        # 2. First pass: PruningContentFilter on raw HTML
-        pruning_filter = PruningContentFilter(threshold=0.5, min_word_threshold=50)
+        # 2. First pass: PruningContentFilterLXML on raw HTML
+        pruning_filter = PruningContentFilterLXML(threshold=0.5, min_word_threshold=50)
 
         # filter_content returns a list of "text chunks" or cleaned HTML sections
         pruned_chunks = pruning_filter.filter_content(raw_html)
@@ -2508,17 +2519,24 @@ In **`CrawlerRunConfig`**, you can specify a **`content_filter`** to shape how c
 - **`result.markdown.fit_markdown`** (filtered or “fit” version)
 - **`result.markdown.fit_html`** (the corresponding HTML snippet that produced `fit_markdown`)
 ### 1.2 Common Filters
-## 2. PruningContentFilter
+## 2. PruningContentFilterLXML
+
+!!! warning "Deprecation"
+    Use `PruningContentFilterLXML` (lxml engine, **~10× faster**, identical output). The legacy
+    `PruningContentFilter` (BeautifulSoup) still works but emits a `DeprecationWarning`. In an
+    upcoming release `PruningContentFilter` will become an alias for the lxml engine, with
+    `PruningContentFilterLXML` kept as a legacy alias.
+
 ### 2.1 Usage Example
 ```python
 import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 async def main():
     # Step 1: Create a pruning filter
-    prune_filter = PruningContentFilter(
+    prune_filter = PruningContentFilterLXML(
         # Lower → more content retained, higher → more content pruned
         threshold=0.45,           
         # "fixed" or "dynamic"
@@ -2613,7 +2631,7 @@ If the content filter is **BM25**, you might see additional logic or references 
 ## 5. Code Patterns Recap
 ### 5.1 Pruning
 ```python
-prune_filter = PruningContentFilter(
+prune_filter = PruningContentFilterLXML(
     threshold=0.5,
     threshold_type="fixed",
     min_word_threshold=10
@@ -2637,7 +2655,7 @@ config = CrawlerRunConfig(
     excluded_tags=["nav", "footer", "header"],
     exclude_external_links=True,
     markdown_generator=DefaultMarkdownGenerator(
-        content_filter=PruningContentFilter(threshold=0.5)
+        content_filter=PruningContentFilterLXML(threshold=0.5)
     )
 )
 ```
@@ -2811,6 +2829,46 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+## 3.1 Flattening Shadow DOM
+Sites built with **Web Components** (Stencil, Lit, Shoelace, Angular Elements, etc.) render content inside Shadow DOM — an encapsulated sub-tree invisible to `page.content()`. Set `flatten_shadow_dom=True` to extract it:
+```python
+config = CrawlerRunConfig(
+    flatten_shadow_dom=True,
+    wait_until="load",
+    delay_before_return_html=3.0,  # give components time to hydrate
+)
+```
+```python
+import asyncio
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
+
+async def main():
+    config = CrawlerRunConfig(
+        flatten_shadow_dom=True,
+        wait_until="load",
+        delay_before_return_html=3.0,
+    )
+    async with AsyncWebCrawler() as crawler:
+        result = await crawler.arun(
+            url="https://store.boschrexroth.com/en/us/p/hydraulic-cylinder-r900999011",
+            config=config,
+        )
+        # Without flatten_shadow_dom: ~1 KB markdown (breadcrumbs only)
+        # With flatten_shadow_dom:   ~33 KB (product description, specs, downloads)
+        print(len(result.markdown.raw_markdown))
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+When enabled, Crawl4AI also injects an init script that force-opens closed shadow roots. The flattener resolves `<slot>` projections and strips shadow-scoped `<style>` tags, producing clean HTML for the downstream scraping/markdown pipeline.
+
+**Execution order**: `flatten_shadow_dom` runs right before HTML capture, after all waits and JS execution:
+```
+js_code_before_wait → wait_for → delay → js_code → flatten_shadow_dom → page capture
+```
+
+For a full runnable example, see [`shadow_dom_crawling.py`](https://github.com/unclecode/crawl4ai/blob/main/docs/examples/shadow_dom_crawling.py).
+
 ## 4. Structured Extraction Examples
 ### 4.1 Pattern-Based with `JsonCssExtractionStrategy`
 ```python
@@ -3344,8 +3402,9 @@ Below are the key interaction-related parameters in `CrawlerRunConfig`. For a fu
 - **`wait_for`**: CSS (`"css:..."`) or JS (`"js:..."`) expression to wait for.  
 - **`session_id`**: Reuse the same page across calls.  
 - **`cache_mode`**: Whether to read/write from the cache or bypass.  
-- **`remove_overlay_elements`**: Remove certain popups automatically.  
-- **`simulate_user`, `override_navigator`, `magic`**: Anti-bot or “human-like” interactions.
+- **`remove_overlay_elements`**: Remove certain popups automatically.
+- **`remove_consent_popups`**: Remove GDPR/cookie consent popups from known CMP providers (OneTrust, Cookiebot, Didomi, etc.).
+- **`simulate_user`, `override_navigator`, `magic`**: Anti-bot or "human-like" interactions.
 ## 8. Conclusion
 1. **Execute JavaScript** for scrolling, clicks, or form filling.  
 2. **Wait** for CSS or custom JS conditions before capturing data.  
@@ -4077,7 +4136,7 @@ That's how you keep the config self-contained, illustrate **XPath** usage, and d
 ## 3. Advanced Schema & Nested Structures
 ### Sample E-Commerce HTML
 ```
-https://gist.githubusercontent.com/githubusercontent/2d7b8ba3cd8ab6cf3c8da771ddb36878/raw/1ae2f90c6861ce7dd84cc50d3df9920dee5e1fd2/sample_ecommerce.html
+https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/examples/sample_ecommerce.html
 ```
 ```python
 schema = {
@@ -4202,7 +4261,7 @@ async def extract_ecommerce_data():
 
     async with AsyncWebCrawler(verbose=True) as crawler:
         result = await crawler.arun(
-            url="https://gist.githubusercontent.com/githubusercontent/2d7b8ba3cd8ab6cf3c8da771ddb36878/raw/1ae2f90c6861ce7dd84cc50d3df9920dee5e1fd2/sample_ecommerce.html",
+            url="https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/examples/sample_ecommerce.html",
             extraction_strategy=strategy,
             config=config
         )
@@ -4359,7 +4418,7 @@ async def extract_with_generated_pattern():
         # Get sample HTML for context
         async with AsyncWebCrawler() as crawler:
             result = await crawler.arun("https://example.com/products")
-            html = result.fit_html
+            html = result.markdown.fit_html
 
         # Generate pattern (one-time LLM usage)
         pattern = RegexExtractionStrategy.generate_pattern(
@@ -4492,6 +4551,20 @@ xpath_schema = JsonXPathExtractionStrategy.generate_schema(
 # Use the generated schema for fast, repeated extractions
 strategy = JsonCssExtractionStrategy(css_schema)
 ```
+### Token Usage Tracking
+`generate_schema` may make multiple LLM calls internally (field inference, generation, validation retries). Track total token consumption by passing a `TokenUsage` accumulator:
+```python
+from crawl4ai.models import TokenUsage
+
+usage = TokenUsage()
+schema = JsonCssExtractionStrategy.generate_schema(
+    url="https://example.com/products",
+    query="extract product name and price",
+    usage=usage,
+)
+print(f"Total tokens: {usage.total_tokens}")
+```
+The `usage` parameter is optional and fully backward-compatible. Both `generate_schema` (sync) and `agenerate_schema` (async) support it.
 ### LLM Provider Options
 1. **OpenAI GPT-4 (`openai/gpt4o`)**
    - Default provider
@@ -4633,7 +4706,7 @@ To keep context continuous across chunks, we can overlap them. E.g., `overlap_ra
 ## 7. Input Format
 By default, **LLMExtractionStrategy** uses `input_format="markdown"`, meaning the **crawler’s final markdown** is fed to the LLM. You can change to:
 - **`html`**: The cleaned HTML or raw HTML (depending on your crawler config) goes into the LLM.  
-- **`fit_markdown`**: If you used, for instance, `PruningContentFilter`, the “fit” version of the markdown is used. This can drastically reduce tokens if you trust the filter.  
+- **`fit_markdown`**: If you used, for instance, `PruningContentFilterLXML`, the “fit” version of the markdown is used. This can drastically reduce tokens if you trust the filter.  
 - **`markdown`**: Standard markdown output from the crawler’s `markdown_generator`.
 This setting is crucial: if the LLM instructions rely on HTML tags, pick `"html"`. If you prefer a text-based approach, pick `"markdown"`.
 ```python
@@ -5164,7 +5237,7 @@ This ensures the newly created context is under your control **before** `arun()`
 
 ## Core Imports
 ```python
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerConfig, CacheMode
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, LLMConfig
 from crawl4ai.extraction_strategy import LLMExtractionStrategy, JsonCssExtractionStrategy, CosineStrategy
 ```
 
@@ -5178,14 +5251,14 @@ async with AsyncWebCrawler() as crawler:
 ## Advanced Pattern
 ```python
 browser_config = BrowserConfig(headless=True, viewport_width=1920)
-crawler_config = CrawlerConfig(
+crawler_config = CrawlerRunConfig(
     cache_mode=CacheMode.BYPASS,
     wait_for="css:.content",
     screenshot=True,
     pdf=True
 )
 strategy = LLMExtractionStrategy(
-    provider="openai/gpt-4",
+    llm_config=LLMConfig(provider="openai/gpt-4", api_token="your-openai-token"),
     instruction="Extract products with name and price"
 )
 

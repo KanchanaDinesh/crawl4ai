@@ -10,7 +10,7 @@ async def arun_many(
     config: Optional[Union[CrawlerRunConfig, List[CrawlerRunConfig]]] = None,
     dispatcher: Optional[BaseDispatcher] = None,
     ...
-) -> Union[List[CrawlResult], AsyncGenerator[CrawlResult, None]]:
+) -> RunManyReturn:
     """
     Crawl multiple URLs concurrently or in batches.
 
@@ -20,7 +20,7 @@ async def arun_many(
         - A list of `CrawlerRunConfig` objects with url_matcher patterns
     :param dispatcher: (Optional) A concurrency controller (e.g. MemoryAdaptiveDispatcher).
     ...
-    :return: Either a list of `CrawlResult` objects, or an async generator if streaming is enabled.
+    :return: RunManyReturn containing either a list of `CrawlResult` objects or an async generator if streaming is enabled.
     """
 ```
 
@@ -29,7 +29,7 @@ async def arun_many(
 1. **Multiple URLs**:  
    
    - Instead of crawling a single URL, you pass a list of them (strings or tasks).  
-   - The function returns either a **list** of `CrawlResult` or an **async generator** if streaming is enabled.
+   - The function returns `RunManyReturn` which contains either a **list** of `CrawlResult` or an **async generator** if streaming is enabled.
 
 2. **Concurrency & Dispatchers**:  
 
@@ -105,7 +105,7 @@ Instead of using one config for all URLs, provide a list of configs with `url_ma
 from crawl4ai import CrawlerRunConfig, MatchMode
 from crawl4ai.processors.pdf import PDFContentScrapingStrategy
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilterLXML
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 # PDF files - specialized extraction
@@ -118,7 +118,7 @@ pdf_config = CrawlerRunConfig(
 blog_config = CrawlerRunConfig(
     url_matcher=["*/blog/*", "*/article/*", "*python.org*"],
     markdown_generator=DefaultMarkdownGenerator(
-        content_filter=PruningContentFilter(threshold=0.48)
+        content_filter=PruningContentFilterLXML(threshold=0.48)
     )
 )
 
@@ -164,7 +164,7 @@ results = await crawler.arun_many(
 
 ### Return Value
 
-Either a **list** of [`CrawlResult`](./crawl-result.md) objects, or an **async generator** if streaming is enabled. You can iterate to check `result.success` or read each item’s `extracted_content`, `markdown`, or `dispatch_result`.
+Returns a **`RunManyReturn`** object which contains either a **list** of [`CrawlResult`](./crawl-result.md) objects, or an **async generator** if streaming is enabled. You can iterate to check `result.success` or read each item’s `extracted_content`, `markdown`, or `dispatch_result`.
 
 ---
 

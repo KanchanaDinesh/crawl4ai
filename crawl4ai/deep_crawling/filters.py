@@ -85,7 +85,7 @@ class FilterChain:
 
     def add_filter(self, filter_: URLFilter) -> "FilterChain":
         """Add a filter to the chain"""
-        self.filters.append(filter_)
+        self.filters = self.filters + (filter_,)
         return self  # Enable method chaining
 
     async def apply(self, url: str) -> bool:
@@ -209,17 +209,19 @@ class URLPatternFilter(URLFilter):
                         lambda m: f'({"|".join(m.group(1).split(","))})',
                         pattern,
                     )
-                pattern = fnmatch.translate(pattern)
+                # A leading * already matches any prefix; \A stops search() retrying every offset.
+                pattern = ("\\A" if pattern.startswith("*") else "") + fnmatch.translate(pattern)
             self._path_patterns.append(
                 pattern if isinstance(pattern, Pattern) else re.compile(pattern)
             )
 
     @lru_cache(maxsize=10000)
     def apply(self, url: str) -> bool:
+        url_path = urlparse(url).path
+
         # Quick suffix check (*.html)
         if self._simple_suffixes:
-            path = url.split("?")[0]
-            if path.split("/")[-1].split(".")[-1] in self._simple_suffixes:
+            if url_path.split("/")[-1].split(".")[-1] in self._simple_suffixes:
                 result = True
                 self._update_stats(result)
                 return not result if self._reverse else result
@@ -232,21 +234,13 @@ class URLPatternFilter(URLFilter):
                     self._update_stats(result)
                     return not result if self._reverse else result
 
-        # Prefix check (/foo/*)
+        # Prefix check (/foo/* or https://domain/foo/*)
         if self._simple_prefixes:
-            path = url.split("?")[0]
-            # if any(path.startswith(p) for p in self._simple_prefixes):
-            #     result = True
-            #     self._update_stats(result)
-            #     return not result if self._reverse else result
-            ####
-            # Modified the prefix matching logic to ensure path boundary checking:
-            # - Check if the matched prefix is followed by a path separator (`/`), query parameter (`?`), fragment (`#`), or is at the end of the path
-            # - This ensures `/api/` only matches complete path segments, not substrings like `/apiv2/`
-            ####
             for prefix in self._simple_prefixes:
-                if path.startswith(prefix):
-                    if len(path) == len(prefix) or path[len(prefix)] in ['/', '?', '#']:
+                # Use url_path for path-only prefixes, full URL for absolute prefixes
+                match_against = url if '://' in prefix else url_path
+                if match_against.startswith(prefix):
+                    if len(match_against) == len(prefix) or match_against[len(prefix)] in ['/', '?', '#']:
                         result = True
                         self._update_stats(result)
                         return not result if self._reverse else result
@@ -434,9 +428,6 @@ class DomainFilter(URLFilter):
 
     __slots__ = ("_allowed_domains", "_blocked_domains", "_domain_cache")
 
-    # Regex for fast domain extraction
-    _DOMAIN_REGEX = re.compile(r"://([^/]+)")
-
     def __init__(
         self,
         allowed_domains: Union[str, List[str]] = None,
@@ -457,12 +448,17 @@ class DomainFilter(URLFilter):
         )
 
     @staticmethod
-    def _normalize_domains(domains: Union[str, List[str]]) -> Set[str]:
+    def _normalize_domain(domain: str) -> str:
+        """Lowercase a domain and strip a trailing dot"""
+        return domain.lower().rstrip(".")
+
+    @classmethod
+    def _normalize_domains(cls, domains: Union[str, List[str]]) -> Set[str]:
         """Fast domain normalization"""
         if isinstance(domains, str):
-            return {domains.lower()}
-        return {d.lower() for d in domains}
-    
+            return {cls._normalize_domain(domains)}
+        return {cls._normalize_domain(d) for d in domains}
+
     @staticmethod
     def _is_subdomain(domain: str, parent_domain: str) -> bool:
         """Check if domain is a subdomain of parent_domain"""
@@ -471,9 +467,12 @@ class DomainFilter(URLFilter):
     @staticmethod
     @lru_cache(maxsize=10000)
     def _extract_domain(url: str) -> str:
-        """Ultra-fast domain extraction with regex and caching"""
-        match = DomainFilter._DOMAIN_REGEX.search(url)
-        return match.group(1).lower() if match else ""
+        """Extract the host from a URL, dropping userinfo/port and trailing dot"""
+        try:
+            host = urlparse(url).hostname
+        except ValueError:
+            return ""
+        return host.rstrip(".") if host else ""
 
     def apply(self, url: str) -> bool:
         """Optimized domain checking with early returns"""

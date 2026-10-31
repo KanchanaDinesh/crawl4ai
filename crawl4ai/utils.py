@@ -36,6 +36,7 @@ from functools import lru_cache
 
 from packaging import version
 from . import __version__
+from .egress_policy import proxy_url
 from typing import Sequence
 
 from itertools import chain
@@ -50,27 +51,34 @@ from urllib.parse import (
 import inspect
 
 
-# Monkey patch to fix wildcard handling in urllib.robotparser
-from urllib.robotparser import RuleLine
-import re
+# Monkey patch to fix wildcard handling in urllib.robotparser.
+# Python 3.14 rewrote robotparser with native wildcard, '$' and RFC 9309
+# longest-match support, and its applies_to returns a match *length* used to
+# rank rules. Patching it there returns a bool, which collapses every wildcard
+# rule to the lowest priority and breaks Allow: overrides -- so only patch the
+# older implementation, which has no wildcard support at all.
+import sys
 
-original_applies_to = RuleLine.applies_to
+if sys.version_info < (3, 14):
+    from urllib.robotparser import RuleLine
 
-def patched_applies_to(self, filename):
-   # Handle wildcards in paths
-   if '*' in self.path or '%2A' in self.path or self.path in ("*", "%2A"):
-       pattern = self.path.replace('%2A', '*')
-       pattern = re.escape(pattern).replace('\\*', '.*')
-       pattern = '^' + pattern
-       if pattern.endswith('\\$'):
-           pattern = pattern[:-2] + '$'
-       try:
-           return bool(re.match(pattern, filename))
-       except re.error:
-           return original_applies_to(self, filename)
-   return original_applies_to(self, filename)
+    original_applies_to = RuleLine.applies_to
 
-RuleLine.applies_to = patched_applies_to
+    def patched_applies_to(self, filename):
+       # Handle wildcards in paths
+       if '*' in self.path or '%2A' in self.path or self.path in ("*", "%2A"):
+           pattern = self.path.replace('%2A', '*')
+           pattern = re.escape(pattern).replace('\\*', '.*')
+           pattern = '^' + pattern
+           if pattern.endswith('\\$'):
+               pattern = pattern[:-2] + '$'
+           try:
+               return bool(re.match(pattern, filename))
+           except re.error:
+               return original_applies_to(self, filename)
+       return original_applies_to(self, filename)
+
+    RuleLine.applies_to = patched_applies_to
 # Monkey patch ends
 
 def chunk_documents(
@@ -226,7 +234,7 @@ def merge_chunks(
 
 class VersionManager:
     def __init__(self):
-        self.home_dir = Path.home() / ".crawl4ai"
+        self.home_dir = Path(os.getenv("CRAWL4_AI_BASE_DIRECTORY", Path.home())) / ".crawl4ai"
         self.version_file = self.home_dir / "version.txt"
 
     def get_installed_version(self):
@@ -247,6 +255,28 @@ class VersionManager:
         installed = self.get_installed_version()
         current = version.parse(__version__.__version__)
         return installed is None or installed < current
+
+
+def _preserve_bare_query(rules_text: str) -> str:
+    """Append '*' to Allow/Disallow values ending in a bare '?' (e.g. '/*?').
+
+    Only correct below Python 3.14, and only called there. Those parsers drop a
+    trailing '?' when normalizing the rule path, collapsing '/*?' to '/*' and
+    blocking the whole site; they also take the first matching rule, so making a
+    rule longer cannot change which one wins.
+
+    From 3.14 the stdlib keeps the '?' and ranks rules by match length, and the
+    rewrite becomes actively wrong: '/*?*' matches to end of string, so it
+    outranks a competing 'Allow: /*?q=' that the raw '/*?' would have lost to.
+    """
+    fixed = []
+    for raw_line in rules_text.splitlines():
+        body, _, _ = raw_line.partition("#")
+        key, sep, value = body.partition(":")
+        if sep and key.strip().lower() in ("allow", "disallow") and value.strip().endswith("?"):
+            raw_line = f"{key.strip()}: {value.strip()}*"
+        fixed.append(raw_line)
+    return "\n".join(fixed)
 
 
 class RobotsParser:
@@ -340,8 +370,16 @@ class RobotsParser:
                 scheme = parsed.scheme or 'http'
                 robots_url = f"{scheme}://{domain}/robots.txt"
                 
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(robots_url, timeout=2, ssl=False) as response:
+                # proxy=None unless an embedder installed one (the Docker
+                # server does). Without it this fetch is a caller-chosen URL on
+                # an unguarded client: it reached internal hosts directly and
+                # followed redirects into them.
+                # ssl=False is gone: a bad certificate now raises, and the
+                # except below fails open, so robots is ignored rather than
+                # respected -- more crawling, never a broken crawl.
+                timeout = aiohttp.ClientTimeout(total=2)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(robots_url, proxy=proxy_url()) as response:
                         if response.status == 200:
                             rules = await response.text()
                             self._cache_rules(domain, rules)
@@ -355,7 +393,12 @@ class RobotsParser:
             return True
 
         # Create parser for this check
-        parser = RobotFileParser() 
+        parser = RobotFileParser()
+        # Below 3.14, rewrite rules ending in a bare '?' so they survive path
+        # normalization. From 3.14 the stdlib handles them, and the rewrite
+        # would skew its longest-match ranking -- see _preserve_bare_query.
+        if sys.version_info < (3, 14):
+            rules = _preserve_bare_query(rules)
         parser.parse(rules.splitlines())
         
         # If parser can't read rules, allow access
@@ -1697,7 +1740,7 @@ def extract_xml_data_legacy(tags, string):
     data = {}
 
     for tag in tags:
-        pattern = f"<{tag}>(.*?)</{tag}>"
+        pattern = f"<{tag}>((?:(?!<{tag}>).)*)</{tag}>"
         match = re.search(pattern, string, re.DOTALL)
         if match:
             data[tag] = match.group(1).strip()
@@ -1726,7 +1769,7 @@ def extract_xml_data(tags, string):
     data = {}
 
     for tag in tags:
-        pattern = f"<{tag}>(.*?)</{tag}>"
+        pattern = f"<{tag}>((?:(?!<{tag}>).)*)</{tag}>"
         matches = re.findall(pattern, string, re.DOTALL)
         
         if matches:
@@ -1748,6 +1791,7 @@ def perform_completion_with_backoff(
     base_delay=2,
     max_attempts=3,
     exponential_factor=2,
+    messages=None,
     **kwargs,
 ):
     """
@@ -1789,7 +1833,7 @@ def perform_completion_with_backoff(
         try:
             response = completion(
                 model=provider,
-                messages=[{"role": "user", "content": prompt_with_variables}],
+                messages=messages if messages is not None else [{"role": "user", "content": prompt_with_variables}],
                 **extra_args,
             )
             return response  # Return the successful response
@@ -1839,6 +1883,7 @@ async def aperform_completion_with_backoff(
     base_delay=2,
     max_attempts=3,
     exponential_factor=2,
+    messages=None,
     **kwargs,
 ):
     """
@@ -1881,7 +1926,7 @@ async def aperform_completion_with_backoff(
         try:
             response = await acompletion(
                 model=provider,
-                messages=[{"role": "user", "content": prompt_with_variables}],
+                messages=messages if messages is not None else [{"role": "user", "content": prompt_with_variables}],
                 **extra_args,
             )
             return response  # Return the successful response
@@ -2210,25 +2255,6 @@ def fast_format_html(html_string):
     return "\n".join(formatted)
 
 
-def normalize_url(href, base_url):
-    """Normalize URLs to ensure consistent format"""
-    from urllib.parse import urljoin, urlparse
-
-    # Parse base URL to get components
-    parsed_base = urlparse(base_url)
-    if not parsed_base.scheme or not parsed_base.netloc:
-        raise ValueError(f"Invalid base URL format: {base_url}")
-    
-    if  parsed_base.scheme.lower() not in ["http", "https"]:
-        # Handle special protocols
-        raise ValueError(f"Invalid base URL format: {base_url}")
-    cleaned_href = href.strip()
-
-    # Use urljoin to handle all cases
-    return urljoin(base_url, cleaned_href)
-
-
-
 
 def normalize_url(
     href: str,
@@ -2292,14 +2318,14 @@ def normalize_url(
     # IMPORTANT: Don't use quote(unquote()) as it mangles + signs in URLs
     # The path from urlparse is already properly encoded
     path = parsed.path
-    if path.endswith('/') and path != '/':
-        path = path.rstrip('/')
+    # Preserve trailing slashes -- they are semantically significant per RFC 3986
+    # e.g. /page/9123/ and /page/9123 may return different responses
 
     # ── query ──
     query = parsed.query
     if query:
         # explode, mutate, then rebuild
-        params = [(k.lower(), v) for k, v in parse_qsl(query, keep_blank_values=True)]
+        params = [(k, v) for k, v in parse_qsl(query, keep_blank_values=True)]
 
         if drop_query_tracking:
             default_tracking = {
@@ -2308,7 +2334,7 @@ def normalize_url(
             }
             if extra_drop_params:
                 default_tracking |= {p.lower() for p in extra_drop_params}
-            params = [(k, v) for k, v in params if k not in default_tracking]
+            params = [(k, v) for k, v in params if k.lower() not in default_tracking]
 
         if sort_query:
             params.sort(key=lambda kv: kv[0])
@@ -2381,7 +2407,7 @@ def normalize_url_for_deep_crawl(href, base_url, preserve_https=False, original_
     normalized = urlunparse((
         parsed.scheme,
         netloc,
-        parsed.path.rstrip('/'),  # Normalize trailing slash
+        parsed.path or '/',  # Preserve trailing slash
         parsed.params,
         query,
         fragment
@@ -2420,7 +2446,7 @@ def efficient_normalize_url_for_deep_crawl(href, base_url, preserve_https=False,
     normalized = urlunparse((
         parsed.scheme,
         parsed.netloc.lower(),
-        parsed.path.rstrip('/'),
+        parsed.path or '/',  # Preserve trailing slash
         parsed.params,
         parsed.query,
         ''  # Remove fragment
@@ -2428,41 +2454,6 @@ def efficient_normalize_url_for_deep_crawl(href, base_url, preserve_https=False,
     
     return normalized
 
-
-def normalize_url_tmp(href, base_url):
-    """Normalize URLs to ensure consistent format"""
-    # Extract protocol and domain from base URL
-    try:
-        base_parts = base_url.split("/")
-        protocol = base_parts[0]
-        domain = base_parts[2]
-    except IndexError:
-        raise ValueError(f"Invalid base URL format: {base_url}")
-
-    # Handle special protocols
-    special_protocols = {"mailto:", "tel:", "ftp:", "file:", "data:", "javascript:"}
-    if any(href.lower().startswith(proto) for proto in special_protocols):
-        return href.strip()
-
-    # Handle anchor links
-    if href.startswith("#"):
-        return f"{base_url}{href}"
-
-    # Handle protocol-relative URLs
-    if href.startswith("//"):
-        return f"{protocol}{href}"
-
-    # Handle root-relative URLs
-    if href.startswith("/"):
-        return f"{protocol}//{domain}{href}"
-
-    # Handle relative URLs
-    if not href.startswith(("http://", "https://")):
-        # Remove leading './' if present
-        href = href.lstrip("./")
-        return f"{protocol}//{domain}/{href}"
-
-    return href.strip()
 
 
 def quick_extract_links(html: str, base_url: str) -> Dict[str, List[Dict[str, str]]]:
@@ -2484,7 +2475,23 @@ def quick_extract_links(html: str, base_url: str) -> Dict[str, List[Dict[str, st
     except Exception:
         return {"internal": [], "external": []}
 
+    # base_domain stays anchored to the real page origin so internal/external
+    # classification is correct even when a <base> tag points elsewhere.
     base_domain = get_base_domain(base_url)
+
+    # Honor <head><base href> for relative-URL resolution (#752). The full LXML
+    # scraping path does this; the prefetch quick path (used by scan/site) must
+    # too — otherwise relative links resolve against the page URL and the base
+    # tag is ignored. urljoin handles a relative <base href> against the page.
+    try:
+        base_el = doc.xpath("//head/base[@href]")
+        if base_el:
+            base_href = (base_el[0].get("href") or "").strip()
+            if base_href:
+                base_url = urljoin(base_url, base_href)
+    except Exception:
+        pass
+
     internal: List[Dict[str, str]] = []
     external: List[Dict[str, str]] = []
     seen: Set[str] = set()
@@ -2588,9 +2595,9 @@ def is_external_url(url: str, base_domain: str) -> bool:
         if not parsed.netloc:  # Relative URL
             return False
 
-        # Strip 'www.' from both domains for comparison
-        url_domain = parsed.netloc.lower().replace("www.", "")
-        base = base_domain.lower().replace("www.", "")
+        # Strip port and 'www.' from both domains for comparison
+        url_domain = parsed.netloc.lower().split(":")[0].replace("www.", "")
+        base = base_domain.lower().split(":")[0].replace("www.", "")
 
         # Check if URL domain ends with base domain
         return not url_domain.endswith(base)
@@ -3130,10 +3137,13 @@ def preprocess_html_for_schema(html_content, text_threshold=100, attr_value_thre
     Returns:
         str: Preprocessed HTML content
     """
+    # Local import: content_scraping_strategy imports from this module.
+    from .content_scraping_strategy import unwrap_orphaned_noscript
+
     try:
         # Parse HTML with error recovery
         parser = etree.HTMLParser(remove_comments=True, remove_blank_text=True)
-        tree = lhtml.fromstring(html_content, parser=parser)
+        tree = lhtml.fromstring(unwrap_orphaned_noscript(html_content), parser=parser)
         
         # 1. Remove HEAD section (keep only BODY)
         head_elements = tree.xpath('//head')
