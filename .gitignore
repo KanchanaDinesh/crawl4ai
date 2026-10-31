@@ -311,3 +311,6 @@ out/
 
 # entrypoint.sh is a required deployment artifact (Dockerfile COPYs it)
 !deploy/docker/entrypoint.sh
+
+# Personal scrapers: everything they write (JSON/CSV/HTML dumps/PDF/screenshots)
+output/
