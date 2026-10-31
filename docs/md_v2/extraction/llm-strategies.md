@@ -175,7 +175,7 @@ By chunking, you can potentially process multiple chunks in parallel (depending 
 By default, **LLMExtractionStrategy** uses `input_format="markdown"`, meaning the **crawler’s final markdown** is fed to the LLM. You can change to:
 
 - **`html`**: The cleaned HTML or raw HTML (depending on your crawler config) goes into the LLM.  
-- **`fit_markdown`**: If you used, for instance, `PruningContentFilter`, the “fit” version of the markdown is used. This can drastically reduce tokens if you trust the filter.  
+- **`fit_markdown`**: If you used, for instance, `PruningContentFilterLXML`, the “fit” version of the markdown is used. This can drastically reduce tokens if you trust the filter.  
 - **`markdown`**: Standard markdown output from the crawler’s `markdown_generator`.
 
 This setting is crucial: if the LLM instructions rely on HTML tags, pick `"html"`. If you prefer a text-based approach, pick `"markdown"`.
@@ -204,7 +204,9 @@ llm_strategy.show_usage()
 # e.g. “Total usage: 1241 tokens across 2 chunk calls”
 ```
 
-If your model provider doesn’t return usage info, these fields might be partial or empty.
+If your model provider doesn't return usage info, these fields might be partial or empty.
+
+> **Tip:** `JsonCssExtractionStrategy.generate_schema()` also supports token usage tracking via an optional `usage` parameter. See [Token Usage Tracking in Schema Generation](./no-llm-strategies.md#token-usage-tracking) for details.
 
 ---
 

@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Damro",
+    "url": "https://www.damro.lk/products/office-furniture/tables-cupboards-racks/executive-tables",
+    "output_file": "products_damro.json",
+    "enabled": true,
+    "schema": {
+      "name": "Damro Products",
+      "baseSelector": "div.product-grid-item",
+      "fields": [
+        {"name": "title", "selector": "div.product-title > a", "type": "text"},
+        {"name": "url", "selector": "div.product-title > a", "type": "attribute", "attribute": "href"},
+        {"name": "price", "selector": "div.product-price", "type": "text"},
+        {"name": "image", "selector": "div.product-element-top.product_img img", "type": "attribute", "attribute": "src"}
+      ]
+    }
+  },
+  {
+    "name": "WebScraper Test Site",
+    "url": "https://webscraper.io/test-sites/e-commerce/allinone",
+    "output_file": "products_webscraper_test.json",
+    "enabled": true,
+    "schema": {
+      "name": "Test Site Items",
+      "baseSelector": "div.thumbnail",
+      "fields": [
+        {"name": "title", "selector": "a.title", "type": "text"},
+        {"name": "url", "selector": "a.title", "type": "attribute", "attribute": "href"},
+        {"name": "price", "selector": "h4.price", "type": "text"},
+        {"name": "description", "selector": "p.description", "type": "text"},
+        {"name": "image", "selector": "img.image", "type": "attribute", "attribute": "src"}
+      ]
+    }
+  }
+]

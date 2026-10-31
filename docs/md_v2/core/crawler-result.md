@@ -22,8 +22,8 @@ class CrawlResult(BaseModel):
     fit_html: Optional[str] = None
     success: bool
     cleaned_html: Optional[str] = None
-    media: Dict[str, List[Dict]] = {}
-    links: Dict[str, List[Dict]] = {}
+    media: Dict[str, List[Dict]] = {"images": [], "videos": [], "audios": []}
+    links: Dict[str, List[Dict]] = {"internal": [], "external": []}
     downloaded_files: Optional[List[str]] = None
     js_execution_result: Optional[Dict[str, Any]] = None
     screenshot: Optional[str] = None
@@ -39,6 +39,7 @@ class CrawlResult(BaseModel):
     ssl_certificate: Optional[SSLCertificate] = None
     dispatch_result: Optional[DispatchResult] = None
     redirected_url: Optional[str] = None
+    redirected_status_code: Optional[int] = None
     network_requests: Optional[List[Dict[str, Any]]] = None
     console_messages: Optional[List[Dict[str, Any]]] = None
     tables: List[Dict] = Field(default_factory=list)
@@ -73,6 +74,7 @@ class CrawlResult(BaseModel):
 | **ssl_certificate (`Optional[SSLCertificate]`)** | SSL certificate info if `fetch_ssl_certificate=True`.                                               |
 | **dispatch_result (`Optional[DispatchResult]`)** | Additional concurrency and resource usage information when crawling URLs in parallel.               |
 | **redirected_url (`Optional[str]`)**      | The URL after any redirects (different from `url` which is the final URL).                          |
+| **redirected_status_code (`Optional[int]`)** | HTTP status code of the final redirect destination (e.g., 200). `None` for non-HTTP requests (raw HTML, local files). |
 | **network_requests (`Optional[List[Dict[str, Any]]]`)** | List of network requests, responses, and failures captured during the crawl if `capture_network_requests=True`. |
 | **console_messages (`Optional[List[Dict[str, Any]]]`)** | List of browser console messages captured during the crawl if `capture_console_messages=True`.       |
 | **tables (`List[Dict]`)**                 | Table data extracted from HTML tables with structure `[{headers, rows, caption, summary}]`.           |
@@ -108,7 +110,7 @@ print(result.cleaned_html)  # Freed of forms, header, footer, data-* attributes
 ### 3.1 `markdown`
 
 - **`markdown`**: The current location for detailed markdown output, returning a **`MarkdownGenerationResult`** object.  
-- **`markdown_v2`**: Deprecated since v0.5.
+- **`markdown_v2`**: Removed in v0.5. Accessing it now raises `AttributeError`; use `markdown`.
 
 **`MarkdownGenerationResult`** Fields:
 
@@ -139,7 +141,7 @@ print(md_res.markdown_with_citations)
 print(md_res.references_markdown)
 ```
 
-**Note**: If you use a filter like `PruningContentFilter`, you’ll get `fit_markdown` and `fit_html` as well.
+**Note**: If you use a filter like `PruningContentFilterLXML`, you’ll get `fit_markdown` and `fit_html` as well.
 
 ---
 
@@ -326,8 +328,7 @@ else:
     print("Error:", result.error_message)
 ```
 
-**Deprecation**: Since v0.5 `result.markdown_v2`, `result.fit_html`,`result.fit_markdown` are deprecated. Use `result.markdown` instead! It holds `MarkdownGenerationResult`, which includes `fit_html` and `fit_markdown`
-as it's properties.
+**Deprecation**: Since v0.5 `markdown_v2`, `fit_markdown`, and `fit_html` are removed from `CrawlResult`. Use `result.markdown` for markdown output. It holds `MarkdownGenerationResult`, including `fit_html` and `fit_markdown`.
 
 
 ---
@@ -335,7 +336,7 @@ as it's properties.
 ## 7. Next Steps
 
 - **Markdown Generation**: Dive deeper into how to configure `DefaultMarkdownGenerator` and various filters.  
-- **Content Filtering**: Learn how to use `BM25ContentFilter` and `PruningContentFilter`.
+- **Content Filtering**: Learn how to use `BM25ContentFilter` and `PruningContentFilterLXML`.
 - **Session & Hooks**: If you want to manipulate the page or preserve state across multiple `arun()` calls, see the hooking or session docs.  
 - **LLM Extraction**: For complex or unstructured content requiring AI-driven parsing, check the LLM-based strategies doc.
 

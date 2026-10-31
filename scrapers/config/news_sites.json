@@ -1,0 +1,112 @@
+[
+  {
+    "name": "Daily Mirror",
+    "url": "https://www.dailymirror.lk/",
+    "domain": "dailymirror.lk",
+    "base_selector": "div.news_block",
+    "title_selector": "p > a",
+    "url_selector": "p > a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "News.lk",
+    "url": "https://www.news.lk/",
+    "domain": "news.lk",
+    "base_selector": "div.sppb-addon-article",
+    "title_selector": "h3 > a",
+    "url_selector": "h3 > a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "The Island",
+    "url": "https://island.lk/",
+    "domain": "island.lk",
+    "base_selector": "li.mvp-blog-story-wrap",
+    "title_selector": "h2",
+    "url_selector": "a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "LankaENews",
+    "url": "https://www.lankaenews.com/",
+    "domain": "lankaenews.com",
+    "base_selector": "div.newes, div.newes_left",
+    "title_selector": "h4 > a",
+    "url_selector": "h4 > a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "CBSL",
+    "url": "https://www.cbsl.gov.lk/",
+    "domain": "cbsl.gov.lk",
+    "base_selector": "li.views-row",
+    "title_selector": "div.views-field-field-file-title a",
+    "url_selector": "div.views-field-field-file-title a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "Newswire",
+    "url": "https://www.newswire.lk/",
+    "domain": "newswire.lk",
+    "base_selector": "div.posts-listunit, div.content-block",
+    "title_selector": "h4 > a",
+    "url_selector": "h4 > a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "Sunday Times",
+    "url": "https://www.sundaytimes.lk/",
+    "domain": "sundaytimes.lk",
+    "base_selector": "h2.posttitle",
+    "title_selector": "a",
+    "url_selector": "a",
+    "country": "LK",
+    "category": "tech",
+    "enabled": true
+  },
+  {
+    "name": "broadcom",
+    "url": "https://news.broadcom.com/apj",
+    "domain": "broadcom.com",
+    "base_selector": "div.post-grid-item-v2__text, div.post-featured-v2__text",
+    "title_selector": ":scope > a",
+    "url_selector": ":scope > a",
+    "country": "GLOBAL",
+    "category": "tech",
+    "enabled": false
+  },
+  {
+    "name": "veeam",
+    "url": "https://www.veeam.com/blog/?ad=menu-resources",
+    "domain": "veeam.com",
+    "base_selector": "article.post-preview",
+    "title_selector": "a",
+    "url_selector": "a",
+    "country": "GLOBAL",
+    "category": "tech",
+    "enabled": false
+  },
+  {
+    "name": "fastcompany",
+    "url": "https://www.fastcompany.com/news",
+    "domain": "fastcompany.com",
+    "base_selector": "article.post-preview",
+    "title_selector": "a",
+    "url_selector": "a",
+    "country": "GLOBAL",
+    "category": "tech",
+    "enabled": false
+  }
+]

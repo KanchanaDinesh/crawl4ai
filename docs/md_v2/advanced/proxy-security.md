@@ -2,6 +2,15 @@
 
 This guide covers proxy configuration and security features in Crawl4AI, including SSL certificate analysis and proxy rotation strategies.
 
+!!! tip "No proxies to buy or rotate"
+    [Crawl4AI Cloud](https://crawl4ai.com/?ref=docs-proxy) fetches from the country you choose with its own addresses: add `"country": "gb"` to a call, nothing to configure. 1,000 free credits every month, no card. [Get a key →](https://crawl4ai.com/?ref=docs-proxy)
+
+    ```bash
+    curl -X POST https://api.crawl4ai.com/scrape \
+      -H "Authorization: Bearer YOUR_KEY" -H "Content-Type: application/json" \
+      -d '{"url": "https://example.com", "format": "md"}'
+    ```
+
 ## Understanding Proxy Configuration
 
 Crawl4AI recommends configuring proxies per request through `CrawlerRunConfig.proxy_config`. This gives you precise control, enables rotation strategies, and keeps examples simple enough to copy, paste, and run.
@@ -264,7 +273,7 @@ run_config = CrawlerRunConfig(proxy_config="socks5://proxy.example.com:1080")
 ```python
 # Old (deprecated) approach
 # from crawl4ai import BrowserConfig
-# browser_config = BrowserConfig(proxy="http://proxy.example.com:8080")
+# browser_config = BrowserConfig(proxy_config="http://proxy.example.com:8080")
 
 # New (preferred) approach
 from crawl4ai import CrawlerRunConfig
@@ -302,3 +311,7 @@ def safe_proxy_repr(proxy: ProxyConfig):
     - Ensure `ProxyConfig.from_env()` actually loaded entries (`len(proxies) > 0`).
     - Attach `proxy_rotation_strategy` to `CrawlerRunConfig`.
     - Validate the proxy definitions you pass into the strategy.
+
+## See Also
+
+- [Anti-Bot Detection & Fallback](anti-bot-and-fallback.md) — Automatic retry with proxy escalation and fallback functions when anti-bot blocking is detected
