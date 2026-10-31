@@ -125,7 +125,8 @@ Each site's file (and the printed output) is one JSON object:
 }
 ```
 
-riyasewana ads also have `mileage`. `price_lkr` is `null` when the price isn't a plain number
+riyasewana ads also have `year`, `mileage` and `details` (the raw card text), and are sorted
+by ad number, newest first, so older pinned ads are skipped. `price_lkr` is `null` when the price isn't a plain number
 (for example "Negotiable").
 
 ## Updating crawl4ai

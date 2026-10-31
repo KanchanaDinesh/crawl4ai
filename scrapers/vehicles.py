@@ -9,6 +9,8 @@ Each site in scrapers/config/vehicle_sites.json describes:
                     attribute: attribute name, or a list of fallbacks (e.g. ["data-src", "src"])
                     contains:  only use an element whose text contains this string
   limit             how many ads to keep (default 10)
+  sort              optional {"by": "url", "pattern": "-(\\d+)$", "order": "desc"}: sort by a
+                    number taken from a field (e.g. the ad id in the URL) before applying limit
   crawl             extra crawl4ai CrawlerRunConfig options (magic, page_timeout, wait_for, ...)
 
 Each site is written to its own JSON file in output/ and printed as a JSON object.
@@ -77,6 +79,21 @@ def parse_price(price: str | None) -> int | None:
     return int(float(match.group().replace(",", ""))) if match else None
 
 
+def _sort_ads(ads: list[dict], sort: dict) -> list[dict]:
+    """Sort by a number pulled out of a field, e.g. the ad id at the end of the URL.
+
+    Pinned/promoted ads are often older, so sorting by ad id gives the truly latest ads.
+    """
+    pattern = re.compile(sort.get("pattern", r"(\d+)"))
+    field = sort.get("by", "url")
+
+    def key(ad: dict) -> int:
+        match = pattern.search(ad.get(field) or "")
+        return int(match.group(1)) if match else -1
+
+    return sorted(ads, key=key, reverse=sort.get("order", "desc") == "desc")
+
+
 def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     excluded = set(map(id, soup.select(site["exclude_selector"]))) if site.get("exclude_selector") else set()
@@ -95,10 +112,11 @@ def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
         seen.add(ad["url"])
         if "price" in ad:
             ad["price_lkr"] = parse_price(ad["price"])
-        ads.append({"rank": len(ads) + 1, **ad})
-        if len(ads) >= limit:
-            break
-    return ads
+        ads.append(ad)
+
+    if site.get("sort"):
+        ads = _sort_ads(ads, site["sort"])
+    return [{"rank": i, **ad} for i, ad in enumerate(ads[:limit], 1)]
 
 
 def _dump_html(site: dict, html: str) -> str:

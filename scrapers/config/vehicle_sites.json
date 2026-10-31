@@ -23,16 +23,18 @@
     "output_file": "vehicles_riyasewana.json",
     "limit": 10,
     "enabled": true,
-    "item_selector": "li.item",
-    "exclude_selector": "li.item.promoted, li.item.featured",
+    "item_selector": "li.v-card",
+    "exclude_selector": "",
+    "sort": {"by": "url", "pattern": "-(\\d+)/?$", "order": "desc"},
     "fields": {
-      "title":    {"selector": ["h2.more a", "h2 a"], "type": "text"},
-      "url":      {"selector": ["h2.more a", "h2 a"], "type": "attribute", "attribute": "href"},
-      "price":    {"selector": ["div.boxintxt.b"], "type": "text"},
-      "location": {"selector": ["div.boxintxt:first-child"], "type": "text"},
-      "mileage":  {"selector": ["div.boxintxt"], "type": "text", "contains": "km"},
-      "posted":   {"selector": ["div.boxintxt.s"], "type": "text"},
-      "image":    {"selector": ["div.imgbox img", "img"], "type": "attribute", "attribute": ["data-src", "src"]}
+      "title":    {"selector": ["div.v-card-title a", "a[href*='/buy/']"], "type": "text"},
+      "url":      {"selector": ["div.v-card-title a", "a[href*='/buy/']"], "type": "attribute", "attribute": "href"},
+      "price":    {"selector": ["div.v-card-price"], "type": "text"},
+      "year":     {"selector": ["div.v-card-year"], "type": "text"},
+      "mileage":  {"selector": ["div.v-card-meta *", "div.v-card-meta"], "type": "text", "contains": "km"},
+      "details":  {"selector": ["div.v-card-meta"], "type": "text"},
+      "posted":   {"selector": ["div.v-card-date"], "type": "text"},
+      "image":    {"selector": ["div.v-card-img img", "img"], "type": "attribute", "attribute": ["data-src", "data-lazy", "src"]}
     },
     "crawl": {"magic": true, "delay_before_return_html": 2.0, "page_timeout": 60000}
   }
