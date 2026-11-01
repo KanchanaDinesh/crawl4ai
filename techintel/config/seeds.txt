@@ -1,0 +1,7 @@
+# Manually added sites to evaluate: one domain or URL per line.
+# Lines starting with # are ignored. Discovered by: python -m techintel discover --source seeds
+#
+# Examples (uncomment or add your own):
+# https://www.wso2.com
+# https://www.ifs.com
+# https://www.sysco.lk

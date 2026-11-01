@@ -1,6 +1,13 @@
 # Web scrapers
 
-News, product, IMDb and Colombo Stock Exchange scrapers. They use
+Two parts, both built on crawl4ai:
+
+- **`scrapers/`**: news, vehicle ads, products, IMDb and Colombo Stock Exchange scrapers (this page).
+- **`techintel/`**: a pipeline that discovers new tech websites, profiles and monitors them, and
+  writes analytics reports. See [techintel/README.md](techintel/README.md).
+  Quick start: `uv run python -m techintel run`.
+
+The scrapers use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
 installed library, pinned in `pyproject.toml`.
 

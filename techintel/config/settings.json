@@ -1,0 +1,133 @@
+{
+  "sources": {
+    "seeds": {
+      "enabled": true,
+      "file": "seeds.txt"
+    },
+    "hackernews": {
+      "enabled": true,
+      "lookback_hours": 48,
+      "max_results": 200
+    },
+    "crtsh": {
+      "enabled": true,
+      "queries": ["%.lk"],
+      "lookback_days": 3,
+      "max_results_per_query": 500,
+      "timeout_seconds": 120
+    },
+    "certstream": {
+      "enabled": false,
+      "url": "wss://certstream.calidog.io/",
+      "default_minutes": 5
+    },
+    "outlinks": {
+      "enabled": true,
+      "max_per_run": 200
+    }
+  },
+
+  "domain_filter": {
+    "match_tlds": [".lk", ".ai", ".io", ".dev", ".tech", ".app"],
+    "match_keywords": ["cloud", "data", "tech", "labs", "robot", "quantum", "cyber", "analytics",
+                       "agent", "neural", "llm", "gpt", "saas", "devops", "code", "software", "digital"],
+    "ignore_domains": [
+      "google.com", "youtube.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+      "linkedin.com", "github.com", "gitlab.com", "medium.com", "reddit.com", "wikipedia.org",
+      "apple.com", "microsoft.com", "amazon.com", "cloudflare.com", "wordpress.com", "substack.com",
+      "ycombinator.com", "producthunt.com", "discord.gg", "discord.com", "t.me", "whatsapp.com",
+      "tiktok.com", "pinterest.com", "bit.ly", "goo.gl", "gstatic.com", "googleapis.com",
+      "googletagmanager.com", "w3.org", "schema.org", "apps.apple.com", "play.google.com"
+    ],
+    "ignore_suffixes": [
+      ".vercel.app", ".netlify.app", ".github.io", ".pages.dev", ".herokuapp.com", ".web.app",
+      ".firebaseapp.com", ".azurewebsites.net", ".cloudfront.net", ".amazonaws.com", ".workers.dev",
+      ".blogspot.com", ".wixsite.com", ".myshopify.com", ".ngrok.io", ".ngrok-free.app"
+    ]
+  },
+
+  "crawl": {
+    "concurrency": 4,
+    "delay_seconds": 1.0,
+    "page_timeout_ms": 30000,
+    "check_robots_txt": true,
+    "user_agent": null
+  },
+
+  "qualify": {
+    "fetch_mode": "http",
+    "browser_fallback": true,
+    "min_words": 80,
+    "min_score": 6,
+    "recheck_after_days": 30,
+    "watch_recheck_days": 7,
+    "parked_phrases": [
+      "domain is for sale", "this domain may be for sale", "buy this domain", "domain for sale",
+      "parked free", "parked domain", "domain parking", "this domain is parked", "related searches",
+      "account suspended", "this account has been suspended"
+    ],
+    "placeholder_phrases": [
+      "coming soon", "launching soon", "under construction", "website is under construction",
+      "default web site page", "welcome to nginx", "apache2 ubuntu default page", "it works!",
+      "index of /", "site is being built", "stay tuned"
+    ],
+    "parking_hosts": ["sedo.com", "afternic.com", "dan.com", "godaddy.com", "hugedomains.com",
+                      "parkingcrew.net", "bodis.com", "namecheap.com", "porkbun.com", "atom.com"]
+  },
+
+  "categories": {
+    "ai_ml": ["artificial intelligence", "machine learning", "deep learning", "llm", "large language model",
+              "generative ai", "genai", "ai agent", "ai agents", "agentic", "computer vision", "nlp",
+              "natural language processing", "neural network", "ai-powered", "ai powered", "rag",
+              "fine-tuning", "inference", "embeddings", "chatbot", "copilot", "model training"],
+    "cloud_infra": ["cloud", "kubernetes", "serverless", "infrastructure", "devops", "containers",
+                    "docker", "hosting", "cdn", "edge computing", "observability", "monitoring",
+                    "deployment", "microservices", "platform engineering", "terraform"],
+    "devtools": ["developer", "developers", "sdk", "api", "open source", "open-source", "github",
+                 "cli", "ide", "code review", "ci/cd", "debugging", "testing", "documentation",
+                 "framework", "library", "low-code", "no-code"],
+    "data_analytics": ["data platform", "analytics", "data warehouse", "data pipeline", "etl", "dashboard",
+                       "business intelligence", "big data", "data lake", "lakehouse", "sql", "database",
+                       "vector database", "data engineering", "real-time data", "reporting"],
+    "cybersecurity": ["security", "cybersecurity", "zero trust", "threat", "vulnerability", "encryption",
+                      "identity", "authentication", "siem", "soc", "penetration testing", "malware",
+                      "compliance", "firewall", "endpoint protection", "ransomware"],
+    "fintech": ["fintech", "payments", "payment gateway", "banking", "lending", "digital wallet",
+                "blockchain", "crypto", "invoicing", "accounting", "trading", "insurtech", "remittance"],
+    "saas_business": ["saas", "crm", "erp", "workflow automation", "productivity", "collaboration",
+                      "project management", "customer support", "marketing automation", "hr software",
+                      "b2b", "subscription", "integrations"],
+    "iot_hardware": ["iot", "internet of things", "sensors", "embedded", "robotics", "robot", "drones",
+                     "hardware", "semiconductor", "chip", "edge devices", "3d printing", "wearable"],
+    "healthtech": ["healthtech", "telemedicine", "digital health", "medical ai", "patient", "clinical",
+                   "ehr", "health records", "diagnostics"],
+    "edtech": ["edtech", "e-learning", "online learning", "lms", "learning platform", "online courses",
+               "tutoring", "upskilling"]
+  },
+
+  "profile": {
+    "fetch_mode": "browser",
+    "max_pages": 6,
+    "key_pages": {
+      "about":   ["about", "company", "team", "who-we-are", "our-story"],
+      "product": ["product", "products", "features", "solutions", "platform", "services"],
+      "pricing": ["pricing", "plans", "price"],
+      "docs":    ["docs", "documentation", "developers", "developer", "api-reference"],
+      "blog":    ["blog", "news", "insights", "updates", "changelog"],
+      "careers": ["careers", "jobs", "join-us", "join", "hiring", "work-with-us", "open-positions"],
+      "contact": ["contact", "contact-us"]
+    },
+    "ats_hosts": ["greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "bamboohr.com",
+                  "recruitee.com", "smartrecruiters.com", "breezy.hr", "teamtailor.com", "wellfound.com"],
+    "top_keywords": 20
+  },
+
+  "monitor": {
+    "interval_days": 7
+  },
+
+  "report": {
+    "default_days": 7,
+    "max_sites_listed": 50
+  }
+}

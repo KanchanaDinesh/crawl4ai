@@ -1,15 +1,24 @@
 [project]
 name = "web-scrapers"
 version = "0.1.0"
-description = "News, product, IMDb and Colombo Stock Exchange scrapers built on crawl4ai"
+description = "Web scrapers and a tech intelligence pipeline built on crawl4ai"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "crawl4ai==0.9.5",
     "aiohttp>=3.11",
     "beautifulsoup4>=4.12",
+    "tldextract>=5.1",
 ]
 
 [tool.uv]
 # Scripts are run as modules (python -m scrapers.news); nothing to build or install.
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

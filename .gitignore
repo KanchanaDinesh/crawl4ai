@@ -1,5 +1,7 @@
-# Scraper output (JSON/CSV/HTML dumps/PDF/screenshots)
+# Scraper output (JSON/CSV/HTML dumps/PDF/screenshots) and pipeline state
 output/
+data/
+.pytest_cache/
 
 # Python
 __pycache__/
