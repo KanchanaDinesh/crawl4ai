@@ -78,10 +78,15 @@ plist_head() {   # $1 label, $2.. program arguments
 EOF
 }
 
+# The command a job runs: bash -c "cd <project>; exec bash ./script ...". When a job names a script on the
+# external drive directly (/bin/bash /Volumes/.../run_all.sh), macOS judges the script, not /bin/bash, so
+# Full Disk Access for /bin/bash doesn't help and bash can't even read it ("Operation not permitted").
+in_project() { echo "cd '$PROJECT_DIR' || exit 1; exec /bin/bash $*"; }
+
 run_plist() {   # $1 = "interval" minutes | "daily" times...
   local kind="$1"; shift
   # shellcheck disable=SC2046
-  plist_head "$(label_for "$PROFILE")" /bin/bash "$PROJECT_DIR/run_all.sh" $(run_args "$PROFILE")
+  plist_head "$(label_for "$PROFILE")" /bin/bash -c "$(in_project ./run_all.sh $(run_args "$PROFILE"))"
   echo "  <key>StandardOutPath</key><string>$JOB_LOG_DIR/scheduler.log</string>"
   echo "  <key>StandardErrorPath</key><string>$JOB_LOG_DIR/scheduler.log</string>"
   echo "  <key>RunAtLoad</key><false/>"
@@ -99,7 +104,7 @@ run_plist() {   # $1 = "interval" minutes | "daily" times...
 }
 
 watch_plist() {
-  plist_head "$WATCH_LABEL" /bin/bash "$PROJECT_DIR/watch.sh" --foreground
+  plist_head "$WATCH_LABEL" /bin/bash -c "$(in_project ./watch.sh --foreground)"
   echo "  <key>StandardOutPath</key><string>$JOB_LOG_DIR/watch.log</string>"
   echo "  <key>StandardErrorPath</key><string>$JOB_LOG_DIR/watch.log</string>"
   echo "  <key>RunAtLoad</key><true/>"
@@ -136,7 +141,8 @@ mac_describe() {   # $1 plist file
 mac_problems() {   # $@ = extra log files to check (whole file) for the macOS block
   local f old=0 blocked=0
   for f in "$AGENTS"/com.crawl4ai.*.plist; do
-    if [ -e "$f" ] && grep -qF "<string>$PROJECT_DIR/logs/" "$f"; then old=1; fi
+    if [ -e "$f" ] && grep -qF -e "<string>$PROJECT_DIR/logs/" -e "<string>$PROJECT_DIR/run_all.sh</string>" \
+                              -e "<string>$PROJECT_DIR/watch.sh</string>" "$f"; then old=1; fi
   done
   for f in "$JOB_LOG_DIR"/*.log; do   # only the last line: a run that got in since writes "started"
     if [ -e "$f" ] && tail -n 1 "$f" | grep -q "Operation not permitted"; then blocked=1; fi
@@ -145,8 +151,8 @@ mac_problems() {   # $@ = extra log files to check (whole file) for the macOS bl
     if [ -e "$f" ] && grep -q "Operation not permitted" "$f"; then blocked=1; fi
   done
   if [ "$old" = 1 ]; then
-    echo "Problem: these schedules were set up by an older version and can't start (launchd can't keep their"
-    echo "  log on the external drive). Set them up again with: ./schedule.sh recommended"
+    echo "Problem: these schedules were set up by an older version that macOS blocks from the external drive."
+    echo "  Set them up again with: ./schedule.sh recommended"
   fi
   if [ "$blocked" = 1 ]; then
     echo "Problem: macOS blocks scheduled runs from using the external drive (\"Operation not permitted\")."

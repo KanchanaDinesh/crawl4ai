@@ -58,9 +58,10 @@ Set all three up with one command, then check them:
   skipped for that run, not failed.
 
 **State on the Mac (2026-11-03):** Kanchana gave `/bin/bash` Full Disk Access, and `./schedule.sh doctor` (run from
-their Terminal) said "All good" inside launchd. **Claude must not set up schedules itself:** jobs loaded with
-`launchctl bootstrap` from Claude's shell stayed blocked from the drive ("Operation not permitted") even with Full
-Disk Access, while the one Kanchana loaded from Terminal worked. So Kanchana runs `./schedule.sh recommended`.
+their Terminal) said "All good" inside launchd. The listener and run jobs were still blocked, because they named
+the script on the drive directly (see history item 20). **Not confirmed yet:** Kanchana runs
+`./schedule.sh recommended` from Terminal (Claude isn't allowed to install launchd jobs), then checks that
+`tail -n 3 ~/Library/Logs/crawl4ai/watch.log` ends with "listener started".
 
 ## History (what was done, oldest first)
 
@@ -105,16 +106,22 @@ Disk Access, while the one Kanchana loaded from Terminal worked. So Kanchana run
       launchd's log is in `~/Library/Logs/crawl4ai/`. `run_all.sh` and `watch.sh` write their own logs to `logs/`.
     - Once started, bash is blocked from the drive ("Operation not permitted") until `/bin/bash` has Full Disk
       Access. `run_all.sh` and `watch.sh` now say so in one line, and `./schedule.sh status` / `doctor` print the fix.
-    - Even with Full Disk Access, jobs loaded from Claude's shell stayed blocked; the job Kanchana loaded from
-      Terminal worked. Runs now write a "started" line to launchd's log, so `status` stops warning once one gets in.
+    - Runs now write a "started" line to launchd's log, so `status` stops warning once one gets in.
     - The "vehicles FAILED after 3s" run (03:38) was actually a manual run with a broken Chromium install
       (`icudtl.dat not found`, then "GPU process isn't usable"). The browser was reinstalled at 03:47, and vehicles
       has worked by hand since.
+20. Even with Full Disk Access for `/bin/bash`, jobs started as `/bin/bash /Volumes/.../watch.sh` got "Operation
+    not permitted" reading their own script, while the doctor job (`bash -c "cd ...; uv run ..."`) worked. macOS
+    seems to judge a script named in the job instead of `/bin/bash`. All jobs now start as
+    `bash -c "cd <project>; exec /bin/bash ./script ..."`, and `status` flags jobs in the old format.
+    - Claude's shell can't install launchd jobs (blocked by Claude Code's permission check); Kanchana runs
+      `./schedule.sh` from Terminal.
 
 ## Open issues and things to watch
 
-- **Scheduled runs: confirm they work (2026-11-03).** See history item 19. Full Disk Access is on. Next: Kanchana
-  runs `./schedule.sh recommended` from Terminal, then `./schedule.sh status` after 15 minutes should show no
+- **Scheduled runs: confirm they work (2026-11-03).** See history items 19 and 20. Full Disk Access is on. Next:
+  Kanchana runs `./schedule.sh recommended` from Terminal, then
+  `launchctl kickstart gui/$(id -u)/com.crawl4ai.runall.frequent` to run the 15-minute job at once. `./schedule.sh status` should show no
   "Problem" lines, the listener running, and a `(scheduled)` run. If a scheduled vehicles run still fails,
   `tail -3 logs/history.log` shows why.
   - If "icudtl.dat not found" or "GPU process isn't usable" comes back, the browser install is broken again:

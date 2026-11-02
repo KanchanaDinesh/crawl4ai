@@ -43,6 +43,11 @@ def test_launchd_jobs_keep_their_folder_and_log_off_the_project_drive(tmp_path):
     assert f"<string>{tmp_path}/Library/Logs/crawl4ai/scheduler.log</string>" in out.stdout
     assert f"<string>{tmp_path}/Library/Logs/crawl4ai/watch.log</string>" in out.stdout
     assert f"<string>{ROOT}/logs/" not in out.stdout and f"<string>{ROOT}</string>" not in out.stdout
+    # macOS judges a script named directly in the job, not /bin/bash: start it through bash -c instead
+    assert f"<string>{ROOT}/run_all.sh</string>" not in out.stdout
+    assert f"<string>{ROOT}/watch.sh</string>" not in out.stdout
+    assert f"<string>-c</string><string>cd '{ROOT}' || exit 1; exec /bin/bash ./watch.sh --foreground</string>" \
+        in out.stdout
 
 
 def test_status_explains_old_schedules_and_the_macos_block(tmp_path):
