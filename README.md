@@ -1,8 +1,8 @@
 # Web scrapers
 
-Five parts:
+The parts:
 
-- **`scrapers/`**: news, vehicle ads, products, IMDb and Colombo Stock Exchange scrapers (this page).
+- **`scrapers/`**: news, products, IMDb and Colombo Stock Exchange scrapers (this page).
 - **`techintel/`**: a pipeline that discovers new tech websites, profiles and monitors them, and
   writes analytics reports. See [techintel/README.md](techintel/README.md).
   Quick start: `uv run python -m techintel run`.
@@ -11,10 +11,12 @@ Five parts:
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
 - **`markets/`**: Sri Lankan and US stocks and indices, gold, silver, oil, exchange rates and the crypto top 100,
   with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
+- **`vehicles/`**: the latest ads from ikman.lk and riyasewana.com, with new-ad and price-change history.
+  See [vehicles/README.md](vehicles/README.md). Quick start: `uv run python -m vehicles run`.
 - **`dashboard/`**: a local web dashboard for World News, Tech Intel, Markets and Vehicles, reading live from the databases.
   `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
 
-All three use
+All of them use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
 installed library, pinned in `pyproject.toml`.
 
@@ -185,8 +187,6 @@ Run everything from the repository root as modules:
 | `python -m scrapers.news --site "Daily Mirror" --site CBSL` | Only these sites, even if disabled | `news.json` |
 | `python -m scrapers.news --all` | Include disabled sites (broadcom, veeam, fastcompany) | `news.json` |
 | `python -m scrapers.products` | Product listings from `scrapers/config/product_sites.json` | `products_*.json` |
-| `python -m scrapers.vehicles` | Latest 10 vehicle ads from ikman.lk and riyasewana.com (separately) | `vehicles_ikman.json`, `vehicles_riyasewana.json` |
-| `python -m scrapers.vehicles --site ikman --limit 5` | One site, a different number of ads | `vehicles_ikman.json` |
 | `python -m scrapers.imdb` | IMDb Top 250 + release calendar, merged into the existing file | `imdb.json` |
 | `python -m scrapers.cse summary` | CSE daily market summary (ASPI, S&P SL20, turnover) | `cse_market_summary.json` |
 | `python -m scrapers.cse trades` | CSE per-company trade summary | `cse_trade_summary.csv` |
@@ -207,17 +207,16 @@ watch.sh                 the live tech-intel listener (normally via ./schedule.s
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               DuckDB helpers and the `python -m warehouse` query tool
 dashboard/               local web dashboard (python -m dashboard)
+techintel/ worldnews/ markets/ vehicles/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)
 scrapers/
 ├── common.py            shared paths, logging, JSON/CSV saving
 ├── config/
 │   ├── news_sites.json  news sites + selectors (toggle with "enabled")
-│   ├── product_sites.json  product sites + crawl4ai extraction schemas
-│   └── vehicle_sites.json  vehicle ad sites + selectors
+│   └── product_sites.json  product sites + crawl4ai extraction schemas
 ├── news.py              news headline scraper
 ├── products.py          product listing scraper
-├── vehicles.py          latest vehicle ads (ikman, riyasewana)
 ├── imdb.py              IMDb Top 250 + calendar
 ├── cse.py               Colombo Stock Exchange API client
 ├── inspect_site.py      selector-finding helper
@@ -235,11 +234,7 @@ scrapers/
 3. Add an entry to `scrapers/config/news_sites.json` and run `python -m scrapers.news --site <name>`.
    The `--base`/`--title`/`--link` options map to `base_selector`/`title_selector`/`url_selector` in the config.
 
-**Vehicle ad site**: add an entry to `scrapers/config/vehicle_sites.json` with an
-`item_selector` (one ad), an optional `exclude_selector` (promoted ads) and `fields`. Each field's
-`selector` can be a list of fallbacks, and the first match wins. If a site returns 0 ads, its page is
-saved to `output/html_dumps/<name>.html`; run `python -m scrapers.inspect_site` on that file to find
-the right selectors. The file docstring in `scrapers/vehicles.py` documents every option.
+**Vehicle ad site**: see [vehicles/README.md](vehicles/README.md#adding-a-site).
 
 **Product site**: add an entry with a crawl4ai `schema` to `scrapers/config/product_sites.json`
 ([schema docs](https://docs.crawl4ai.com/extraction/no-llm-strategies/)).
@@ -266,36 +261,6 @@ Each item in `output/news.json`:
 `url` is the article link, made absolute. The old scripts overwrote it with the homepage URL. The
 homepage is now in `source_url`. Duplicate article URLs are dropped. `country` and `category` are set
 per site in the config.
-
-## Vehicle ads output format
-
-Each site's file (and the printed output) is one JSON object:
-
-```json
-{
-  "site": "ikman",
-  "source_url": "https://ikman.lk/en/ads/sri-lanka/vehicles",
-  "fetched_at": "2026-10-31 22:00:00",
-  "success": true,
-  "count": 10,
-  "ads": [
-    {
-      "rank": 1,
-      "title": "Toyota Axio 2015",
-      "url": "https://ikman.lk/en/ad/toyota-axio-2015-for-sale-colombo",
-      "price": "Rs 6,500,000",
-      "location": "Colombo, Cars",
-      "posted": "2 mins",
-      "image": "https://i.ikman-st.com/....jpg",
-      "price_lkr": 6500000
-    }
-  ]
-}
-```
-
-riyasewana ads also have `year`, `mileage` and `details` (the raw card text), and are sorted
-by ad number, newest first, so older pinned ads are skipped. `price_lkr` is `null` when the price isn't a plain number
-(for example "Negotiable").
 
 ## Updating crawl4ai
 
@@ -334,4 +299,4 @@ The scrapers also restart a crashed browser and retry once by themselves.
 **Vehicles seems stuck:** a site gets at most 120 seconds (the log says `gave up after 120s`), and the
 browser gets 60 seconds to start, so a run can't hang forever. Each site logs how long it took
 (`ikman: 20 ads in 14.2s`). A normal run takes about 10 to 30 seconds per site. If ikman keeps
-giving up, try `--no-stealth`, or a shorter limit: `--max-seconds 60`.
+giving up, try `uv run python -m vehicles run --no-stealth`, or a shorter limit: `--max-seconds 60`.

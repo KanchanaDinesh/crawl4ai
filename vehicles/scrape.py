@@ -1,6 +1,6 @@
-"""Latest vehicle ads from ikman.lk and riyasewana.com (or any site in the config).
+"""Scrape the latest vehicle ads from each site in vehicles/config/sites.json (ikman.lk, riyasewana.com, ...).
 
-Each site in scrapers/config/vehicle_sites.json describes:
+Each site in the config describes:
   item_selector     CSS selector for one ad on the listing page
   exclude_selector  ads to skip (promoted / "top" ads), optional
   fields            name -> {selector, type, attribute?, contains?}
@@ -9,39 +9,39 @@ Each site in scrapers/config/vehicle_sites.json describes:
                     attribute: attribute name, or a list of fallbacks (e.g. ["data-src", "src"])
                     contains:  only use an element whose text contains this string
   limit             how many ads to keep (default 10)
+  max_seconds       give up on this site after this long (default 120)
   sort              optional {"by": "url", "pattern": "-(\\d+)$", "order": "desc"}: sort by a
                     number taken from a field (e.g. the ad id in the URL) before applying limit
-  max_seconds       give up on this site after this long (default 120)
   crawl             extra crawl4ai CrawlerRunConfig options (magic, page_timeout, wait_for, ...)
+  enabled           false to skip the site in normal runs
 
-Each site is written to its own JSON file in output/ and printed as a JSON object.
-If a site yields no ads, its HTML is saved to output/html_dumps/ so the selectors
-can be fixed with `python -m scrapers.inspect_site <dump file> --base "<selector>"`.
-
-Usage:
-    python -m scrapers.vehicles                    # all enabled sites
-    python -m scrapers.vehicles --site ikman
-    python -m scrapers.vehicles --limit 5 --save-html
-    python -m scrapers.vehicles --list
-    python -m scrapers.vehicles --max-seconds 60   # give up on a slow site sooner (default 120)
+Each site is written to output/vehicles_<site>.json and kept in data/scrapers/scrapers.duckdb
+(history, price changes). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
+selectors can be fixed with `python -m scrapers.inspect_site <dump file> --base "<selector>"`.
 """
 
-import argparse
 import asyncio
 import json
 import logging
 import re
 import time
+from pathlib import Path
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
-from .common import load_config, now_str, output_path, save_json, setup_logging
+from scrapers.common import now_str, output_path, save_json
 
 logger = logging.getLogger(__name__)
 
 LINK_FIELDS = ("url", "image")
+SITES_FILE = Path(__file__).resolve().parent / "config" / "sites.json"
+
+
+def load_sites(path: Path | str | None = None) -> list[dict]:
+    with open(path or SITES_FILE, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _as_list(value) -> list:
@@ -240,48 +240,3 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
 def _browser_died(error: str | None) -> bool:
     low = (error or "").lower()
     return any(s in low for s in ("has been closed", "target closed", "browser closed", "browser has disconnected"))
-
-
-def main() -> None:
-    setup_logging()
-    parser = argparse.ArgumentParser(description="Scrape the latest vehicle ads.")
-    parser.add_argument("--site", action="append", help="Site name to scrape (repeatable).")
-    parser.add_argument("--limit", type=int, help="Ads per site (overrides the config's 'limit').")
-    parser.add_argument("--save-html", action="store_true", help="Also save each page to output/html_dumps/.")
-    parser.add_argument("--quiet", action="store_true", help="Don't print the JSON, only save it.")
-    parser.add_argument("--list", action="store_true", help="List configured sites and exit.")
-    parser.add_argument("--no-stealth", action="store_true", help="Don't use crawl4ai's stealth browser settings.")
-    parser.add_argument("--max-seconds", type=float,
-                        help=f"Give up on a site after this many seconds (default {SITE_SECONDS}).")
-    args = parser.parse_args()
-
-    sites = load_config("vehicle_sites.json")
-    if args.list:
-        for s in sites:
-            print(f"{'on ' if s.get('enabled', True) else 'off'}  {s['name']:<12} {s['url']}")
-        return
-
-    if args.site:
-        wanted = {n.lower() for n in args.site}
-        sites = [s for s in sites if s["name"].lower() in wanted]
-        if not sites:
-            parser.error("No matching sites. Use --list.")
-    else:
-        sites = [s for s in sites if s.get("enabled", True)]
-
-    try:
-        reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet,
-                                  stealth=not args.no_stealth, max_seconds=args.max_seconds))
-    except RuntimeError as e:
-        logger.error("%s", e)
-        raise SystemExit(1) from None
-    total = sum(r.get("count", 0) for r in reports)
-    logger.info("Done: %d ads from %d site(s): %s", total, len(reports),
-                ", ".join(f"{r['site']} {r.get('count', 0)}" for r in reports))
-    if total == 0:
-        logger.error("No ads from any site (no internet, or the sites changed: see output/html_dumps/).")
-        raise SystemExit(1)
-
-
-if __name__ == "__main__":
-    main()

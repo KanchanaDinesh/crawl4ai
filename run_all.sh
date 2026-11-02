@@ -52,7 +52,7 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 : "${STEP_news:=$UV run --frozen python -m worldnews run ${NEWS_ARGS:-}}"
 : "${STEP_tech:=$UV run --frozen python -m techintel run ${TECH_ARGS:-}}"
 : "${STEP_tech_quick:=$UV run --frozen python -m techintel quick ${TECH_QUICK_ARGS:-}}"
-: "${STEP_vehicles:=$UV run --frozen python -m scrapers.vehicles --quiet ${VEHICLES_ARGS:-}}"
+: "${STEP_vehicles:=$UV run --frozen python -m vehicles run ${VEHICLES_ARGS:-}}"
 : "${STEP_lknews:=$UV run --frozen python -m scrapers.news ${LKNEWS_ARGS:-}}"
 : "${TOOL_markets:=markets}" "${TOOL_news:=news}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
 : "${TOOL_vehicles:=scrapers}" "${TOOL_lknews:=scrapers}"

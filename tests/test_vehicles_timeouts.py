@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scrapers import common, vehicles
+from scrapers import common
+from vehicles import scrape as vehicles
 
 ADS_HTML = "<ul>" + "".join(
     f'<li class="gtm-normal-ad"><a class="gtm-ad-item" href="/ad/car-{i}"><h2 class="heading--x">Car {i}</h2></a></li>'
@@ -65,3 +66,23 @@ def test_browser_that_never_starts_fails_fast(monkeypatch):
 def test_site_config_can_set_its_own_limit():
     reports = asyncio.run(vehicles.run([{**site("slow"), "max_seconds": 0.2}], 5, False, True))
     assert "gave up" in reports[0]["error"] and reports[0]["seconds"] < 5
+
+
+def test_cli_show_changes_and_sites(tmp_path, monkeypatch, capsys):
+    """python -m vehicles show / changes / sites, on sample data."""
+    import importlib
+    monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
+    monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
+    import project_paths, warehouse
+    importlib.reload(project_paths); importlib.reload(warehouse)
+    from sample_data import build_vehicles
+    build_vehicles(runs=3)
+    from vehicles import cli
+    cli.main(["sites"])
+    assert "ikman" in capsys.readouterr().out
+    cli.main(["show", "--new"])
+    out = capsys.readouterr().out
+    assert "Nissan Leaf 2014" in out and "NEW" in out and "2 of 2 ads" in out
+    cli.main(["changes"])
+    assert "->" in capsys.readouterr().out

@@ -22,7 +22,7 @@ def test_browsers_on_system_drive_switch(tmp_path, monkeypatch):
 
 
 def test_dead_browser_is_recognised():
-    from scrapers.vehicles import _browser_died
+    from vehicles.scrape import _browser_died
     from techintel.fetch import browser_died, friendly_error
     msg = "BrowserContext.new_page: Target page, context or browser has been closed"
     assert browser_died(msg) and _browser_died(msg) and not browser_died("Request timed out")

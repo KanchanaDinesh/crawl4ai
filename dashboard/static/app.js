@@ -460,7 +460,7 @@ async function loadVehicles() {
   const s = summary.data;
   if (!s) {
     $("vh-kpis").innerHTML = "";
-    $("vh-list").innerHTML = `<div class="empty">No vehicle ads yet.<br>Run <code>./run_all.sh vehicles</code> (or <code>uv run python -m scrapers.vehicles</code>), then refresh.</div>`;
+    $("vh-list").innerHTML = `<div class="empty">No vehicle ads yet.<br>Run <code>./run_all.sh vehicles</code> (or <code>uv run python -m vehicles run</code>), then refresh.</div>`;
     return;
   }
   const c = s.counts;
