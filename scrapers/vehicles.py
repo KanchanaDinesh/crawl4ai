@@ -11,6 +11,7 @@ Each site in scrapers/config/vehicle_sites.json describes:
   limit             how many ads to keep (default 10)
   sort              optional {"by": "url", "pattern": "-(\\d+)$", "order": "desc"}: sort by a
                     number taken from a field (e.g. the ad id in the URL) before applying limit
+  max_seconds       give up on this site after this long (default 120)
   crawl             extra crawl4ai CrawlerRunConfig options (magic, page_timeout, wait_for, ...)
 
 Each site is written to its own JSON file in output/ and printed as a JSON object.
@@ -22,6 +23,7 @@ Usage:
     python -m scrapers.vehicles --site ikman
     python -m scrapers.vehicles --limit 5 --save-html
     python -m scrapers.vehicles --list
+    python -m scrapers.vehicles --max-seconds 60   # give up on a slow site sooner (default 120)
 """
 
 import argparse
@@ -29,6 +31,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
@@ -154,48 +157,83 @@ async def scrape_site(crawler: AsyncWebCrawler, site: dict, limit: int, save_htm
                 "  python -m scrapers.inspect_site %s",
                 site["name"], site["item_selector"], dump, dump,
             )
-    logger.info("%s: %d ads", site["name"], report["count"])
     return report
 
 
-async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool, stealth: bool = True) -> list[dict]:
+SITE_SECONDS = 120   # give up on one site after this long, whatever the page is doing
+START_SECONDS = 60   # the browser must start within this long
+CLOSE_SECONDS = 15
+
+
+def _failed(site: dict, error: str) -> dict:
+    return {"site": site["name"], "source_url": site["url"], "fetched_at": now_str(), "success": False,
+            "count": 0, "ads": [], "error": error[:400]}
+
+
+async def _open(browser: BrowserConfig) -> AsyncWebCrawler:
+    crawler = AsyncWebCrawler(config=browser)
+    try:
+        await asyncio.wait_for(crawler.__aenter__(), START_SECONDS)
+    except asyncio.TimeoutError:
+        await _close(crawler)
+        raise RuntimeError(f"the browser didn't start within {START_SECONDS}s (run: uv run python doctor.py)") from None
+    return crawler
+
+
+async def _close(crawler: AsyncWebCrawler | None) -> None:
+    if crawler is None:
+        return
+    try:
+        await asyncio.wait_for(crawler.__aexit__(None, None, None), CLOSE_SECONDS)
+    except BaseException:  # noqa: BLE001 - a wedged browser must not block the run
+        pass
+
+
+async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool, stealth: bool = True,
+              max_seconds: float | None = None) -> list[dict]:
+    """Scrape each site. A site gets at most `max_seconds` (default SITE_SECONDS, or its config's
+    "max_seconds"); a slow or stuck page is abandoned and the next site gets a fresh browser."""
     reports = []
     browser = BrowserConfig(headless=True, enable_stealth=stealth)
-    crawler = AsyncWebCrawler(config=browser)
-    await crawler.__aenter__()
+    crawler = None
     try:
         for site in sites:
             n = limit or site.get("limit", 10)
-            try:
-                report = await scrape_site(crawler, site, n, save_html)
-                died = not report["success"] and _browser_died(report.get("error"))
-            except Exception as e:  # noqa: BLE001
-                if not _browser_died(str(e)):
-                    raise
-                died = True
-            if died:                                  # Chromium crashed: start a fresh one and retry this site
-                logger.warning("%s: browser closed unexpectedly; restarting it and retrying", site["name"])
+            budget = max_seconds or site.get("max_seconds", SITE_SECONDS)
+            began = time.monotonic()
+            for attempt in (1, 2):
+                if crawler is None:
+                    logger.info("Starting the browser...")
+                    crawler = await _open(browser)
                 try:
-                    await crawler.__aexit__(None, None, None)
-                except Exception:  # noqa: BLE001
-                    pass
-                crawler = AsyncWebCrawler(config=browser)
-                await crawler.__aenter__()
-                try:
-                    report = await scrape_site(crawler, site, n, save_html)
+                    report = await asyncio.wait_for(scrape_site(crawler, site, n, save_html), budget)
+                    died = not report["success"] and _browser_died(report.get("error"))
+                except asyncio.TimeoutError:
+                    report = _failed(site, f"gave up after {budget:.0f}s: the page didn't finish loading "
+                                           "(slow connection, or the site is blocking the browser)")
+                    logger.error("%s: %s", site["name"], report["error"])
+                    await _close(crawler)        # the page may still be hanging: start clean for the next site
+                    crawler = None
+                    break
                 except Exception as e:  # noqa: BLE001
-                    report = {"site": site["name"], "source_url": site["url"], "success": False, "count": 0,
-                              "ads": [], "error": f"{e} (run: uv run python doctor.py)"[:400]}
+                    if not _browser_died(str(e)):
+                        raise
+                    report, died = _failed(site, f"{e} (run: uv run python doctor.py)"), True
+                if not died:
+                    break
+                await _close(crawler)            # Chromium crashed: start a fresh one and retry this site once
+                crawler = None
+                if attempt == 1:
+                    logger.warning("%s: browser closed unexpectedly; restarting it and retrying", site["name"])
+            report["seconds"] = round(time.monotonic() - began, 1)
+            logger.info("%s: %d ads in %.1fs", site["name"], report["count"], report["seconds"])
             path = save_json(report, site["output_file"])
             logger.info("Saved %s", path)
             if not quiet:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             reports.append(report)
     finally:
-        try:
-            await crawler.__aexit__(None, None, None)
-        except Exception:  # noqa: BLE001
-            pass
+        await _close(crawler)
     return reports
 
 
@@ -213,6 +251,8 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true", help="Don't print the JSON, only save it.")
     parser.add_argument("--list", action="store_true", help="List configured sites and exit.")
     parser.add_argument("--no-stealth", action="store_true", help="Don't use crawl4ai's stealth browser settings.")
+    parser.add_argument("--max-seconds", type=float,
+                        help=f"Give up on a site after this many seconds (default {SITE_SECONDS}).")
     args = parser.parse_args()
 
     sites = load_config("vehicle_sites.json")
@@ -229,7 +269,12 @@ def main() -> None:
     else:
         sites = [s for s in sites if s.get("enabled", True)]
 
-    reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet, stealth=not args.no_stealth))
+    try:
+        reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet,
+                                  stealth=not args.no_stealth, max_seconds=args.max_seconds))
+    except RuntimeError as e:
+        logger.error("%s", e)
+        raise SystemExit(1) from None
     total = sum(r.get("count", 0) for r in reports)
     logger.info("Done: %d ads from %d site(s): %s", total, len(reports),
                 ", ".join(f"{r['site']} {r.get('count', 0)}" for r in reports))

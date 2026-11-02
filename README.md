@@ -330,3 +330,8 @@ symbolic links, then tells you the fix. The usual ones are below.
 - **Only stealth mode fails:** set `VEHICLES_ARGS="--limit 20 --no-stealth"`.
 
 The scrapers also restart a crashed browser and retry once by themselves.
+
+**Vehicles seems stuck:** a site gets at most 120 seconds (the log says `gave up after 120s`), and the
+browser gets 60 seconds to start, so a run can't hang forever. Each site logs how long it took
+(`ikman: 20 ads in 14.2s`). A normal run takes about 10 to 30 seconds per site. If ikman keeps
+giving up, try `--no-stealth`, or a shorter limit: `--max-seconds 60`.
