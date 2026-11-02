@@ -111,7 +111,11 @@ trap 'echo; echo "Stopped."; exit 130' INT TERM
 
 STAMP="$(date '+%Y%m%d-%H%M%S')"
 LOG="$LOG_DIR/run-$STAMP-$PROFILE.log"
-if [ "$SCHEDULED" = 1 ]; then exec >>"$LOG" 2>&1; else exec > >(tee -a "$LOG") 2>&1; fi
+if [ "$SCHEDULED" = 1 ]; then
+  # one line in launchd's log, so ./schedule.sh status can see that the drive is usable again
+  echo "$(date '+%Y-%m-%d %H:%M:%S') run started, log: $LOG"
+  exec >>"$LOG" 2>&1
+else exec > >(tee -a "$LOG") 2>&1; fi
 ln -sf "run-$STAMP-$PROFILE.log" "$LOG_DIR/latest.log"
 
 fmt_secs() { local s=$1; if [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s / 60)) $((s % 60)); else printf '%ds' "$s"; fi; }

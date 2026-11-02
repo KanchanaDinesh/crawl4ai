@@ -65,7 +65,9 @@ case "${1:-}" in
     rotate_log
     echo $$ > "$PIDFILE"
     # launchd's own log is on the Mac's drive (see schedule.sh), so the listener writes logs/watch.log itself
-    if [ -t 1 ]; then exec "${RUN[@]}"; else exec "${RUN[@]}" >> "$LOG_DIR/watch.log" 2>&1; fi
+    [ -t 1 ] && exec "${RUN[@]}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') listener started, log: $LOG_DIR/watch.log"   # for ./schedule.sh status
+    exec "${RUN[@]}" >> "$LOG_DIR/watch.log" 2>&1
     ;;
   -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown option $1 (try --help)"; exit 2 ;;

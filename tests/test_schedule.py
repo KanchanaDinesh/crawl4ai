@@ -76,3 +76,16 @@ def test_scripts_say_clearly_when_the_project_folder_is_blocked(script, tmp_path
         logs.chmod(0o700)
     assert out.returncode == 1
     assert "Operation not permitted" in out.stderr and "Full Disk Access" in out.stderr
+
+
+def test_status_forgets_the_macos_block_once_a_run_gets_in(tmp_path):
+    """A run that works writes nothing else to launchd's log, so only its last line counts."""
+    job_logs = tmp_path / "Library" / "Logs" / "crawl4ai"
+    job_logs.mkdir(parents=True)
+    (job_logs / "scheduler.log").write_text(f"/bin/bash: {ROOT}/run_all.sh: Operation not permitted\n"
+                                            f"2026-11-03 05:15:00 run started, log: {ROOT}/logs/run-x.log\n")
+    env = {**os.environ, "SCHEDULE_OS": "Darwin", "HOME": str(tmp_path)}
+    out = subprocess.run(["bash", str(ROOT / "schedule.sh"), "status"], capture_output=True, text=True, env=env,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert "Problem" not in out.stdout

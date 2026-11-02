@@ -115,6 +115,8 @@ Other schedule commands: `every 2h` (default steps), `daily 07:30 19:30 [--profi
   and says what to fix. The runs and the listener still write their logs to `logs/`.
 - Schedules set up before 2026-11-03 kept their log on the external drive and never started: run
   `./schedule.sh recommended` once to set them up again.
+- **Run `./schedule.sh` from your own Terminal.** Jobs set up from another program (for example an AI
+  assistant's shell) were still blocked from the drive even with Full Disk Access on.
 
 **On a Linux server** the same commands use your crontab (other cron jobs are left untouched); the listener is
 kept running by a cron check every 5 minutes and restarted at boot.

@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 71 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 72 tests pass.
 
 ## Parts and how to run them
 
@@ -57,9 +57,10 @@ Set all three up with one command, then check them:
 - **Overlapping runs:** each tool has a lock (`logs/.lock-<tool>`). If a tool is still busy, that step is
   skipped for that run, not failed.
 
-**State on the Mac (2026-11-03):** the schedules are installed (`./schedule.sh recommended` was re-run with the
-fix), but they can't use the drive until Kanchana gives `/bin/bash` Full Disk Access. Then `./schedule.sh doctor`
-should say "All good", and `tail -3 logs/history.log` should show `(scheduled)` runs.
+**State on the Mac (2026-11-03):** Kanchana gave `/bin/bash` Full Disk Access, and `./schedule.sh doctor` (run from
+their Terminal) said "All good" inside launchd. **Claude must not set up schedules itself:** jobs loaded with
+`launchctl bootstrap` from Claude's shell stayed blocked from the drive ("Operation not permitted") even with Full
+Disk Access, while the one Kanchana loaded from Terminal worked. So Kanchana runs `./schedule.sh recommended`.
 
 ## History (what was done, oldest first)
 
@@ -104,15 +105,18 @@ should say "All good", and `tail -3 logs/history.log` should show `(scheduled)` 
       launchd's log is in `~/Library/Logs/crawl4ai/`. `run_all.sh` and `watch.sh` write their own logs to `logs/`.
     - Once started, bash is blocked from the drive ("Operation not permitted") until `/bin/bash` has Full Disk
       Access. `run_all.sh` and `watch.sh` now say so in one line, and `./schedule.sh status` / `doctor` print the fix.
+    - Even with Full Disk Access, jobs loaded from Claude's shell stayed blocked; the job Kanchana loaded from
+      Terminal worked. Runs now write a "started" line to launchd's log, so `status` stops warning once one gets in.
     - The "vehicles FAILED after 3s" run (03:38) was actually a manual run with a broken Chromium install
       (`icudtl.dat not found`, then "GPU process isn't usable"). The browser was reinstalled at 03:47, and vehicles
       has worked by hand since.
 
 ## Open issues and things to watch
 
-- **Scheduled runs wait for Full Disk Access (2026-11-03).** See history item 19. Next: Kanchana adds `/bin/bash`
-  to Full Disk Access, runs `./schedule.sh doctor`, then checks `./schedule.sh status` after 15 minutes. If a
-  scheduled vehicles run still fails, `tail -3 logs/history.log` shows why.
+- **Scheduled runs: confirm they work (2026-11-03).** See history item 19. Full Disk Access is on. Next: Kanchana
+  runs `./schedule.sh recommended` from Terminal, then `./schedule.sh status` after 15 minutes should show no
+  "Problem" lines, the listener running, and a `(scheduled)` run. If a scheduled vehicles run still fails,
+  `tail -3 logs/history.log` shows why.
   - If "icudtl.dat not found" or "GPU process isn't usable" comes back, the browser install is broken again:
     `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
 - **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive

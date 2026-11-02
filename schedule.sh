@@ -138,8 +138,8 @@ mac_problems() {   # $@ = extra log files to check (whole file) for the macOS bl
   for f in "$AGENTS"/com.crawl4ai.*.plist; do
     if [ -e "$f" ] && grep -qF "<string>$PROJECT_DIR/logs/" "$f"; then old=1; fi
   done
-  for f in "$JOB_LOG_DIR"/*.log; do   # only the latest lines: an old message may have been fixed since
-    if [ -e "$f" ] && tail -n 5 "$f" | grep -q "Operation not permitted"; then blocked=1; fi
+  for f in "$JOB_LOG_DIR"/*.log; do   # only the last line: a run that got in since writes "started"
+    if [ -e "$f" ] && tail -n 1 "$f" | grep -q "Operation not permitted"; then blocked=1; fi
   done
   for f in "$@"; do
     if [ -e "$f" ] && grep -q "Operation not permitted" "$f"; then blocked=1; fi
