@@ -23,3 +23,10 @@ def test_recommended_sets_up_listener_frequent_and_hourly(os_name, tmp_path):
     else:
         assert "--profile frequent" in text and "--profile hourly" in text and "watch.sh" in text
     assert not (tmp_path / "Library").exists()        # dry run: nothing written
+
+
+def test_doctor_runs_inside_the_scheduler_dry_run(tmp_path):
+    env = {**os.environ, "SCHEDULE_OS": "Darwin", "HOME": str(tmp_path)}
+    out = subprocess.run(["bash", str(ROOT / "schedule.sh"), "doctor", "--dry-run"], capture_output=True, text=True,
+                         env=env, timeout=60)
+    assert out.returncode == 0 and "doctor.py --verbose" in out.stdout and "doctor-scheduled.log" in out.stdout

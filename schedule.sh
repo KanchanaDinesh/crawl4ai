@@ -10,6 +10,7 @@
 #   ./schedule.sh status                         all schedules, the listener, the last runs
 #   ./schedule.sh off [--profile NAME | all]     stop one schedule (or every one)
 #   ./schedule.sh run-now [--profile NAME]       start one run now, in the background
+#   ./schedule.sh doctor                         run the browser health check the way scheduled runs see it
 #
 # Profiles are defined in automation.conf. macOS uses launchd (LaunchAgents: they run while you're
 # logged in; a run missed during sleep happens on wake). Linux uses your crontab and leaves your
@@ -34,7 +35,7 @@ done
 set -- "${ARGS[@]+"${ARGS[@]}"}"
 CMD="${1:-}"
 
-usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 label_for() { if [ "$1" = "default" ]; then echo "com.crawl4ai.runall"; else echo "com.crawl4ai.runall.$1"; fi; }
 mark_for() { echo "# crawl4ai-runall[$1]"; }
 WATCH_MARK="# crawl4ai-watch"
@@ -124,6 +125,35 @@ mac_describe() {   # $1 plist file
   else
     echo "  $name: daily at $(grep -oE '<integer>[0-9]+</integer>' "$f" | sed -E 's/<[^>]+>//g' | paste -d: - - | sed -E 's/:([0-9])$/:0\1/' | tr '\n' ' ')"
   fi
+}
+
+# Run doctor.py once inside the scheduler (launchd on a Mac, a cron-like bare environment on Linux), with
+# Chromium's own messages, because scheduled runs have a different environment and permissions than Terminal.
+DOCTOR_LABEL="com.crawl4ai.doctor"
+scheduled_doctor() {
+  local log="$PROJECT_DIR/logs/doctor-scheduled.log"
+  local cmd="cd '$PROJECT_DIR' && uv run --frozen python doctor.py --verbose; echo \"=== doctor finished (exit \$?) ===\""
+  if [ "$DRY" = 1 ]; then echo "Would run in the scheduler: $cmd  > $log"; return; fi
+  mkdir -p "$PROJECT_DIR/logs"; : > "$log"
+  if [ "$OS" = "Darwin" ]; then
+    { plist_head "$DOCTOR_LABEL" /bin/bash -c "$cmd"
+      echo "  <key>StandardOutPath</key><string>$log</string>"
+      echo "  <key>StandardErrorPath</key><string>$log</string>"
+      echo "  <key>RunAtLoad</key><true/>"
+      echo "</dict>"; echo "</plist>"; } | mac_load "$DOCTOR_LABEL"
+  else
+    env -i HOME="$HOME" USER="${USER:-}" PATH="$PATH_FOR_JOBS" /bin/bash -c "$cmd" >"$log" 2>&1 </dev/null &
+  fi
+  echo "Running the health check in the scheduler (up to 3 minutes)..."
+  local i=0
+  while [ $i -lt 180 ] && ! grep -q "=== doctor finished" "$log" 2>/dev/null; do sleep 1; i=$((i + 1)); done
+  [ "$OS" = "Darwin" ] && mac_unload "$DOCTOR_LABEL"
+  # the verdict lines, plus only the Chromium messages that explain a crash (the rest is normal noise)
+  echo; grep -vE "^\s*$" "$log" | grep -E -v "pw:browser" | tail -60
+  local why; why="$(grep -E "pw:browser" "$log" | grep -iE "exitCode=[1-9]|signal=[A-Z]|FATAL|Check failed|crash|denied|not permitted|killed|sandbox" | cut -c1-240 | tail -15)"
+  [ -n "$why" ] && { echo; echo "Chromium said:"; echo "$why"; }
+  grep -q "=== doctor finished" "$log" || echo "(it did not finish within 3 minutes; full output: logs/doctor-scheduled.log)"
+  echo; echo "Full output: logs/doctor-scheduled.log"
 }
 
 # ── Linux: cron ───────────────────────────────────────────────────────────
@@ -243,6 +273,7 @@ case "$CMD" in
     ;;
   off|remove|stop) stop_schedule "${2:-}" ;;
   status) status ;;
+  doctor) scheduled_doctor ;;
   run-now)
     check_profile
     # shellcheck disable=SC2046

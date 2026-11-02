@@ -43,7 +43,7 @@ def test_doctor_advice(fs, links, expect, monkeypatch, capsys, tmp_path):
     async def browser_ok():
         return None if links else "BrowserContext.new_page: Target page, context or browser has been closed"
 
-    async def crawl_ok(stealth):
+    async def crawl_ok(stealth, vehicles_settings=False):
         return await browser_ok()
     monkeypatch.setattr(doctor, "try_playwright", browser_ok)
     monkeypatch.setattr(doctor, "try_crawl4ai", crawl_ok)

@@ -27,7 +27,7 @@ Run every command from the project folder, after `source env.sh`.
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News, Tech Intel, Markets, Vehicles. **Restart it after every `git pull`** |
 | Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.` |
-| Health check | `uv run python doctor.py` | Checks that Chromium starts and that the drive supports symlinks |
+| Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
 ## Automation (the agreed plan)
 
@@ -92,14 +92,20 @@ schedules are active. Ask them to run `./schedule.sh status`.
     Failure reasons are now visible:
     - `run_all.sh` adds the step's last error line to the summary and to `logs/history.log`.
     - Vehicles says in one line why the browser couldn't start, or why each site gave no ads.
+18. Added `./schedule.sh doctor` to run the health check inside the scheduler.
+    - `doctor.py` now prints its environment, has `--verbose` (Chromium's own output), and also tests the
+      vehicles page settings (magic mode).
 
 ## Open issues and things to watch
 
 - **Vehicles failed in a scheduled run (2026-11-02), cause not known yet.** It failed after about 3s.
   `doctor.py` on the Mac says "All good: the browser works here", so the browser and drive are fine when run by hand.
-  - Next: check the reason in `tail -3 logs/history.log` after the next scheduled run (the reason is shown now).
-  - If only scheduled runs fail, look at launchd differences: environment, Full Disk Access, the drive
-    not being mounted yet.
+  - **Cause narrowed down (2026-11-03):** in scheduled runs Chromium starts and dies at once.
+    The log shows `BrowserContext.new_page: Target page, context or browser has been closed` for both sites.
+    By hand, it works.
+  - Next: Kanchana runs `./schedule.sh doctor`, which runs doctor.py inside launchd with Chromium's own
+    messages, and sends the output. Then fix whatever launchd blocks: environment, permissions, sandbox.
+  - Other checks: `tail -3 logs/history.log` shows the reason for new failures.
 - **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive
   supports symlinks, so `BROWSERS_ON_SYSTEM_DRIVE` isn't needed. If "browser has been closed" errors come
   back, run `uv run python doctor.py` again.

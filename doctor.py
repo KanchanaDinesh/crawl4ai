@@ -1,4 +1,6 @@
-"""Health check for this machine:  uv run python doctor.py
+"""Health check for this machine:  uv run python doctor.py   (--verbose: also show Chromium's own messages)
+
+To check it the way scheduled runs see it (different environment and permissions):  ./schedule.sh doctor
 
 Checks what the browser-based tools need (vehicles, tech intel profiling, the news browser
 fallback) and prints a clear verdict with the fix for anything wrong:
@@ -79,20 +81,34 @@ async def try_playwright() -> str | None:
         return str(e).strip().splitlines()[0][:300]
 
 
-async def try_crawl4ai(stealth: bool) -> str | None:
+async def try_crawl4ai(stealth: bool, vehicles_settings: bool = False) -> str | None:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+    extra = {}
+    if vehicles_settings:                       # the same page settings the vehicles scraper uses (magic mode etc.)
+        try:
+            from vehicles.scrape import load_sites
+            extra = dict(load_sites()[0].get("crawl", {}))
+        except Exception:  # noqa: BLE001
+            extra = {"magic": True, "delay_before_return_html": 2.0}
     try:
         async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False, enable_stealth=stealth)) as c:
             r = await c.arun(url="raw://<html><body><h1>ok</h1><p>" + "word " * 50 + "</p></body></html>",
-                             config=CrawlerRunConfig(verbose=False))
+                             config=CrawlerRunConfig(verbose=False, **extra))
             return None if r.success and "ok" in (r.html or "") else (r.error_message or "no content")[:300]
     except Exception as e:  # noqa: BLE001
         return str(e).strip().splitlines()[0][:300]
 
 
 def main() -> None:
+    verbose = "--verbose" in sys.argv or "-v" in sys.argv
+    if verbose:
+        os.environ["DEBUG"] = "pw:browser"      # Playwright then prints Chromium's own output (why it stops)
     os.environ.setdefault("CRAWL4AI_NO_CLOUD_NOTICE", "1")
-    print(f"Project: {project_paths.REPO_ROOT}\n")
+    print(f"Project: {project_paths.REPO_ROOT}")
+    print(f"Started from: {'a Terminal' if sys.stdin and sys.stdin.isatty() else 'the background (no Terminal)'}")
+    for name in ("USER", "HOME", "TMPDIR", "PATH", "PLAYWRIGHT_BROWSERS_PATH"):
+        print(f"  {name}={os.environ.get(name, '(not set)')}")
+    print()
     line(OK, "Python", f"{sys.version.split()[0]} on {platform.system()} {platform.machine()}")
     for pkg in ("crawl4ai", "playwright", "duckdb"):
         try:
@@ -123,12 +139,13 @@ def main() -> None:
     line(OK if not err else BAD, "Playwright opens a page", err or "")
     if err:
         problems.append("playwright")
-    for stealth in (False, True):
-        err = asyncio.run(try_crawl4ai(stealth))
-        label = "crawl4ai opens a page" + (" (stealth, as vehicles uses)" if stealth else "")
+    for stealth, veh in ((False, False), (True, False), (True, True)):
+        err = asyncio.run(try_crawl4ai(stealth, veh))
+        label = ("crawl4ai opens a page" + (" (stealth)" if stealth and not veh else "")
+                 + (" (stealth + the vehicles page settings)" if veh else ""))
         line(OK if not err else BAD, label, err or "")
         if err:
-            problems.append("crawl4ai-stealth" if stealth else "crawl4ai")
+            problems.append("crawl4ai-vehicles" if veh else "crawl4ai-stealth" if stealth else "crawl4ai")
 
     print()
     if not problems:
@@ -146,8 +163,12 @@ def main() -> None:
     if "playwright" in problems and "filesystem" not in problems and "no browser" not in problems:
         print("  - Chromium doesn't start. Reinstall it:  source env.sh && rm -rf \"$PLAYWRIGHT_BROWSERS_PATH\"/chromium* "
               "&& uv run crawl4ai-setup")
-    if problems == ["crawl4ai-stealth"]:
+    if problems == ["crawl4ai-vehicles"]:
+        print("  - Only the vehicles page settings fail: in vehicles/config/sites.json try \"magic\": false for each site.")
+    if set(problems) <= {"crawl4ai-stealth", "crawl4ai-vehicles"} and "crawl4ai-stealth" in problems:
         print("  - Only stealth mode fails: in automation.conf set  VEHICLES_ARGS=\"--limit 20 --no-stealth\"")
+    if not verbose:
+        print("  - For Chromium's own messages (why it stopped), run again with:  uv run python doctor.py --verbose")
     sys.exit(1)
 
 

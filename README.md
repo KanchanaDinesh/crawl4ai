@@ -291,8 +291,18 @@ source env.sh
 uv run python doctor.py
 ```
 
-It checks that Chromium starts (with and without stealth mode) and that the drive holding it supports
-symbolic links, then tells you the fix. The usual ones are below.
+It checks that Chromium starts (with and without stealth mode, and with the vehicles page settings) and that the
+drive holding it supports symbolic links, then tells you the fix. `--verbose` also shows Chromium's own messages.
+
+**Works by hand but fails in scheduled runs?** Scheduled runs start from launchd, which has a different
+environment and different permissions than Terminal. Run the same check inside the scheduler; it takes about
+a minute:
+
+```bash
+./schedule.sh doctor
+```
+
+It prints the verdict and any Chromium crash messages, and saves everything to `logs/doctor-scheduled.log`. The usual ones are below.
 
 - **External drive is exFAT/FAT:** Chromium on macOS can't run from it. Set `BROWSERS_ON_SYSTEM_DRIVE=1` in
   `automation.conf`, then run `source env.sh && uv run crawl4ai-setup`. Only the browser (about 500 MB) moves to
