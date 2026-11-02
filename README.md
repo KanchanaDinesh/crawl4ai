@@ -1,11 +1,14 @@
 # Web scrapers
 
-Two parts, both built on crawl4ai:
+Three parts, all built on crawl4ai:
 
 - **`scrapers/`**: news, vehicle ads, products, IMDb and Colombo Stock Exchange scrapers (this page).
 - **`techintel/`**: a pipeline that discovers new tech websites, profiles and monitors them, and
   writes analytics reports. See [techintel/README.md](techintel/README.md).
   Quick start: `uv run python -m techintel run`.
+- **`worldnews/`**: the latest headlines from major news sites in the US, India, Sri Lanka, Australia,
+  Canada, China, plus world and technology news, in one daily report.
+  See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
 
 The scrapers use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an

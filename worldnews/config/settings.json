@@ -1,0 +1,51 @@
+{
+  "limit_per_source": 10,
+
+  "groups": [
+    {"code": "US",     "name": "United States"},
+    {"code": "IN",     "name": "India"},
+    {"code": "LK",     "name": "Sri Lanka"},
+    {"code": "AU",     "name": "Australia"},
+    {"code": "CA",     "name": "Canada"},
+    {"code": "CN",     "name": "China"},
+    {"code": "GLOBAL", "name": "World"},
+    {"code": "TECH",   "name": "Technology"}
+  ],
+
+  "fetch": {
+    "concurrency": 8,
+    "timeout_seconds": 25,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "browser_fallback": true,
+    "fetch_article_meta": true,
+    "article_meta_concurrency": 6
+  },
+
+  "homepage": {
+    "min_title_words": 4,
+    "min_title_chars": 25,
+    "max_title_chars": 220,
+    "skip_url_words": ["tag", "tags", "topic", "topics", "category", "categories", "section", "author", "authors",
+                       "about", "contact", "privacy", "terms", "subscribe", "subscription", "newsletter", "newsletters",
+                       "login", "signin", "sign-in", "register", "account", "search", "advertise", "careers", "jobs",
+                       "podcasts", "podcast", "weather", "horoscope", "games", "puzzles", "crossword", "shop",
+                       "coupons", "deals", "cookie", "cookies", "feedback", "help", "faq", "sitemap", "rss", "live-tv"]
+  },
+
+  "tech_keywords": [
+    "technology", "tech", "artificial intelligence", "ai", "a.i.", "machine learning", "chatgpt", "openai",
+    "anthropic", "claude", "gemini", "llm", "chatbot", "deepfake", "robot", "robotics", "automation",
+    "semiconductor", "chip", "chips", "chipmaker", "nvidia", "intel", "amd", "tsmc", "qualcomm",
+    "apple", "iphone", "google", "alphabet", "microsoft", "meta", "amazon", "aws", "tesla", "spacex", "starlink",
+    "samsung", "huawei", "xiaomi", "bytedance", "tiktok", "alibaba", "tencent", "baidu", "infosys", "tcs", "wipro",
+    "software", "app", "apps", "smartphone", "cloud", "data centre", "data center", "cyber", "cybersecurity",
+    "hack", "hacker", "hackers", "ransomware", "malware", "data breach", "quantum", "crypto", "bitcoin",
+    "blockchain", "startup", "startups", "unicorn", "satellite", "5g", "6g", "broadband", "internet", "digital",
+    "electric vehicle", "ev", "battery", "gadget", "social media", "algorithm", "x.com"
+  ],
+
+  "report": {
+    "items_per_source_in_report": null,
+    "new_badge": true
+  }
+}
