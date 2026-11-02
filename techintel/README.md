@@ -38,6 +38,31 @@ uv run python -m techintel report --days 7
 Re-running is always safe. Each stage only processes what's new or due: discover skips domains it
 already knows, qualify skips checked ones until they're due for a re-check, and so on.
 
+## How long does a run take?
+
+Each stage prints progress as it goes (`qualify 12/30 example.ai qualified … (eta 1m20s)`), plus a
+"still working" line every 20 seconds, and `run` ends with the time per stage. Typical costs:
+
+| Stage | What takes time |
+|---|---|
+| discover | **crt.sh** can take up to a minute per query (it's a slow public service). Skip it with `--source hackernews --source seeds` |
+| qualify | One quick HTTP request per domain, 10 at a time, 15-second timeout. A real browser is used only for pages that load but look empty (JavaScript sites) or answer "forbidden"; never for domains that don't resolve or don't answer |
+| enrich | One RDAP lookup per new qualified domain, 3 at a time |
+| profile | The slowest: a real browser opens up to 6 pages per site (home, about, pricing, docs, blog, careers), 4 sites at a time, with a pause between pages of the same site |
+| monitor | Same as profile, but only for sites last checked more than `monitor.interval_days` ago |
+
+To keep runs short:
+
+```bash
+uv run python -m techintel run --limit 20            # at most 20 sites per stage
+uv run python -m techintel run --max-minutes 5       # each stage stops starting new sites after 5 minutes
+uv run python -m techintel status                    # what's been done, and how long each stage took
+```
+
+Every stage saves each site's result as soon as it's finished, so **Ctrl+C is safe**: nothing finished is
+lost, and running the same command again continues with what's left. The same goes for `--limit` and
+`--max-minutes`: whatever wasn't processed is picked up by the next run.
+
 ## The stages
 
 | Stage | What it does | Reads | Writes |
@@ -87,11 +112,11 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 | `settings.json` → `sources` | Turn sources on or off; crt.sh queries; HN lookback |
 | `settings.json` → `domain_filter` | TLDs and name keywords that look interesting; platforms to ignore |
 | `settings.json` → `categories` | **The classifier:** keywords per category. Add categories or terms freely |
-| `settings.json` → `qualify` | `min_score`, `min_words`, parked and placeholder phrases, re-check intervals |
+| `settings.json` → `qualify` | `concurrency` and `timeout_ms` for the homepage check, `min_score`, `min_words`, parked and placeholder phrases, re-check intervals |
 | `settings.json` → `enrich` | Turn RDAP lookups on or off; timeout and politeness |
 | `settings.json` → `report` | Period, and how many sites and domains to list (`max_sites_listed`, `max_domains_listed`) |
 | `settings.json` → `profile` | Which key pages to look for, max pages per site, job-board hosts |
-| `settings.json` → `crawl` | Politeness: concurrency, delay between requests, robots.txt, user agent |
+| `settings.json` → `crawl` | Politeness: concurrency, delay between requests to the same site, robots.txt, user agent, `max_stage_minutes` (time limit per stage) |
 | `fingerprints.json` | Tech stack detection rules (HTML regex / headers / meta generator) |
 | `seeds.txt` | Sites you want evaluated |
 

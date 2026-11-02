@@ -3,13 +3,15 @@
   http     plain HTTP request: fast and cheap, but no JavaScript (good for qualifying)
   browser  real headless browser: renders JavaScript sites (good for profiling)
 
-Politeness is built in: limited concurrency, a delay between requests, and
-robots.txt is respected (settings["crawl"]).
+Politeness is built in: limited concurrency, a delay between requests to the same
+site (different sites don't wait for each other), and robots.txt is respected
+(settings["crawl"]).
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig, HTTPCrawlerConfig
 from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
@@ -32,16 +34,47 @@ class FetchResult:
     error: str | None = None
 
 
+ERROR_PATTERNS = (
+    (("name or service not known", "nodename nor servname", "getaddrinfo", "no address associated",
+      "err_name_not_resolved", "temporary failure in name resolution"), "domain does not resolve (no website yet)"),
+    (("connect call failed", "connection refused", "err_connection_refused"), "connection refused"),
+    (("timed out", "timeout", "err_timed_out"), "timed out"),
+    (("certificate", "ssl", "err_cert"), "SSL certificate error"),
+    (("connection reset", "server disconnected", "err_connection_reset", "err_empty_response"), "connection dropped"),
+    (("robots",), "robots.txt disallows crawling"),
+    (("anti-bot", "captcha", "cloudflare"), "possible bot protection"),
+)
+
+
+def friendly_error(error: str | None) -> str | None:
+    """crawl4ai wraps errors in long tracebacks; turn them into a short, readable reason."""
+    if not error:
+        return error
+    low = error.lower()
+    for needles, label in ERROR_PATTERNS:
+        if any(n in low for n in needles):
+            return label
+    for line in error.splitlines():
+        if line.strip().startswith("Error:"):
+            return line.strip()[6:].strip()[:160]
+    return error.strip().splitlines()[0][:160]
+
+
 class Fetcher:
     """Async context manager: `async with Fetcher(settings.section("crawl"), "http") as f: ...`"""
 
-    def __init__(self, crawl_config: dict, mode: str = "http"):
+    def __init__(self, crawl_config: dict, mode: str = "http", concurrency: int | None = None,
+                 timeout_ms: int | None = None):
         if mode not in ("http", "browser"):
             raise ValueError("mode must be 'http' or 'browser'")
         self.mode = mode
-        self.config = crawl_config
-        self._semaphore = asyncio.Semaphore(crawl_config.get("concurrency", 4))
+        self.config = dict(crawl_config)
+        if timeout_ms:
+            self.config["page_timeout_ms"] = timeout_ms
+        self._semaphore = asyncio.Semaphore(concurrency or crawl_config.get("concurrency", 4))
         self._crawler: AsyncWebCrawler | None = None
+        self._host_next: dict[str, float] = {}       # politeness: earliest next request time per host
+        self._host_lock = asyncio.Lock()
 
     async def __aenter__(self) -> "Fetcher":
         user_agent = self.config.get("user_agent")
@@ -68,15 +101,28 @@ class Fetcher:
             verbose=False,
         )
 
+    async def _wait_for_host(self, url: str) -> None:
+        """Space out requests to the *same* site by delay_seconds; different sites don't wait."""
+        delay = float(self.config.get("delay_seconds", 1.0))
+        if delay <= 0:
+            return
+        host = urlsplit(url).netloc.lower()
+        loop = asyncio.get_running_loop()
+        async with self._host_lock:
+            now = loop.time()
+            start = max(now, self._host_next.get(host, 0.0))
+            self._host_next[host] = start + delay
+        if start > now:
+            await asyncio.sleep(start - now)
+
     async def fetch(self, url: str) -> FetchResult:
+        await self._wait_for_host(url)
         async with self._semaphore:
             try:
                 result = await self._crawler.arun(url=url, config=self._run_config())
             except Exception as e:  # network errors, timeouts, browser crashes
                 logger.debug("fetch %s failed: %s", url, e)
-                return FetchResult(url=url, mode=self.mode, success=False, error=str(e))
-            finally:
-                await asyncio.sleep(self.config.get("delay_seconds", 1.0))
+                return FetchResult(url=url, mode=self.mode, success=False, error=friendly_error(str(e)))
 
         markdown = ""
         if result.markdown is not None:
@@ -93,7 +139,7 @@ class Fetcher:
             headers=dict(result.response_headers or {}),
             internal_links=links.get("internal", []),
             external_links=links.get("external", []),
-            error=None if result.success else result.error_message,
+            error=None if result.success else friendly_error(result.error_message),
         )
 
     async def fetch_many(self, urls: list[str]) -> list[FetchResult]:

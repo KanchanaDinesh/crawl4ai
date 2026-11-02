@@ -14,7 +14,7 @@
       "queries": ["%.lk"],
       "lookback_days": 3,
       "max_results_per_query": 500,
-      "timeout_seconds": 120
+      "timeout_seconds": 60
     },
     "certstream": {
       "enabled": false,
@@ -50,12 +50,15 @@
     "concurrency": 4,
     "delay_seconds": 1.0,
     "page_timeout_ms": 30000,
+    "max_stage_minutes": 15,
     "check_robots_txt": true,
     "user_agent": null
   },
 
   "qualify": {
     "fetch_mode": "http",
+    "concurrency": 10,
+    "timeout_ms": 15000,
     "browser_fallback": true,
     "min_words": 80,
     "min_score": 6,

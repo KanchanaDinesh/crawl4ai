@@ -133,4 +133,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "report":
         cmd_report(settings, args)
     else:
-        asyncio.run(cmd_run(settings, args, check=args.command == "check"))
+        try:
+            asyncio.run(cmd_run(settings, args, check=args.command == "check"))
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            sys.exit(130)

@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import sys
+import time
 from collections import Counter
 
 os.environ.setdefault("CRAWL4AI_NO_CLOUD_NOTICE", "1")   # hide crawl4ai's promo banner
@@ -34,19 +35,31 @@ logger = logging.getLogger("techintel")
 
 async def run_stage(name: str, settings, store, **options) -> dict:
     module = importlib.import_module(f".stages.{name}", __package__)
-    started = utc_now()
+    started, t0 = utc_now(), time.monotonic()
     logger.info("── %s ──", name)
+
+    def record(status: str, summary: dict) -> None:
+        store.append("runs", [{"stage": name, "status": status, "started_at": started, "finished_at": utc_now(),
+                               "seconds": round(time.monotonic() - t0, 1),
+                               "options": {k: v for k, v in options.items() if v}, "summary": summary}])
     try:
         summary = await module.run(settings, store, **options)
         status = "ok"
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        record("interrupted", {"note": "stopped with Ctrl+C; results finished so far are saved"})
+        logger.warning("%s interrupted: results finished so far are saved; the rest is picked up next run", name)
+        raise
     except Exception as e:
         logger.exception("stage %s failed", name)
         summary, status = {"error": str(e)}, "failed"
-    store.append("runs", [{"stage": name, "status": status, "started_at": started,
-                           "finished_at": utc_now(), "options": {k: v for k, v in options.items() if v},
-                           "summary": summary}])
-    logger.info("%s: %s", name, json.dumps(summary, ensure_ascii=False))
+    record(status, summary)
+    logger.info("%s done in %s: %s", name, _dur(time.monotonic() - t0), json.dumps(summary, ensure_ascii=False))
     return summary
+
+
+def _dur(seconds: float) -> str:
+    seconds = int(seconds)
+    return f"{seconds // 60}m{seconds % 60:02d}s" if seconds >= 60 else f"{seconds}s"
 
 
 def status(store) -> None:
@@ -63,7 +76,9 @@ def status(store) -> None:
     for stage in STAGE_ORDER:
         if stage in last:
             r = last[stage]
-            print(f"  {stage:<9} {r['finished_at']}  {r['status']:<6} {json.dumps(r['summary'], ensure_ascii=False)[:110]}")
+            took = _dur(r["seconds"]) if r.get("seconds") is not None else "?"
+            print(f"  {stage:<9} {r['finished_at']}  {r['status']:<11} {took:>7}  "
+                  f"{json.dumps(r['summary'], ensure_ascii=False)[:100]}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,6 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
         s = sub.add_parser(name, help=help_text)
         s.add_argument("--limit", type=int, help="Process at most N sites")
         s.add_argument("--domain", action="append", dest="domains", help="Only this domain (repeatable)")
+        s.add_argument("--max-minutes", type=float, dest="max_minutes",
+                       help="Stop starting new sites after N minutes (the rest is done next run)")
         if name == "qualify":
             s.add_argument("--recheck", action="store_true", help="Re-check already checked candidates")
         if name == "monitor":
@@ -98,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--source", action="append", dest="sources", help="Discovery sources (default: enabled ones)")
     r.add_argument("--minutes", type=float, help="certstream listening time, if certstream is used")
     r.add_argument("--limit", type=int, help="Max sites per stage")
+    r.add_argument("--max-minutes", type=float, dest="max_minutes",
+                   help="Time limit per stage (default: crawl.max_stage_minutes in settings)")
     r.add_argument("--days", type=int, help="Report period in days")
 
     sub.add_parser("status", help="Show counts and last runs")
@@ -113,12 +132,21 @@ async def main_async(args) -> None:
         status(store)
         return
     if args.command == "run":
+        timings = []
+        t = time.monotonic()
         await run_stage("discover", settings, store, sources=options.get("sources"), minutes=options.get("minutes"))
+        timings.append(("discover", time.monotonic() - t))
         for stage in ("qualify", "enrich", "profile", "monitor"):
-            await run_stage(stage, settings, store, limit=options.get("limit"))
+            t = time.monotonic()
+            await run_stage(stage, settings, store, limit=options.get("limit"), max_minutes=options.get("max_minutes"))
+            timings.append((stage, time.monotonic() - t))
+        t = time.monotonic()
         summary = await run_stage("report", settings, store, days=options.get("days"))
+        timings.append(("report", time.monotonic() - t))
+        print("\nTime per stage: " + "  ".join(f"{s} {_dur(d)}" for s, d in timings)
+              + f"  |  total {_dur(sum(d for _, d in timings))}")
         if "html" in summary:
-            print(f"\nReport: {summary['html']}")
+            print(f"Report: {summary['html']}")
         return
 
     summary = await run_stage(args.command, settings, store, **options)
@@ -132,7 +160,11 @@ def main(argv: list[str] | None = None) -> None:
                         format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S")
     for noisy in ("crawl4ai", "asyncio", "aiohttp", "urllib3", "httpx", "filelock"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
-    asyncio.run(main_async(args))
+    try:
+        asyncio.run(main_async(args))
+    except KeyboardInterrupt:
+        print("\nStopped. Finished results are saved; run the same command again to continue.")
+        sys.exit(130)
 
 
 if __name__ == "__main__":

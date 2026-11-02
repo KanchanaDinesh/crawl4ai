@@ -176,5 +176,5 @@ def tech_changes(con, days=30, limit=100) -> list[dict]:
 
 def tech_runs(con) -> list[dict]:
     return rows(con, """select key as stage, data->>'status' as status, data->>'finished_at' as finished_at,
-            (data->'summary')::varchar as summary
+            try_cast(data->>'seconds' as double) as seconds, (data->'summary')::varchar as summary
         from runs qualify row_number() over (partition by key order by row_id desc) = 1 order by finished_at desc""")

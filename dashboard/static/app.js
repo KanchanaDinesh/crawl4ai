@@ -193,8 +193,9 @@ async function loadTech() {
   $("tech-changes").innerHTML = (changes.data || []).length ? changes.data.slice(0, 25).map((x) => `
     <div class="news-item"><div><b>${esc(x.domain)}</b> ${esc(changeText(x))}</div><div class="meta">${fmtTime(x.detected_at)} · ${ago(x.detected_at)}</div></div>`).join("")
     : `<div class="muted small">No changes detected yet.</div>`;
-  $("tech-runs").innerHTML = (runs.data || []).length ? `<table><tr><th>Stage</th><th>Status</th><th>Finished</th></tr>${runs.data.map((r) => `
-    <tr title="${esc(r.summary || "")}"><td>${esc(r.stage)}</td><td>${pill(r.status === "ok" ? "ok" : "failed")}</td><td class="nowrap">${fmtTime(r.finished_at)}</td></tr>`).join("")}</table>`
+  $("tech-runs").innerHTML = (runs.data || []).length ? `<table><tr><th>Stage</th><th>Status</th><th>Finished</th><th class="num">Took</th></tr>${runs.data.map((r) => `
+    <tr title="${esc(r.summary || "")}"><td>${esc(r.stage)}</td><td>${pill(r.status)}</td><td class="nowrap">${fmtTime(r.finished_at)}</td>
+    <td class="num nowrap">${r.seconds == null ? "" : r.seconds >= 60 ? `${Math.floor(r.seconds / 60)}m${String(Math.round(r.seconds % 60)).padStart(2, "0")}s` : `${Math.round(r.seconds)}s`}</td></tr>`).join("")}</table>`
     : `<div class="muted small">No runs yet.</div>`;
   await loadTechRows(true);
 }

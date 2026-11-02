@@ -125,7 +125,7 @@ def test_full_pipeline(settings, store, sites):
 
         # 3. profile
         p = await run_stage("profile", settings, store)
-        assert p == {"profiled": 1, "ok": 1, "unreachable": 0}
+        assert (p["profiled"], p["ok"], p["unreachable"], p["left_for_next_run"]) == (1, 1, 0, 0)
         prof = store.latest("profiles")[sites["tech"].domain]
         assert set(prof["key_pages"]) == {"about", "pricing", "docs", "blog", "careers"}
         assert {"Next.js", "Stripe", "Cloudflare"} <= set(prof["tech_stack"])

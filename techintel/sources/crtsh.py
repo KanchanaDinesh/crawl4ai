@@ -62,6 +62,7 @@ async def collect(ctx) -> list[Candidate]:
     errors: list[str] = []
     async with aiohttp.ClientSession(trust_env=True) as session:
         for query in queries:
+            logger.info("crt.sh: querying %r (crt.sh is slow; this can take up to %ss)", query, int(timeout.total))
             params = {"q": query, "output": "json", "exclude": "expired"}
             try:
                 async with session.get(API, params=params, timeout=timeout) as resp:

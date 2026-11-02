@@ -13,7 +13,7 @@ from ..domains import DomainFilter
 from ..fetch import Fetcher
 from ..models import Change
 from ..techstack import TechDetector
-from . import age_days
+from . import age_days, process_items
 from .profile import build_profile
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def diff_profiles(old: dict, new: dict) -> list[Change]:
 
 
 async def run(settings, store, limit: int | None = None, force: bool = False,
-              domains: list[str] | None = None, **_) -> dict:
+              domains: list[str] | None = None, max_minutes: float | None = None, **_) -> dict:
     interval = float(settings.section("monitor").get("interval_days", 7))
     latest = store.latest("profiles")
     todo = [p for d, p in latest.items()
@@ -80,18 +80,27 @@ async def run(settings, store, limit: int | None = None, force: bool = False,
 
     detector = TechDetector(settings.load_json("fingerprints.json"))
     domain_filter = DomainFilter(settings.section("domain_filter"))
+    crawl = settings.section("crawl")
     mode = settings.section("profile").get("fetch_mode", "browser")
-    profiles, changes = [], []
-    async with Fetcher(settings.section("crawl"), mode) as fetcher:
+    n_changes = 0
+    async with Fetcher(crawl, mode) as fetcher:
         async def one(old: dict) -> tuple[dict, list[Change]]:
             extra = {"category": old.get("category"), "tech_score": old.get("tech_score")}
             new = await build_profile(fetcher, old["domain"], old["url"], settings, store, detector,
                                       domain_filter, "monitor", extra)
             return new, diff_profiles(old, new)
-        for new, diffs in await asyncio.gather(*(one(p) for p in todo)):
-            profiles.append(new)
-            changes.extend(c.to_dict() for c in diffs)
-            logger.info("monitor %-28s %-11s %d change(s)", new["domain"], new["status"], len(diffs))
-    store.append("profiles", profiles)
-    store.append("changes", changes)
-    return {"monitored": len(profiles), "changes": len(changes)}
+
+        def save(result) -> None:
+            nonlocal n_changes
+            new, diffs = result
+            store.append("profiles", [new])
+            store.append("changes", [c.to_dict() for c in diffs])
+            n_changes += len(diffs)
+
+        out = await process_items(
+            todo, one, stage="monitor", on_result=save,
+            describe=lambda r: f"{r[0]['domain']:<28} {r[0]['status']:<11} {len(r[1])} change(s)",
+            concurrency=int(crawl.get("concurrency", 4)),
+            max_minutes=max_minutes or crawl.get("max_stage_minutes"))
+    return {"monitored": len(out["results"]), "changes": n_changes, "left_for_next_run": out["skipped"],
+            "seconds": out["seconds"]}

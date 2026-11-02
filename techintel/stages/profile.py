@@ -19,6 +19,7 @@ from ..fetch import Fetcher, FetchResult
 from ..models import utc_now
 from ..pages import parse_page, strip_shared_lines, top_keywords
 from ..techstack import TechDetector
+from . import process_items
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,13 @@ async def build_profile(fetcher: Fetcher, domain: str, url: str, settings, store
     }
 
 
-async def run(settings, store, limit: int | None = None, domains: list[str] | None = None, **_) -> dict:
+def _describe(p: dict) -> str:
+    detail = ", ".join(p.get("tech_stack", [])[:5]) if p["status"] == "ok" else (p.get("error") or "")[:70]
+    return f"{p['domain']:<28} {p['status']:<11} {detail}"
+
+
+async def run(settings, store, limit: int | None = None, domains: list[str] | None = None,
+              max_minutes: float | None = None, **_) -> dict:
     profiled = store.keys("profiles")
     qualifications = store.latest("qualifications")
     todo = [q for d, q in qualifications.items()
@@ -149,18 +156,21 @@ async def run(settings, store, limit: int | None = None, domains: list[str] | No
 
     detector = TechDetector(settings.load_json("fingerprints.json"))
     domain_filter = DomainFilter(settings.section("domain_filter"))
+    crawl = settings.section("crawl")
     mode = settings.section("profile").get("fetch_mode", "browser")
-    rows = []
-    async with Fetcher(settings.section("crawl"), mode) as fetcher:
+    counts = {"ok": 0, "unreachable": 0}
+    async with Fetcher(crawl, mode) as fetcher:
         async def one(q: dict) -> dict:
             url = q.get("final_url") or q.get("url") or homepage_url(q["domain"])
             extra = {"category": q.get("category"), "tech_score": q.get("score")}
             return await build_profile(fetcher, q["domain"], url, settings, store, detector, domain_filter,
                                        "initial", extra)
-        for p in await asyncio.gather(*(one(q) for q in todo)):
-            rows.append(p)
-            logger.info("profile %-28s %-11s %s", p["domain"], p["status"],
-                        ", ".join(p.get("tech_stack", [])[:6]) or p.get("error", ""))
-    store.append("profiles", rows)
-    ok = sum(1 for p in rows if p["status"] == "ok")
-    return {"profiled": len(rows), "ok": ok, "unreachable": len(rows) - ok}
+
+        def save(p: dict) -> None:
+            counts["ok" if p["status"] == "ok" else "unreachable"] += 1
+            store.append("profiles", [p])
+
+        out = await process_items(todo, one, stage="profile", on_result=save, describe=_describe,
+                                  concurrency=int(crawl.get("concurrency", 4)),
+                                  max_minutes=max_minutes or crawl.get("max_stage_minutes"))
+    return {"profiled": len(out["results"]), **counts, "left_for_next_run": out["skipped"], "seconds": out["seconds"]}

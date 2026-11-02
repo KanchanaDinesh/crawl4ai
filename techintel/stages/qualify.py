@@ -16,7 +16,7 @@ from ..domains import DomainFilter, homepage_url, host_of, root_domain
 from ..fetch import Fetcher, FetchResult
 from ..models import Qualification
 from ..pages import parse_page
-from . import age_days
+from . import age_days, process_items
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +42,19 @@ def evaluate(cand: dict, result: FetchResult, classifier: RuleClassifier, domain
                 final_url=result.final_url, http_status=result.status)
     if not result.success:
         error = result.error or "unknown error"
-        if "robots" in error.lower():
+        if "robots" in error.lower():  # friendly_error keeps the word "robots"
             return Qualification(status="rejected", reason="robots.txt disallows crawling", **base)
-        # crawl4ai can flag tiny pages as possible bot-blocks while still returning the HTML.
-        # Parked and "coming soon" pages are often tiny, so judge the content if we have it.
+        # crawl4ai can flag small, simple pages as possible bot-blocks while still returning the HTML.
+        # If the page has real content (or is clearly parked / a placeholder), judge it on its content.
         if result.html:
             page = parse_page(result.html, result.markdown)
             verdict = classifier.assess(page, host_of(result.final_url or result.url))
-            if verdict.reason.startswith(("parked", "placeholder", "redirects to parking")):
-                return Qualification(status=verdict.status, reason=verdict.reason, title=page.title[:300],
-                                     word_count=page.word_count, **base)
+            if page.word_count >= classifier.min_words or verdict.reason.startswith(
+                    ("parked", "placeholder", "redirects to parking")):
+                return Qualification(
+                    status=verdict.status, reason=verdict.reason, title=page.title[:300],
+                    description=page.description[:500], word_count=page.word_count, category=verdict.category,
+                    score=verdict.score, scores=verdict.scores, matched=verdict.matched, **base)
         return Qualification(status="watch", reason=f"unreachable: {error[:160]}", **base)
     if result.status and result.status >= 400:
         return Qualification(status="watch", reason=f"HTTP {result.status}", **base)
@@ -73,8 +76,23 @@ def evaluate(cand: dict, result: FetchResult, classifier: RuleClassifier, domain
     )
 
 
+def needs_browser(result: FetchResult, min_words: int) -> bool:
+    """Retry in a real browser only when it can help.
+
+    Yes: the page loaded but is nearly empty (likely a JavaScript site), or the site
+    answered "forbidden / too many requests" (often a bot check a browser passes).
+    No: DNS failures, refused connections, timeouts, robots.txt: a browser won't fix those,
+    and new domains from certificate logs very often aren't live yet.
+    """
+    if result.success:
+        return parse_page(result.html, result.markdown).word_count < min_words
+    if result.status in (403, 429, 503):
+        return True
+    return False
+
+
 async def run(settings, store, limit: int | None = None, recheck: bool = False,
-              domains: list[str] | None = None, **_) -> dict:
+              domains: list[str] | None = None, max_minutes: float | None = None, **_) -> dict:
     config = settings.section("qualify")
     todo = due_candidates(store, config, recheck, domains)[: limit or None]
     if not todo:
@@ -85,28 +103,36 @@ async def run(settings, store, limit: int | None = None, recheck: bool = False,
     crawl = settings.section("crawl")
     min_words = config.get("min_words", 80)
     counts = {"qualified": 0, "watch": 0, "rejected": 0}
-    rows = []
+    browser_retries = 0
 
     async with AsyncExitStack() as stack:
-        primary = await stack.enter_async_context(Fetcher(crawl, config.get("fetch_mode", "http")))
+        primary = await stack.enter_async_context(Fetcher(
+            crawl, config.get("fetch_mode", "http"), concurrency=config.get("concurrency"),
+            timeout_ms=config.get("timeout_ms")))
         browser: Fetcher | None = None
+        browser_lock = asyncio.Lock()
 
         async def check(cand: dict) -> Qualification:
-            nonlocal browser
+            nonlocal browser, browser_retries
             url = cand.get("url") or homepage_url(cand["domain"])
             result = await primary.fetch(url)
-            thin = result.success and parse_page(result.html, result.markdown).word_count < min_words
-            if (not result.success or thin) and primary.mode == "http" and config.get("browser_fallback", True):
-                if "robots" not in (result.error or "").lower():
+            if primary.mode == "http" and config.get("browser_fallback", True) and needs_browser(result, min_words):
+                async with browser_lock:
                     if browser is None:
                         browser = await stack.enter_async_context(Fetcher(crawl, "browser"))
-                    result = await browser.fetch(url)
+                browser_retries += 1
+                result = await browser.fetch(url)
             return evaluate(cand, result, classifier, domain_filter)
 
-        for q in await asyncio.gather(*(check(c) for c in todo)):
+        def save(q: Qualification) -> None:
             counts[q.status] += 1
-            rows.append(q.to_dict())
-            logger.info("qualify %-28s %-9s %s", q.domain, q.status, q.reason)
+            store.append("qualifications", [q.to_dict()])
 
-    store.append("qualifications", rows)
-    return {"checked": len(rows), **counts}
+        out = await process_items(
+            todo, check, stage="qualify", on_result=save,
+            describe=lambda q: f"{q.domain:<28} {q.status:<9} {q.reason[:70]}",
+            concurrency=int(config.get("concurrency") or crawl.get("concurrency", 4)),
+            max_minutes=max_minutes or crawl.get("max_stage_minutes"))
+
+    return {"checked": len(out["results"]), **counts, "browser_retries": browser_retries,
+            "left_for_next_run": out["skipped"], "seconds": out["seconds"]}

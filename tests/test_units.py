@@ -216,7 +216,8 @@ def test_enrich_and_report_dates_and_all_domains(settings, store, monkeypatch):
             store.append("qualifications", [{"domain": domain, "url": f"https://{domain}/", "status": status,
                                              "reason": "parked: 'x'" if status == "rejected" else "ok", "checked_at": found,
                                              "category": "ai_ml" if status == "qualified" else None, "score": 9}])
-    assert asyncio.run(enrich.run(settings, store)) == {"looked_up": 2, "with_date": 2, "failed": 0}
+    first = asyncio.run(enrich.run(settings, store))
+    assert (first["looked_up"], first["with_date"], first["failed"], first["left_for_next_run"]) == (2, 2, 0, 0)
     assert asyncio.run(enrich.run(settings, store)) == {"looked_up": 0}             # nothing left to look up
 
     a = analyze(store, days=30)
@@ -233,3 +234,32 @@ def test_enrich_and_report_dates_and_all_domains(settings, store, monkeypatch):
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     write_domains_csv(a, csv_path)
     assert len(csv_path.read_text().splitlines()) == 5
+
+
+def test_friendly_errors_and_content_beats_bot_flag(settings):
+    from techintel.classify import RuleClassifier
+    from techintel.domains import DomainFilter
+    from techintel.fetch import FetchResult, friendly_error
+    from techintel.stages.qualify import evaluate, needs_browser
+    assert friendly_error("Unexpected error ... Error: Connection failed: Cannot connect to host x:80 ssl:default "
+                          "[Name or service not known]") == "domain does not resolve (no website yet)"
+    assert friendly_error("Error: Connection failed: ... [Connect call failed ('127.0.0.1', 1)]") == "connection refused"
+    assert friendly_error("Unexpected error\nError: Request timed out: \n") == "timed out"
+    assert friendly_error("nodename nor servname provided, or not known") == "domain does not resolve (no website yet)"
+    assert friendly_error("Error: Something odd happened\nCode context: ...") == "Something odd happened"
+
+    clf = RuleClassifier(settings.section("categories"), settings.section("qualify"))
+    dfilter = DomainFilter(settings.section("domain_filter"))
+    bakery = "<html><title>Bakery</title><body>" + "Fresh bread and cakes baked daily in Kandy. " * 30 + "</body></html>"
+    flagged = FetchResult(url="http://b.lk/", mode="http", success=False, status=200, html=bakery,
+                          error="possible bot protection")
+    q = evaluate({"domain": "b.lk"}, flagged, clf, dfilter)
+    assert (q.status, q.reason) == ("rejected", "no tech keywords")            # judged on content, not "unreachable"
+    tiny = FetchResult(url="http://c.lk/", mode="http", success=False, status=200, html="<p>Just a moment...</p>",
+                       error="possible bot protection")
+    assert evaluate({"domain": "c.lk"}, tiny, clf, dfilter).status == "watch"
+
+    dead = FetchResult(url="http://d.lk/", mode="http", success=False, error="domain does not resolve (no website yet)")
+    assert not needs_browser(dead, 80)                                          # no pointless browser retry
+    assert needs_browser(FetchResult(url="u", mode="http", success=False, status=403), 80)
+    assert needs_browser(FetchResult(url="u", mode="http", success=True, status=200, html="<div id=app></div>"), 80)

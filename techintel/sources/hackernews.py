@@ -46,6 +46,7 @@ async def collect(ctx) -> list[Candidate]:
         "numericFilters": f"created_at_i>{since}",
         "hitsPerPage": str(min(int(config.get("max_results", 200)), 1000)),
     }
+    logger.info("hackernews: fetching Show HN posts from the last %s hours", config.get("lookback_hours", 48))
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.get(API, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             resp.raise_for_status()
