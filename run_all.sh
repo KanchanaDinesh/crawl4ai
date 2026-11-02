@@ -122,13 +122,20 @@ for s in $STEP_LIST; do
   fi
   echo "--- [$s] $CMD"
   T0=$(date +%s)
-  bash -c "$CMD"
-  RC=$?
+  STEP_OUT="$LOG_DIR/.step-$$.out"
+  bash -c "$CMD" 2>&1 | tee "$STEP_OUT"
+  RC=${PIPESTATUS[0]}
   release_lock
   DUR=$(( $(date +%s) - T0 ))
-  if [ $RC -eq 0 ]; then STATE="ok"; else STATE="FAILED(exit $RC)"; FAILED=$((FAILED + 1)); fi
-  echo "--- [$s] $STATE in $(fmt_secs $DUR)"
-  SUMMARY="$SUMMARY | $s $STATE $(fmt_secs $DUR)"
+  WHY=""
+  if [ $RC -eq 0 ]; then STATE="ok"; else
+    STATE="FAILED(exit $RC)"; FAILED=$((FAILED + 1))
+    # the reason, for the summary line: the last error line the step printed
+    WHY="$(grep -E 'ERROR|Error|error:|Traceback|No module' "$STEP_OUT" | tail -1 | sed -E 's/^[0-9-]+ [0-9:,]+ - (ERROR|WARNING) - //' | cut -c1-160)"
+  fi
+  rm -f "$STEP_OUT"
+  echo "--- [$s] $STATE in $(fmt_secs $DUR)${WHY:+: $WHY}"
+  SUMMARY="$SUMMARY | $s $STATE $(fmt_secs $DUR)${WHY:+ ($WHY)}"
   if [ $RC -eq 130 ]; then break; fi               # Ctrl+C inside a step: stop the whole run
 done
 

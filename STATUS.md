@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 64 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 66 tests pass.
 
 ## Parts and how to run them
 
@@ -88,8 +88,17 @@ schedules are active. Ask them to run `./schedule.sh status`.
     - Before, its ads were in `data/scrapers/scrapers.duckdb` and Kanchana couldn't find them in `data/`.
     - The old history is copied in once, automatically. The dashboard and `warehouse sql` (`vehicles.` prefix) use it.
     - Tests now always use a temp folder.
+17. A scheduled `frequent` run showed `vehicles FAILED(exit 1)` after about 3s (tech_quick was fine).
+    Failure reasons are now visible:
+    - `run_all.sh` adds the step's last error line to the summary and to `logs/history.log`.
+    - Vehicles says in one line why the browser couldn't start, or why each site gave no ads.
 
 ## Open issues and things to watch
+
+- **Vehicles failed in a scheduled run (2026-11-02), cause not known yet.** The fast failure (about 3s)
+  points to the browser not starting, e.g. a missing or mismatched browser, or the exFAT drive.
+  Ask Kanchana for the reason now shown in `tail -3 logs/history.log`, or for the output of
+  `uv run python -m vehicles run` and `uv run python doctor.py`.
 
 - **Browser on the external drive:** if Kanchana sees "browser has been closed" errors again, ask for the
   output of `uv run python doctor.py`.

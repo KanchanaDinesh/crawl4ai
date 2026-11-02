@@ -92,3 +92,26 @@ def test_cli_show_changes_and_sites(tmp_path, monkeypatch, capsys):
     assert "Nissan Leaf 2014" in out and "NEW" in out and "2 of 2 ads" in out
     cli.main(["changes"])
     assert "->" in capsys.readouterr().out
+
+
+def test_browser_that_cannot_start_gives_one_clear_line(monkeypatch):
+    async def broken(self):
+        raise Exception("BrowserType.launch: Executable doesn't exist at /x/chrome\n╔══ Playwright banner ══╗")
+    monkeypatch.setattr(FakeCrawler, "__aenter__", broken)
+    with pytest.raises(RuntimeError) as e:
+        asyncio.run(vehicles.run([site("fast")], 5, False, True))
+    assert str(e.value) == ("the browser could not start: BrowserType.launch: Executable doesn't exist at /x/chrome "
+                            "(run: uv run python doctor.py)")
+
+
+def test_no_ads_says_why_per_site(monkeypatch, caplog):
+    from vehicles import cli
+    async def fake_run(*a, **k):
+        return [{"site": "ikman", "count": 0, "error": "Unexpected error in _crawl_web\nError: Failed on navigating ACS-GOTO:\n"
+                 "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://ikman.lk\nCall log: ..."},
+                {"site": "riyasewana", "count": 0, "success": True}]
+    monkeypatch.setattr(cli, "run", fake_run)
+    with pytest.raises(SystemExit):
+        cli.main(["run"])
+    assert ("No ads from any site. ikman: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://ikman.lk; "
+            "riyasewana: 0 ads matched (see output/html_dumps/)") in caplog.text

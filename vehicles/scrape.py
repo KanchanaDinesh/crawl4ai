@@ -186,6 +186,10 @@ async def _open(browser: BrowserConfig) -> AsyncWebCrawler:
     except asyncio.TimeoutError:
         await _close(crawler)
         raise RuntimeError(f"the browser didn't start within {START_SECONDS}s (run: uv run python doctor.py)") from None
+    except Exception as e:  # noqa: BLE001 - e.g. browser missing or can't run from this drive
+        await _close(crawler)
+        first = next((ln.strip() for ln in str(e).splitlines() if ln.strip()), type(e).__name__)
+        raise RuntimeError(f"the browser could not start: {first[:300]} (run: uv run python doctor.py)") from None
     return crawler
 
 

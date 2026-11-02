@@ -47,8 +47,21 @@ def cmd_run(args) -> None:
     logger.info("Done: %d ads from %d site(s): %s", total, len(reports),
                 ", ".join(f"{r['site']} {r.get('count', 0)}" for r in reports))
     if total == 0:
-        logger.error("No ads from any site (no internet, or the sites changed: see output/html_dumps/).")
+        why = "; ".join(f"{r['site']}: {_short(r.get('error')) or '0 ads matched (see output/html_dumps/)'}"
+                        for r in reports)
+        logger.error("No ads from any site. %s", why)
         raise SystemExit(1)
+
+
+def _short(error: str | None) -> str:
+    """The useful line of a long crawl4ai error (it adds code context and call logs)."""
+    lines = [ln.strip() for ln in (error or "").splitlines() if ln.strip()]
+    for wanted in (lambda ln: "net::" in ln or ln.startswith("Page.goto") or "gave up" in ln or "browser" in ln.lower(),
+                   lambda ln: ln.startswith("Error:")):
+        for line in lines:
+            if wanted(line):
+                return line.removeprefix("Error: ")[:200]
+    return lines[0][:200] if lines else ""
 
 
 def _db():
