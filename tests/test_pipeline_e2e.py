@@ -61,6 +61,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    do_POST = do_GET      # the CSE API is POST-only; tests serve it like a GET
+
     def log_message(self, *args):
         pass
 

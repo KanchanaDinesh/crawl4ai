@@ -57,3 +57,16 @@ td.nowrap,.nowrap{white-space:nowrap}td.num{text-align:right}
 .drawer h2{margin:0 0 4px;font-size:19px}.drawer h4{margin:16px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .drawer .close{position:absolute;top:12px;right:14px}
 .kv{display:grid;grid-template-columns:130px 1fr;gap:4px 10px;font-size:13.5px}.kv div:nth-child(odd){color:var(--muted)}
+
+.up{color:var(--ok)}.down{color:var(--bad)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;min-width:0}
+.card:hover{border-color:var(--accent)}
+.card .nm{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .px{font-size:19px;font-weight:700;line-height:1.25;white-space:nowrap}.card .ch{font-size:13px;font-weight:600}
+svg.spark{display:block;width:100%;height:34px;margin-top:4px}svg.spark polyline{fill:none;stroke-width:1.6}
+svg.spark.up polyline{stroke:var(--ok)}svg.spark.down polyline{stroke:var(--bad)}svg.spark.flat polyline{stroke:var(--muted)}
+th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--fg)}th.sorted{color:var(--accent)}
+td.coin{white-space:nowrap}td.coin img{width:16px;height:16px;vertical-align:-3px;margin-right:6px;border-radius:50%}
+svg.chart{width:100%;height:220px;display:block}svg.chart polyline{fill:none;stroke:var(--accent);stroke-width:2}
+svg.chart text{fill:var(--muted);font-size:11px}svg.chart line{stroke:var(--line)}

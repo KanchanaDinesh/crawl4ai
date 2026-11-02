@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from techintel.store import DuckStore
 from worldnews.store import NewsStore
-from worldnews.tagging import TechTagger
+from worldnews.tagging import TechTagger, TopicTagger
 
 
 def iso(dt: datetime, micro: bool = False) -> str:
@@ -37,7 +37,7 @@ NEWS = {
 def build_news(root, tech_keywords: list[str], now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
     rnd = random.Random(7)
-    tagger = TechTagger(tech_keywords)
+    tagger = TopicTagger(tech_keywords) if isinstance(tech_keywords, dict) else TechTagger(tech_keywords)
     store = NewsStore(root)
     for run_no, run_time in enumerate([now - timedelta(days=1, hours=2), now - timedelta(minutes=30)]):
         sources = []
@@ -110,4 +110,48 @@ def build_tech(root, now: datetime | None = None) -> None:
         {"domain": "payflow.io", "change_type": "signal_on", "field": "hiring", "before": False, "after": True, "detected_at": iso(now - timedelta(hours=2))}])
     store.append("runs", [{"stage": s, "status": "ok", "finished_at": iso(now - timedelta(hours=1)), "summary": {"ok": True}}
                           for s in ("discover", "qualify", "enrich", "profile", "monitor", "report")])
+    store.close()
+
+
+def build_markets(root, now: datetime | None = None, runs: int = 6) -> None:
+    """Several runs of realistic prices, so history and sparklines have points."""
+    from markets.collect import lkr_metal_prices
+    from markets.providers import quote
+    from markets.store import MarketStore
+    now = now or datetime.now(timezone.utc)
+    rnd = random.Random(3)
+    base = {("index", "^GSPC", "S&P 500", "USD"): 5728.8, ("index", "^IXIC", "Nasdaq Composite", "USD"): 18200.4,
+            ("index", "^DJI", "Dow Jones", "USD"): 42114.4, ("index", "^VIX", "VIX (volatility)", "USD"): 16.2,
+            ("index", "ASPI", "All Share Price Index (ASPI)", "LKR"): 20364.97, ("index", "S&P SL20", "S&P Sri Lanka 20", "LKR"): 11681.77,
+            ("stock_us", "AAPL", "Apple Inc.", "USD"): 225.1, ("stock_us", "NVDA", "NVIDIA Corporation", "USD"): 138.4,
+            ("stock_us", "MSFT", "Microsoft Corporation", "USD"): 410.3, ("stock_us", "TSLA", "Tesla, Inc.", "USD"): 248.9,
+            ("stock_lk", "JKH.N0000", "John Keells Holdings PLC", "LKR"): 21.4, ("stock_lk", "COMB.N0000", "Commercial Bank Of Ceylon PLC", "LKR"): 140.25,
+            ("stock_lk", "DIAL.N0000", "Dialog Axiata PLC", "LKR"): 13.6, ("stock_lk", "ABAN.N0000", "Abans Electricals PLC", "LKR"): 1020.5,
+            ("commodity", "GC=F", "Gold", "USD"): 2745.6, ("commodity", "SI=F", "Silver", "USD"): 32.6,
+            ("commodity", "CL=F", "Crude oil (WTI)", "USD"): 69.5, ("fx", "LKR=X", "USD/LKR", "LKR"): 293.4,
+            ("fx", "EURUSD=X", "EUR/USD", "USD"): 1.083}
+    coins = [("BTC", "Bitcoin", 101234.5, 2.0e12), ("ETH", "Ethereum", 3900.1, 4.7e11), ("USDT", "Tether", 1.0, 1.2e11),
+             ("SOL", "Solana", 212.3, 1.0e11), ("BNB", "BNB", 690.2, 9.9e10), ("XRP", "XRP", 2.31, 1.3e11)]
+    store = MarketStore(root)
+    prev = {k: v for k, v in base.items()}
+    for n in range(runs):
+        run_at = now - timedelta(hours=(runs - 1 - n) * 4)
+        quotes = []
+        for (cls, sym, name, cur), _ in base.items():
+            p0 = prev[(cls, sym, name, cur)]
+            p1 = p0 * (1 + rnd.uniform(-0.015, 0.015))
+            extra = {"metal": "gold" if sym == "GC=F" else "silver"} if sym in ("GC=F", "SI=F") else ({"lkr_rate": True} if sym == "LKR=X" else {})
+            quotes.append(quote(cls, sym, name, p1, prev_close=p0, currency=cur, volume=rnd.randint(1000, 9_000_000),
+                                market_cap=p1 * 1e9 if cls.startswith("stock") else None, as_of=iso(run_at), source="sample", extra=extra))
+            prev[(cls, sym, name, cur)] = p1
+        for rank, (sym, name, px, cap) in enumerate(coins, 1):
+            quotes.append(quote("crypto", sym, name, px * (1 + rnd.uniform(-0.03, 0.03)), change_pct=rnd.uniform(-5, 5),
+                                currency="USD", volume=cap / 40, market_cap=cap, rank=rank, as_of=iso(run_at), source="sample",
+                                extra={"pct_1h": rnd.uniform(-1, 1), "pct_7d": rnd.uniform(-10, 10)}))
+        quotes += lkr_metal_prices(quotes)
+        sources = [{"source": "yahoo", "group": "us", "ok": True, "count": 10, "seconds": 1.2},
+                   {"source": "cse companies", "group": "lk", "ok": True, "count": 4, "seconds": 0.8},
+                   {"source": "crypto top", "group": "crypto", "ok": True, "count": 6, "seconds": 0.9},
+                   {"source": "yahoo BRK-B", "group": "us", "ok": False, "count": 0, "error": "BRK-B: HTTP 404", "seconds": 0.3}]
+        store.save_run(iso(run_at, micro=True), iso(run_at + timedelta(seconds=20)), quotes, sources)
     store.close()

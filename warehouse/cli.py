@@ -6,7 +6,7 @@
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
 
-In SQL, prefix tables with the database name:  news.*  tech.*  scrapers.*
+In SQL, prefix tables with the database name:  news.*  tech.*  scrapers.*  markets.*
 e.g.  select * from news.news_items order by published_at desc limit 20
 """
 
@@ -25,6 +25,9 @@ EXAMPLES = {
     "Recent site changes": "select detected_at, domain, change_type, field from tech.v_changes order by detected_at desc limit 20",
     "Newest registered domains": "select domain, registered_at from tech.v_registrations where registered_at is not null order by registered_at desc limit 20",
     "Vehicle ads, cheapest first": "select site, title, price_lkr, url from scrapers.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20",
+    "Market snapshot (key prices)": "select name, price, currency, round(change_pct, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
+    "Top CSE gainers today": "select symbol, name, price, round(change_pct, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc limit 10",
+    "Crypto top 20": "select rank, symbol, name, price, round(change_pct, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
     "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from scrapers.v_vehicle_price_changes order by saved_at desc",
 }
 
@@ -38,6 +41,8 @@ def init() -> None:
     con = connect(DB_FILES["scrapers"])
     init_scrapers(con)
     con.close()
+    from markets.store import MarketStore
+    MarketStore(DB_FILES["markets"].parent).close()
     for name, path in DB_FILES.items():
         print(f"{name:<9} {path}")
 
@@ -79,7 +84,7 @@ def run_sql(query: str, csv_path: str | None = None) -> None:
 
 def repl() -> None:
     con = open_all()
-    print("SQL prompt (read-only). Tables: news.*, tech.*, scrapers.*  Type 'examples' or 'exit'.")
+    print("SQL prompt (read-only). Tables: news.*, tech.*, scrapers.*, markets.*  Type 'examples' or 'exit'.")
     while True:
         try:
             query = input("sql> ").strip().rstrip(";")

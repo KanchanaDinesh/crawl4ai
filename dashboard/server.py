@@ -79,6 +79,7 @@ async def news_summary(request):
 async def news_items(request):
     q = request.query
     args = dict(group=q.get("group") or None, source=q.get("source") or None, tech=q.get("tech") == "1",
+                topic=q.get("topic") or None,
                 new=q.get("new") == "1", q=(q.get("q") or "").strip() or None, days=_int(request, "days", 7),
                 limit=_int(request, "limit", 100, hi=1000), offset=_int(request, "offset", 0, lo=0))
     return web.json_response(_query("news", lambda c: queries.news_items(c, **args), f"news_items:{sorted(args.items())}"))
@@ -119,6 +120,22 @@ async def tech_runs(request):
     return web.json_response(_query("tech", queries.tech_runs, "tech_runs"))
 
 
+async def markets_summary(request):
+    return web.json_response(_query("markets", queries.markets_summary, "markets_summary"))
+
+
+async def markets_quotes(request):
+    cls = request.query.get("class") or "index"
+    q = (request.query.get("q") or "").strip() or None
+    return web.json_response(_query("markets", lambda c: queries.markets_quotes(c, cls, q), f"markets_quotes:{cls}:{q}"))
+
+
+async def markets_history(request):
+    cls, sym = request.query.get("class") or "", request.query.get("symbol") or ""
+    days = _int(request, "days", 90)
+    return web.json_response(_query("markets", lambda c: queries.markets_history(c, cls, sym, days), f"mh:{cls}:{sym}:{days}"))
+
+
 async def index(request):
     return web.FileResponse(STATIC / "index.html")
 
@@ -136,6 +153,9 @@ def build_app() -> web.Application:
         web.get("/api/tech/domain/{domain}", tech_domain),
         web.get("/api/tech/changes", tech_changes),
         web.get("/api/tech/runs", tech_runs),
+        web.get("/api/markets/summary", markets_summary),
+        web.get("/api/markets/quotes", markets_quotes),
+        web.get("/api/markets/history", markets_history),
         web.static("/static", STATIC),
     ])
     return app

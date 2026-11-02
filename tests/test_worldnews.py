@@ -208,3 +208,18 @@ def test_old_jsonl_history_is_imported(news_env):
     assert store.known_urls() == {"https://x.com/a"} and store.feed_cache() == {"X": "https://x.com/feed"}
     assert (settings.data_dir / "items.jsonl.imported").exists() and not (settings.data_dir / "items.jsonl").exists()
     store.close()
+
+
+def test_topic_tagging_crypto_and_markets():
+    from worldnews.tagging import TopicTagger
+    settings = json.loads((CONFIG_DIR / "settings.json").read_text())
+    tagger = TopicTagger.from_settings(settings)
+    item = {"title": "Bitcoin jumps as Fed signals rate cut", "summary": "Stocks rally on Wall Street"}
+    tagger.tag(item, "US")
+    assert set(item["topics"]) >= {"crypto", "markets"} and "bitcoin" in item["crypto_terms"]
+    blog = {"title": "Protocol upgrade notes", "summary": "Testnet schedule"}
+    tagger.tag(blog, "CRYPTO")
+    assert blog["topics"] == ["crypto"]                                   # group implies the topic
+    plain = {"title": "Rain expected in Colombo", "summary": "Heavy showers"}
+    tagger.tag(plain, "LK")
+    assert plain["topics"] == []

@@ -15,6 +15,7 @@ def dash(tmp_path, monkeypatch):
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("WORLDNEWS_DATA_DIR", raising=False)
     monkeypatch.delenv("TECHINTEL_DATA_DIR", raising=False)
+    monkeypatch.delenv("MARKETS_DATA_DIR", raising=False)
     import project_paths
     import warehouse
     import dashboard.server as server
@@ -97,3 +98,31 @@ def test_empty_databases(tmp_path, monkeypatch):
     server._cache.clear()
     news, tech = call(server, "/api/news/summary", "/api/tech/summary")
     assert news["empty"] and news["data"] is None and tech["empty"]
+
+
+def test_markets_endpoints(dash):
+    server, db_files = dash
+    from sample_data import build_markets
+    build_markets(db_files["markets"].parent)
+    summary, crypto_rows, lk, metals_lkr, search, hist, page_js = call(
+        server, "/api/markets/summary", "/api/markets/quotes?class=crypto", "/api/markets/quotes?class=stock_lk",
+        "/api/markets/quotes?class=commodity_lkr", "/api/markets/quotes?class=stock_us&q=apple",
+        "/api/markets/history?class=index&symbol=ASPI&days=30", "/static/app.js")
+    s = summary["data"]
+    cards = {c["symbol"]: c for c in s["cards"]}
+    assert {"^GSPC", "ASPI", "S&P SL20", "GC=F", "BTC", "LKR=X", "GOLD24K_LKR_PAWN"} <= set(cards)
+    assert len(cards["ASPI"]["spark"]) == 6                                  # one point per saved run
+    assert [r["rank"] for r in crypto_rows["data"]] == [1, 2, 3, 4, 5, 6]
+    assert len(lk["data"]) == 4 and all(r["currency"] == "LKR" for r in lk["data"])
+    assert {r["symbol"] for r in metals_lkr["data"]} == {"GOLD_LKR_G", "GOLD24K_LKR_PAWN", "GOLD22K_LKR_PAWN", "SILVER_LKR_G"}
+    assert [r["symbol"] for r in search["data"]] == ["AAPL"]
+    assert len(hist["data"]["points"]) == 6 and hist["data"]["quote"]["symbol"] == "ASPI"
+    assert [x["source"] for x in s["sources"] if not x["ok"]] == ["yahoo BRK-B"]
+    assert "loadMarkets" in page_js
+
+
+def test_news_topic_and_multi_group_filters(dash):
+    server, _ = dash
+    tech, both = call(server, "/api/news/items?topic=tech", "/api/news/items?group=US,LK")
+    assert tech["data"]["total"] == 11
+    assert both["data"]["total"] == 13 and {i["group_code"] for i in both["data"]["items"]} == {"US", "LK"}

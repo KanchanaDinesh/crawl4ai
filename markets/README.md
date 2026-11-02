@@ -1,0 +1,62 @@
+# Markets
+
+Prices for **Sri Lankan and US stocks and indices, gold, silver, oil, exchange rates and the top 100
+cryptocurrencies**, saved on every run so you build up a price history. View them in the dashboard's
+**Markets** tab; market and crypto **news** comes from `worldnews` (groups `MARKETS` and `CRYPTO`).
+
+## Commands
+
+```bash
+uv run python -m markets run                     # collect everything and save it (about 30 seconds)
+uv run python -m markets run --only lk,crypto    # just some groups: us, lk, metals, fx, crypto
+uv run python -m markets check                   # same, but only print the results (nothing saved)
+uv run python -m markets show --class crypto     # latest saved prices (index, stock_us, stock_lk, commodity, commodity_lkr, fx, crypto)
+uv run python -m markets history ASPI --days 30  # one instrument over time
+uv run python -m dashboard --open                # Markets tab
+```
+
+Run `markets run` as often as you like (for example every 15–60 minutes during market hours). Each run
+adds a point to the history and the dashboard charts.
+
+## What's collected
+
+| Group | Instruments | Source (free, no API key) |
+|---|---|---|
+| `lk` | **ASPI** and **S&P SL20** (with P/E, P/BV, dividend yield, turnover), and **every CSE-listed company**: price, change, volume, turnover, market cap | cse.lk's own API |
+| `us` | S&P 500, Dow Jones, Nasdaq Composite, Nasdaq 100, Russell 2000, VIX, plus the `us_stocks` watchlist | Yahoo Finance chart data |
+| `metals` | Gold, silver, platinum (COMEX futures, USD/oz), WTI and Brent crude, plus **gold and silver in LKR** | Yahoo Finance |
+| `fx` | USD/LKR, EUR/USD, GBP/USD, USD/INR, USD/JPY, US Dollar Index | Yahoo Finance |
+| `crypto` | **Top 100 by market cap**: price, 1h/24h/7d change, market cap, 24h volume | CoinGecko; CoinPaprika as a backup |
+
+**Gold and silver in LKR** (per gram, and gold 24K/22K per pawn of 8 g) are calculated from the
+international USD price and USD/LKR. They're a **reference price, not a local jeweller's rate**, which
+includes duties and margins.
+
+## Settings (`markets/config/settings.json`)
+
+| Setting | What it does |
+|---|---|
+| `us_indices`, `us_stocks` | Which US indices and stocks to track. Add any Yahoo symbol, e.g. `"AMD"`, `"BRK-B"` |
+| `commodities`, `fx` | Yahoo symbols for commodities and exchange rates (`"metal": "gold"` marks metals converted to LKR) |
+| `crypto.top_n` | How many coins (default 100, max 250) |
+| `cse.enabled` | Turn the Colombo Stock Exchange off or on |
+
+## Data
+
+`data/markets/markets.duckdb`:
+
+| Table / view | Contents |
+|---|---|
+| `quotes` | Every price from every run (history) |
+| `v_latest` | The latest price of each instrument |
+| `v_daily` | The last price of each day, for longer-term charts |
+| `runs`, `source_runs` | Each run and each source's result (to spot sources that stop working) |
+
+Query with `uv run python -m warehouse sql "select * from markets.v_latest where asset_class = 'stock_lk' order by change_pct desc limit 10"`.
+
+## Notes
+
+- Yahoo Finance and CoinGecko are free public endpoints without keys. They can rate-limit or change
+  without notice. A failing source shows under "Data sources" in the dashboard; other sources keep working,
+  and crypto automatically falls back to CoinPaprika.
+- Prices may be delayed (typically 15 minutes for exchanges). Use them for tracking and research, not trading.

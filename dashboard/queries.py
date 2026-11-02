@@ -43,15 +43,17 @@ def news_summary(con, days: int) -> dict:
     return {"last_run": last, "totals": totals, "by_group": by_group, "by_day": by_day, "top_sources": top_sources}
 
 
-def news_items(con, *, group=None, source=None, tech=False, new=False, q=None, days=7,
+def news_items(con, *, group=None, source=None, tech=False, topic=None, new=False, q=None, days=7,
                limit=100, offset=0) -> dict:
     where, params = [f"coalesce(published_at, first_seen_at) >= now() - interval {int(days)} day"], []
-    if group:
-        where.append("group_code = ?"); params.append(group)
+    if group:                                        # one group, or several: "MARKETS,CRYPTO"
+        codes = [g.strip() for g in group.split(",") if g.strip()]
+        where.append(f"group_code in ({', '.join('?' * len(codes))})"); params += codes
     if source:
         where.append("source = ?"); params.append(source)
-    if tech:
-        where.append("list_contains(topics, 'tech')")
+    topic = topic or ("tech" if tech else None)
+    if topic:
+        where.append("list_contains(topics, ?)"); params.append(topic)
     if new:
         where.append("first_seen_at >= (select date_trunc('second', max(run_at)) from news_runs)")
     if q:
@@ -178,3 +180,57 @@ def tech_runs(con) -> list[dict]:
     return rows(con, """select key as stage, data->>'status' as status, data->>'finished_at' as finished_at,
             try_cast(data->>'seconds' as double) as seconds, (data->'summary')::varchar as summary
         from runs qualify row_number() over (partition by key order by row_id desc) = 1 order by finished_at desc""")
+
+
+# ── markets ──────────────────────────────────────────────────────────────
+KEY_SYMBOLS = [("index", "^GSPC"), ("index", "^IXIC"), ("index", "^DJI"), ("index", "^VIX"), ("index", "ASPI"),
+               ("index", "S&P SL20"), ("commodity", "GC=F"), ("commodity", "SI=F"), ("crypto", "BTC"),
+               ("crypto", "ETH"), ("fx", "LKR=X"), ("commodity_lkr", "GOLD24K_LKR_PAWN")]
+QUOTE_COLS = f"""asset_class, symbol, name, price, prev_close, change, change_pct, currency, volume, market_cap, rank,
+    high, low, {_ts('as_of')} as as_of, {_ts('run_at')} as run_at, source,
+    try_cast(extra->>'pct_1h' as double) as pct_1h, try_cast(extra->>'pct_7d' as double) as pct_7d,
+    try_cast(extra->>'turnover' as double) as turnover, extra->>'unit' as unit, extra->>'note' as note,
+    extra->>'image' as image"""
+
+
+def _spark(con, asset_class: str, symbol: str, days: int = 30) -> list[float]:
+    pts = [r[0] for r in con.execute(f"""select price from quotes where asset_class = ? and symbol = ? and price is not null
+        and run_at >= now() - interval {int(days)} day order by run_at""", [asset_class, symbol]).fetchall()]
+    if len(pts) >= 3:
+        return pts[-60:]
+    extra = con.execute("select extra->'spark' from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol]).fetchone()
+    if extra and extra[0]:
+        return [p for p in json.loads(extra[0]) if p is not None]
+    return pts
+
+
+def markets_summary(con) -> dict:
+    cards = []
+    for cls, sym in KEY_SYMBOLS:
+        row = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [cls, sym])
+        if row:
+            row["spark"] = _spark(con, cls, sym)
+            cards.append(row)
+    last = one(con, f"select {_ts('run_at')} as run_at, quotes, errors::varchar as errors from runs order by run_at desc limit 1")
+    sources = rows(con, """select source, grp, ok, count, error, seconds from source_runs
+        where run_at = (select max(run_at) from runs) order by ok, grp, source""")
+    counts = rows(con, "select asset_class, count(*) as n from v_latest group by 1 order by 1")
+    return {"cards": cards, "last_run": last, "sources": sources, "counts": counts}
+
+
+def markets_quotes(con, asset_class: str, q: str | None = None, limit: int = 500) -> list[dict]:
+    where, params = ["asset_class = ?"], [asset_class]
+    if asset_class == "index_all":
+        where, params = ["asset_class = 'index'"], []
+    if q:
+        where.append("(symbol ilike ? or name ilike ?)"); params += [f"%{q}%"] * 2
+    order = "rank nulls last" if asset_class == "crypto" else "market_cap desc nulls last, symbol"
+    return rows(con, f"select {QUOTE_COLS} from v_latest where {' and '.join(where)} order by {order} limit {int(limit)}", params)
+
+
+def markets_history(con, asset_class: str, symbol: str, days: int = 90) -> dict:
+    pts = rows(con, f"""select {_ts('run_at')} as t, price, change_pct from quotes
+        where asset_class = ? and symbol = ? and run_at >= now() - interval {int(days)} day order by run_at""",
+               [asset_class, symbol])
+    latest = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol])
+    return {"quote": latest, "points": pts, "spark": _spark(con, asset_class, symbol, days)}

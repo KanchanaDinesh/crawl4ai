@@ -9,7 +9,9 @@
     {"code": "CA",     "name": "Canada"},
     {"code": "CN",     "name": "China"},
     {"code": "GLOBAL", "name": "World"},
-    {"code": "TECH",   "name": "Technology"}
+    {"code": "TECH",   "name": "Technology"},
+    {"code": "MARKETS", "name": "Markets & Business"},
+    {"code": "CRYPTO", "name": "Crypto"}
   ],
 
   "fetch": {
@@ -43,6 +45,20 @@
     "blockchain", "startup", "startups", "unicorn", "satellite", "5g", "6g", "broadband", "internet", "digital",
     "electric vehicle", "ev", "battery", "gadget", "social media", "algorithm", "x.com"
   ],
+
+  "topic_keywords": {
+    "crypto": ["crypto", "cryptocurrency", "cryptocurrencies", "bitcoin", "btc", "ethereum", "ether", "eth", "solana",
+               "xrp", "ripple", "dogecoin", "cardano", "tether", "usdt", "usdc", "stablecoin", "stablecoins", "binance",
+               "coinbase", "kraken", "defi", "nft", "nfts", "web3", "altcoin", "altcoins", "memecoin", "blockchain",
+               "crypto exchange", "bitcoin etf", "satoshi", "halving", "mining pool", "layer 2", "on-chain", "token"],
+    "markets": ["stock market", "stocks", "shares", "share price", "wall street", "s&p 500", "dow jones", "nasdaq",
+                "earnings", "ipo", "federal reserve", "the fed", "interest rate", "interest rates", "rate cut",
+                "rate hike", "inflation", "bond", "bonds", "treasury", "yields", "gold price", "gold prices",
+                "silver price", "oil price", "oil prices", "brent", "commodities", "forex", "rupee", "dollar",
+                "colombo stock exchange", "cse", "aspi", "central bank", "cbsl", "monetary policy", "gdp",
+                "recession", "investors", "market cap", "sensex", "nifty", "hang seng", "nikkei", "ftse", "rally",
+                "sell-off", "bull market", "bear market"]
+  },
 
   "report": {
     "items_per_source_in_report": null,

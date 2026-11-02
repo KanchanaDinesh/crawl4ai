@@ -70,7 +70,7 @@ const store = {
 };
 
 // ───────────────────────────── NEWS ─────────────────────────────
-const news = { days: 7, group: "", source: "", tech: false, new: false, q: "", offset: 0, groups: [] };
+const news = { days: 7, group: "", source: "", topic: "", new: false, q: "", offset: 0, groups: [] };
 const groupName = (code) => (news.groups.find((g) => g.code === code) || {}).name || code || "—";
 
 function emptyNews() {
@@ -126,14 +126,14 @@ async function loadNewsItems(reset) {
   if (reset) news.offset = 0;
   const ticket = ++newsReq;                                // ignore answers to older requests
   const res = await api("/api/news/items", { days: news.days, group: news.group, source: news.source,
-    tech: news.tech ? 1 : "", new: news.new ? 1 : "", q: news.q, limit: PAGE, offset: news.offset });
+    topic: news.topic, new: news.new ? 1 : "", q: news.q, limit: PAGE, offset: news.offset });
   if (ticket !== newsReq) return;
   const d = res.data || { total: 0, items: [] };
   $("news-count").textContent = `${fmtNum(d.total)} · newest first`;
   const html = d.items.map((i) => {
     const when = i.published_at || i.first_seen_at;
     return `<div class="news-item">
-      <div class="title">${i.is_new ? `<span class="badge b-new">NEW</span>` : ""}${link(i.url, i.title)}${(i.topics || []).includes("tech") && i.group_code !== "TECH" ? ` <span class="badge b-tech">tech</span>` : ""}</div>
+      <div class="title">${i.is_new ? `<span class="badge b-new">NEW</span>` : ""}${link(i.url, i.title)}${(i.topics || []).filter((t) => ({ tech: "TECH", crypto: "CRYPTO", markets: "MARKETS" })[t] !== i.group_code).map((t) => ` <span class="badge b-tech">${esc(t)}</span>`).join("")}</div>
       <div class="meta">${esc(fmtTime(when))} · ${esc(ago(when))}${i.published_at ? "" : " (found)"} · <b>${esc(i.source)}</b> · ${esc(groupName(i.group_code))}${i.times_seen > 1 ? ` · seen in ${i.times_seen} runs` : ""}</div>
       ${i.summary ? `<div class="sum">${esc(i.summary)}</div>` : ""}</div>`;
   }).join("");
@@ -151,7 +151,7 @@ $("news-groups").addEventListener("click", (e) => {
 });
 $("news-days").addEventListener("change", (e) => { news.days = +e.target.value; loadNews(); });
 $("news-source").addEventListener("change", (e) => { news.source = e.target.value; loadNewsItems(true); });
-$("news-tech").addEventListener("change", (e) => { news.tech = e.target.checked; loadNewsItems(true); });
+$("news-topic").addEventListener("change", (e) => { news.topic = e.target.value; loadNewsItems(true); });
 $("news-new").addEventListener("change", (e) => { news.new = e.target.checked; loadNewsItems(true); });
 $("news-q").addEventListener("input", debounce((e) => { news.q = e.target.value.trim(); loadNewsItems(true); }));
 $("news-more").addEventListener("click", () => loadNewsItems(false));
@@ -287,20 +287,183 @@ $("drawer-close").addEventListener("click", closeDrawer);
 $("drawer-bg").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 
+// ───────────────────────────── MARKETS ─────────────────────────────
+const MK_CLASSES = [
+  { key: "index", label: "Indices" }, { key: "stock_us", label: "US stocks" }, { key: "stock_lk", label: "Sri Lanka (CSE)" },
+  { key: "crypto", label: "Crypto top 100" }, { key: "metals", label: "Gold, silver & oil" }, { key: "fx", label: "Exchange rates" },
+];
+const mk = { cls: "index", q: "", rows: [], sort: null, summary: null };
+
+function fmtPrice(v, cls) {
+  if (v === null || v === undefined) return "–";
+  const a = Math.abs(v);
+  if (a > 0 && a < 1) return Number(v.toPrecision(4)).toString();            // small coins: 4 significant digits
+  const d = cls === "fx" && a < 20 ? 4 : 2;                                  // EUR/USD 1.0832; everything else 2
+  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtBig(v) {
+  if (v === null || v === undefined) return "–";
+  const a = Math.abs(v);
+  for (const [n, s] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]) if (a >= n) return `${(v / n).toFixed(2)}${s}`;
+  return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+const fmtPct = (v) => (v === null || v === undefined) ? `<span class="muted">–</span>`
+  : `<span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${v.toFixed(2)}%</span>`;
+function sparkSvg(values) {
+  const v = (values || []).filter((x) => x !== null && x !== undefined);
+  if (v.length < 2) return "";
+  const min = Math.min(...v), max = Math.max(...v), span = max - min || 1;
+  const pts = v.map((x, i) => `${(i / (v.length - 1)) * 100},${30 - ((x - min) / span) * 28}`).join(" ");
+  const trend = v[v.length - 1] > v[0] ? "up" : v[v.length - 1] < v[0] ? "down" : "flat";
+  return `<svg class="spark ${trend}" viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${pts}" vector-effect="non-scaling-stroke"/></svg>`;
+}
+const qname = (r) => r.asset_class === "stock_us" && r.name === r.symbol ? r.symbol : r.name;
+
+async function loadMarkets() {
+  const res = await api("/api/markets/summary");
+  setBanner([res]);
+  const s = res.data;
+  mk.summary = s;
+  if (!s) {
+    $("mk-cards").innerHTML = "";
+    $("mk-table").innerHTML = `<div class="empty">No market data yet.<br>Run <code>uv run python -m markets run</code>, then refresh this page.</div>`;
+    return;
+  }
+  $("mk-cards").innerHTML = (s.cards || []).map((c) => `
+    <div class="card" data-cls="${esc(c.asset_class)}" data-sym="${esc(c.symbol)}">
+      <div class="nm" title="${esc(c.name)}">${esc(c.name)}</div>
+      <div class="px">${fmtPrice(c.price, c.asset_class)} <small class="muted">${esc(c.currency === "USD" ? "" : c.currency || "")}</small></div>
+      <div class="ch">${fmtPct(c.change_pct)}</div>${sparkSvg(c.spark)}</div>`).join("");
+  const counts = Object.fromEntries((s.counts || []).map((r) => [r.asset_class, r.n]));
+  counts.metals = (counts.commodity || 0) + (counts.commodity_lkr || 0);
+  $("mk-classes").innerHTML = MK_CLASSES.map((c) => `<button class="chip ${mk.cls === c.key ? "active" : ""}" data-cls="${c.key}">${c.label}<small>${counts[c.key] || 0}</small></button>`).join(" ");
+  $("mk-asof").textContent = s.last_run && s.last_run.run_at ? `Last update ${fmtTime(s.last_run.run_at)} (${ago(s.last_run.run_at)})` : "";
+  const src = s.sources || [];
+  const bad = src.filter((x) => !x.ok);
+  $("mk-sources").innerHTML = src.length ? `<div class="small muted">${src.length - bad.length}/${src.length} OK</div>` + (bad.length
+    ? `<table>${bad.map((x) => `<tr><td>${esc(x.source)}</td><td>${pill("failed")}<div class="muted small">${esc((x.error || "").slice(0, 100))}</div></td></tr>`).join("")}</table>`
+    : `<div class="muted small">All sources returned data.</div>`) : "";
+  const [mn, cn] = await Promise.all([api("/api/news/items", { group: "MARKETS", days: 3, limit: 10 }), api("/api/news/items", { group: "CRYPTO", days: 3, limit: 10 })]);
+  const newsList = (r) => ((r.data || {}).items || []).map((i) => `<div class="news-item"><div>${link(i.url, i.title)}</div>
+    <div class="meta">${esc(ago(i.published_at || i.first_seen_at))} · ${esc(i.source)}</div></div>`).join("")
+    || `<div class="muted small">No ${r === cn ? "crypto" : "market"} news yet. Run <code>uv run python -m worldnews run --group MARKETS --group CRYPTO</code>.</div>`;
+  $("mk-news").innerHTML = newsList(mn);
+  $("mk-crypto-news").innerHTML = newsList(cn);
+  await loadMarketRows();
+}
+
+let mkReq = 0;
+async function loadMarketRows() {
+  const ticket = ++mkReq;
+  const classes = mk.cls === "metals" ? ["commodity", "commodity_lkr"] : [mk.cls];
+  const results = await Promise.all(classes.map((c) => api("/api/markets/quotes", { class: c, q: mk.q })));
+  if (ticket !== mkReq) return;
+  mk.rows = results.flatMap((r) => r.data || []);
+  renderMarketTable();
+  const movers = mk.rows.filter((r) => r.change_pct !== null && (r.asset_class !== "stock_lk" || (r.volume || 0) > 0));
+  const label = (MK_CLASSES.find((c) => c.key === mk.cls) || {}).label || "";
+  $("mk-movers-label").textContent = label;
+  const moverList = (list) => list.map((r) => `<div class="news-item" data-cls="${esc(r.asset_class)}" data-sym="${esc(r.symbol)}" style="cursor:pointer">
+    <b>${esc(r.symbol)}</b> ${fmtPct(r.change_pct)} <span class="muted small">${esc((qname(r) || "").slice(0, 32))} · ${fmtPrice(r.price, r.asset_class)}</span></div>`).join("")
+    || `<div class="muted small">No data.</div>`;
+  const sorted = movers.slice().sort((a, b) => b.change_pct - a.change_pct);
+  $("mk-gainers").innerHTML = moverList(sorted.filter((r) => r.change_pct > 0).slice(0, 6));
+  $("mk-losers").innerHTML = moverList(sorted.filter((r) => r.change_pct < 0).reverse().slice(0, 6));
+}
+
+const MK_COLS = {
+  crypto: [["rank", "#"], ["name", "Coin"], ["price", "Price (USD)"], ["pct_1h", "1h"], ["change_pct", "24h"], ["pct_7d", "7d"], ["market_cap", "Market cap"], ["volume", "Volume 24h"]],
+  stock_lk: [["symbol", "Symbol"], ["name", "Company"], ["price", "Price (LKR)"], ["change", "Change"], ["change_pct", "%"], ["volume", "Volume"], ["turnover", "Turnover"], ["market_cap", "Market cap"]],
+  stock_us: [["symbol", "Symbol"], ["name", "Name"], ["price", "Price"], ["change", "Change"], ["change_pct", "%"], ["volume", "Volume"], ["as_of", "As of"]],
+  default: [["name", "Name"], ["symbol", "Symbol"], ["price", "Price"], ["currency", ""], ["change", "Change"], ["change_pct", "%"], ["as_of", "As of"]],
+};
+function renderMarketTable() {
+  const cols = MK_COLS[mk.cls] || MK_COLS.default;
+  let rows = mk.rows.slice();
+  if (mk.sort) {
+    const { key, dir } = mk.sort;
+    rows.sort((a, b) => { const x = a[key], y = b[key];
+      if (x === null || x === undefined) return 1; if (y === null || y === undefined) return -1;
+      return (typeof x === "string" ? x.localeCompare(y) : x - y) * dir; });
+  }
+  const label = (MK_CLASSES.find((c) => c.key === mk.cls) || {}).label || "Prices";
+  $("mk-title").textContent = label;
+  $("mk-count").textContent = `${rows.length} · click a row for its price history · click a column to sort`;
+  const cell = (r, k) => {
+    if (k === "name" && r.asset_class === "crypto") return `<td class="coin">${r.image ? `<img src="${esc(r.image)}" alt="">` : ""}${esc(r.name)} <span class="muted">${esc(r.symbol)}</span></td>`;
+    if (["change_pct", "pct_1h", "pct_7d"].includes(k)) return `<td class="num">${fmtPct(r[k])}</td>`;
+    if (k === "change") return `<td class="num ${r.change > 0 ? "up" : r.change < 0 ? "down" : ""}">${r.change === null ? "–" : (r.change > 0 ? "+" : "") + fmtPrice(r.change, r.asset_class)}</td>`;
+    if (k === "price") return `<td class="num"><b>${fmtPrice(r.price, r.asset_class)}</b></td>`;
+    if (["volume", "market_cap", "turnover"].includes(k)) return `<td class="num">${fmtBig(r[k])}</td>`;
+    if (k === "as_of") return `<td class="nowrap muted small">${esc(fmtTime(r.as_of))}</td>`;
+    if (k === "rank") return `<td class="num muted">${r.rank ?? ""}</td>`;
+    if (k === "symbol") return `<td class="nowrap"><b>${esc(r.symbol)}</b></td>`;
+    return `<td>${esc(r[k] ?? "")}</td>`;
+  };
+  $("mk-table").innerHTML = rows.length ? `<table class="list"><tr>${cols.map(([k, l]) => `<th class="sort ${mk.sort && mk.sort.key === k ? "sorted" : ""} ${["price", "change", "change_pct", "pct_1h", "pct_7d", "volume", "market_cap", "turnover", "rank"].includes(k) ? "num" : ""}" data-key="${k}">${esc(l)}${mk.sort && mk.sort.key === k ? (mk.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr>
+    ${rows.map((r) => `<tr class="click" data-cls="${esc(r.asset_class)}" data-sym="${esc(r.symbol)}">${cols.map(([k]) => cell(r, k)).join("")}</tr>`).join("")}</table>`
+    : `<div class="empty">No prices for this market yet.</div>`;
+  const notes = [...new Set(mk.rows.map((r) => r.note).filter(Boolean))];
+  $("mk-note").textContent = notes.length ? `LKR gold/silver: ${notes[0]}.` : (mk.cls === "metals" ? "Gold and silver are COMEX futures prices in USD per troy ounce." : "");
+}
+
+async function openSymbol(cls, sym) {
+  $("drawer-body").innerHTML = `<div class="muted">Loading ${esc(sym)}…</div>`;
+  $("drawer").classList.add("open"); $("drawer-bg").classList.add("open");
+  const res = await api("/api/markets/history", { class: cls, symbol: sym, days: 90 });
+  const d = res.data || {}, q = d.quote || {};
+  const pts = (d.points || []).filter((p) => p.price !== null);
+  const series = pts.length >= 2 ? pts.map((p) => p.price) : (d.spark || []);
+  const chart = series.length >= 2 ? (() => {
+    const min = Math.min(...series), max = Math.max(...series), span = max - min || 1;
+    const P = series.map((x, i) => `${80 + (i / (series.length - 1)) * 410},${12 + (1 - (x - min) / span) * 176}`).join(" ");
+    return `<svg class="chart" viewBox="0 0 500 210"><line x1="80" y1="12" x2="490" y2="12"/><line x1="80" y1="188" x2="490" y2="188"/>
+      <text x="0" y="16">${esc(fmtPrice(max, cls))}</text><text x="0" y="192">${esc(fmtPrice(min, cls))}</text><polyline points="${P}"/></svg>
+      <div class="muted small">${pts.length >= 2 ? `${pts.length} saved prices since ${fmtTime(pts[0].t)}` : "Last 5 trading days (more history builds up with each run)"}</div>`;
+  })() : `<div class="muted">Not enough history yet: each <code>python -m markets run</code> adds a point.</div>`;
+  $("drawer-body").innerHTML = `
+    <h2>${esc(qname(q) || sym)}</h2><div class="muted">${esc(sym)} · ${esc(q.asset_class || cls)} · ${esc(q.source || "")}</div>
+    <p style="font-size:24px;font-weight:700;margin:8px 0">${fmtPrice(q.price, cls)} <small class="muted">${esc(q.currency || "")}</small> ${fmtPct(q.change_pct)}</p>
+    ${chart}
+    <h4>Details</h4><div class="kv">
+      <div>Previous close</div><div>${fmtPrice(q.prev_close, cls)}</div><div>Change</div><div>${q.change === null || q.change === undefined ? "–" : fmtPrice(q.change, cls)}</div>
+      ${q.high ? `<div>Day high / low</div><div>${fmtPrice(q.high, cls)} / ${fmtPrice(q.low, cls)}</div>` : ""}
+      ${q.volume ? `<div>Volume</div><div>${fmtBig(q.volume)}</div>` : ""}${q.market_cap ? `<div>Market cap</div><div>${fmtBig(q.market_cap)}</div>` : ""}
+      ${q.rank ? `<div>Rank</div><div>#${q.rank}</div>` : ""}${q.pct_7d !== null && q.pct_7d !== undefined ? `<div>7 days</div><div>${fmtPct(q.pct_7d)}</div>` : ""}
+      <div>Price time</div><div>${esc(fmtTime(q.as_of))}</div><div>Collected</div><div>${esc(fmtTime(q.run_at))}</div>
+      ${q.note ? `<div>Note</div><div>${esc(q.note)}</div>` : ""}</div>`;
+}
+
+$("mk-classes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cls]"); if (!b) return;
+  mk.cls = b.dataset.cls; mk.sort = null;
+  document.querySelectorAll("#mk-classes .chip").forEach((c) => c.classList.toggle("active", c === b));
+  loadMarketRows();
+});
+$("mk-q").addEventListener("input", debounce((e) => { mk.q = e.target.value.trim(); loadMarketRows(); }));
+$("mk-table").addEventListener("click", (e) => {
+  const th = e.target.closest("th.sort");
+  if (th) { const k = th.dataset.key; mk.sort = mk.sort && mk.sort.key === k ? { key: k, dir: -mk.sort.dir } : { key: k, dir: ["name", "symbol", "currency"].includes(k) ? 1 : -1 }; renderMarketTable(); return; }
+  const tr = e.target.closest("tr[data-sym]"); if (tr) openSymbol(tr.dataset.cls, tr.dataset.sym);
+});
+for (const id of ["mk-cards", "mk-gainers", "mk-losers"]) {
+  $(id).addEventListener("click", (e) => { const c = e.target.closest("[data-sym]"); if (c) openSymbol(c.dataset.cls, c.dataset.sym); });
+}
+
 // ───────────────────────────── shell ─────────────────────────────
 let view = "news";
 async function refresh() {
   try {
-    await (view === "news" ? loadNews() : loadTech());
+    await ({ news: loadNews, tech: loadTech, markets: loadMarkets })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;
   } catch (err) {
     setBanner([{ error: `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
   }
 }
 function show(v) {
-  view = v === "tech" ? "tech" : "news";
+  view = ["news", "tech", "markets"].includes(v) ? v : "news";
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
-  $("view-news").hidden = view !== "news"; $("view-tech").hidden = view !== "tech";
+  ["news", "tech", "markets"].forEach((n) => { $(`view-${n}`).hidden = view !== n; });
   if (location.hash !== `#${view}`) history.replaceState(null, "", `#${view}`);
   refresh();
 }

@@ -14,6 +14,7 @@
     <nav class="tabs">
       <button class="tab" data-view="news">World News</button>
       <button class="tab" data-view="tech">Tech Intel</button>
+      <button class="tab" data-view="markets">Markets</button>
     </nav>
     <div class="hright">
       <span id="updated"></span>
@@ -36,7 +37,10 @@
       </select>
       <span id="news-groups"></span>
       <select id="news-source"><option value="">All sources</option></select>
-      <label class="tog"><input type="checkbox" id="news-tech"> Tech only</label>
+      <select id="news-topic" title="Topic">
+        <option value="">All topics</option><option value="tech">Technology</option>
+        <option value="crypto">Crypto</option><option value="markets">Markets</option>
+      </select>
       <label class="tog"><input type="checkbox" id="news-new"> New in last run</label>
       <input type="search" id="news-q" placeholder="Search headlines, summaries, sources…">
     </div>
@@ -86,6 +90,31 @@
         <div class="panel"><h3>Discovered by source</h3><div id="tech-by-source" class="bars"></div></div>
         <div class="panel"><h3>Recent changes</h3><div id="tech-changes"></div></div>
         <div class="panel"><h3>Pipeline <small>last run per stage</small></h3><div id="tech-runs" class="scroll"></div></div>
+      </aside>
+    </div>
+  </section>
+  <!-- ─────────────── MARKETS ─────────────── -->
+  <section id="view-markets" hidden>
+    <div class="cards" id="mk-cards"></div>
+    <div class="filters">
+      <span id="mk-classes"></span>
+      <input type="search" id="mk-q" placeholder="Search symbol or name…">
+      <span class="muted small" id="mk-asof"></span>
+    </div>
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h3><span id="mk-title">Prices</span> <small id="mk-count"></small></h3>
+          <div class="scroll" id="mk-table"></div>
+          <div class="muted small" id="mk-note"></div>
+        </div>
+      </div>
+      <aside>
+        <div class="panel"><h3>Top gainers <small id="mk-movers-label"></small></h3><div id="mk-gainers"></div></div>
+        <div class="panel"><h3>Top losers</h3><div id="mk-losers"></div></div>
+        <div class="panel"><h3>Market news <small><a href="#news" id="mk-more-mkt">more</a></small></h3><div id="mk-news"></div></div>
+        <div class="panel"><h3>Crypto news</h3><div id="mk-crypto-news"></div></div>
+        <div class="panel"><h3>Data sources <small>last run</small></h3><div id="mk-sources" class="scroll"></div></div>
       </aside>
     </div>
   </section>

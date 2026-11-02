@@ -1,0 +1,48 @@
+{
+  "us_indices": [
+    {"symbol": "^GSPC", "name": "S&P 500"},
+    {"symbol": "^DJI",  "name": "Dow Jones"},
+    {"symbol": "^IXIC", "name": "Nasdaq Composite"},
+    {"symbol": "^NDX",  "name": "Nasdaq 100"},
+    {"symbol": "^RUT",  "name": "Russell 2000"},
+    {"symbol": "^VIX",  "name": "VIX (volatility)"}
+  ],
+
+  "us_stocks": [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "BRK-B", "JPM",
+    "V", "LLY", "WMT", "XOM", "UNH", "MA", "ORCL", "COST", "NFLX", "AMD",
+    "PLTR", "INTC", "CRM", "ADBE", "IBM", "QCOM", "TSM", "COIN", "MSTR", "SPY"
+  ],
+
+  "commodities": [
+    {"symbol": "GC=F", "name": "Gold", "unit": "USD/oz", "metal": "gold"},
+    {"symbol": "SI=F", "name": "Silver", "unit": "USD/oz", "metal": "silver"},
+    {"symbol": "PL=F", "name": "Platinum", "unit": "USD/oz"},
+    {"symbol": "CL=F", "name": "Crude oil (WTI)", "unit": "USD/bbl"},
+    {"symbol": "BZ=F", "name": "Brent crude", "unit": "USD/bbl"}
+  ],
+
+  "fx": [
+    {"symbol": "LKR=X",    "name": "USD/LKR", "lkr_rate": true},
+    {"symbol": "EURUSD=X", "name": "EUR/USD"},
+    {"symbol": "GBPUSD=X", "name": "GBP/USD"},
+    {"symbol": "INR=X",    "name": "USD/INR"},
+    {"symbol": "JPY=X",    "name": "USD/JPY"},
+    {"symbol": "DX-Y.NYB", "name": "US Dollar Index"}
+  ],
+
+  "crypto": {
+    "top_n": 100,
+    "vs_currency": "usd"
+  },
+
+  "cse": {
+    "enabled": true
+  },
+
+  "fetch": {
+    "timeout_seconds": 25,
+    "concurrency": 6,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+  }
+}

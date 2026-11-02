@@ -1,8 +1,9 @@
 # World news collector
 
 Collects the **latest N headlines** (default 10) from major news sites, grouped by country in
-priority order: **United States, India, Sri Lanka, Australia, Canada, China**, then **World** and
-**Technology**. Every headline from every country is also checked for technology topics, so tech
+priority order: **United States, India, Sri Lanka, Australia, Canada, China**, then **World**,
+**Technology**, **Markets & Business** and **Crypto** (CoinDesk, Cointelegraph, The Block, Decrypt,
+Bitcoin Magazine, the Ethereum Foundation and Bitcoin Core blogs, ...). Every headline from every country is also checked for technology topics, so tech
 stories from CNN or The Hindu appear in the Technology section too.
 
 Run it manually for now. It's built to be scheduled later.
@@ -107,6 +108,7 @@ Only headlines, summaries, dates and links are stored, not full article text.
 | `fetch` | Concurrency, timeout, user agent, browser fallback, opening article pages for dates |
 | `homepage` | Rules for picking article links out of homepages |
 | `tech_keywords` | Words that mark a headline as technology |
+| `topic_keywords` | Words that mark a headline as `crypto` or `markets` (shown as badges, filterable in the dashboard) |
 
 ## Notes
 

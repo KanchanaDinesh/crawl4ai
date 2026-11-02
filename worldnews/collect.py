@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from . import extract
 from .http import Http
 from .store import NewsStore
-from .tagging import TechTagger
+from .tagging import TopicTagger
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def utc_now() -> str:
 @dataclass
 class Context:
     http: Http
-    tagger: TechTagger
+    tagger: TopicTagger
     fetch_cfg: dict
     home_cfg: dict
     feed_cache: dict[str, str]
@@ -180,7 +180,7 @@ async def run_collection(settings, store: NewsStore, sources: list[dict], limit:
     cache = store.feed_cache()
     async with AsyncExitStack() as stack:
         http = await stack.enter_async_context(Http(settings.section("fetch")))
-        ctx = Context(http=http, tagger=TechTagger(settings.raw.get("tech_keywords", [])),
+        ctx = Context(http=http, tagger=TopicTagger.from_settings(settings.raw),
                       fetch_cfg=settings.section("fetch"), home_cfg=settings.section("homepage"),
                       feed_cache=cache, stack=stack, article_meta=article_meta, use_browser=use_browser)
 

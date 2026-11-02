@@ -1,6 +1,6 @@
 # Web scrapers
 
-Four parts, all built on crawl4ai:
+Five parts:
 
 - **`scrapers/`**: news, vehicle ads, products, IMDb and Colombo Stock Exchange scrapers (this page).
 - **`techintel/`**: a pipeline that discovers new tech websites, profiles and monitors them, and
@@ -9,7 +9,9 @@ Four parts, all built on crawl4ai:
 - **`worldnews/`**: the latest headlines from major news sites in the US, India, Sri Lanka, Australia,
   Canada, China, plus world and technology news, in one daily report.
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
-- **`dashboard/`**: a local web dashboard for World News and Tech Intel, reading live from the databases.
+- **`markets/`**: Sri Lankan and US stocks and indices, gold, silver, oil, exchange rates and the crypto top 100,
+  with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
+- **`dashboard/`**: a local web dashboard for World News, Tech Intel and Markets, reading live from the databases.
   `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
 
 All three use
@@ -52,6 +54,10 @@ uv run python -m dashboard --open        # http://localhost:8050
 - **World News:** headlines newest first with NEW and tech badges; filters for period, country/group, source,
   tech only, new in the last run, and search. Side panels show headlines per day, per country, top sources,
   **source health** (which sites failed, and how many runs in a row) and recent runs.
+- **Markets:** cards for S&P 500, Nasdaq, Dow, VIX, ASPI, S&P SL20, gold, silver, Bitcoin, Ethereum, USD/LKR and
+  gold per pawn in LKR, with sparklines; sortable tables for indices, US stocks, all CSE companies, crypto top 100,
+  gold/silver/oil (incl. LKR) and exchange rates; top gainers/losers; market and crypto news; click any row for its
+  price history chart.
 - **Tech Intel:** discovered domains latest first, with status, category, score, registration date and source;
   filters for period, status, category, source and search. **Click a row** for the full profile: tech stack,
   signals, key pages, changes and check history. Side panels show per-day discoveries, categories, tech stack,
@@ -71,6 +77,7 @@ uv run pytest                                        # automated tests (no inter
 uv run python -m worldnews check                     # 1. test every news source (3 headlines each)
 uv run python -m worldnews run                       # 2. collect the latest 10 per source into the database
 uv run python -m techintel run --limit 30            # 3. discover, qualify, enrich and profile tech sites
+uv run python -m markets run                         #    stocks, indices, gold/silver, FX, crypto top 100
 uv run python -m warehouse info                      # 4. check the databases filled up
 uv run python -m dashboard --open                    # 5. look at it all in the browser
 ```
@@ -86,9 +93,10 @@ Each tool stores its data in its own DuckDB file inside `data/`, so they can run
 |---|---|
 | `data/worldnews/worldnews.duckdb` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
 | `data/techintel/techintel.duckdb` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` |
+| `data/markets/markets.duckdb` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
 | `data/scrapers/scrapers.duckdb` | `scraper_rows` (every scraper output, every run), plus views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes`, `v_news_headlines`, `v_products` |
 
-Query all three together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.` or `scrapers.`:
+Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `scrapers.` or `markets.`:
 
 ```bash
 uv run python -m warehouse info                    # sizes, tables, row counts
