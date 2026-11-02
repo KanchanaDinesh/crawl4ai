@@ -146,3 +146,32 @@ def test_strip_shared_lines_and_tld():
     out = strip_shared_lines(["Menu\nVector search for RAG", "Menu\nPricing plans"])
     assert out == ["Vector search for RAG", "Pricing plans"]
     assert _tld("foo.com.lk") == ".com.lk" and _tld("bar.ai") == ".ai" and _tld("127.0.0.1:8080") == "(local)"
+
+
+def test_report_lists_latest_first_with_url_and_new_tab_links(store):
+    from techintel.stages.analyze import analyze
+    from techintel.stages.report import render_html, render_markdown
+    from techintel.models import utc_now
+    now = utc_now()
+    times = {"old.ai": "2026-01-01T08:00:00Z", "mid.ai": "2026-01-02T08:00:00Z", "new.ai": now}
+    # discovered in mixed order; "old.ai" has the highest score
+    for domain, score in (("mid.ai", 10), ("new.ai", 8), ("old.ai", 50)):
+        when = now if domain == "new.ai" else times[domain].replace("2026-01", now[:7])
+        times[domain] = when
+        store.append("candidates", [{"domain": domain, "url": f"https://{domain}/", "source": "seeds",
+                                     "discovered_at": when, "detail": {}}])
+        store.append("qualifications", [{"domain": domain, "url": f"https://{domain}/", "status": "qualified",
+                                         "reason": "ok", "checked_at": when, "category": "ai_ml", "score": score,
+                                         "final_url": f"https://www.{domain}/"}])
+    store.append("changes", [
+        {"domain": "mid.ai", "change_type": "tech_added", "field": "tech_stack", "after": "Stripe", "detected_at": times["mid.ai"]},
+        {"domain": "new.ai", "change_type": "signal_on", "field": "hiring", "after": True, "detected_at": now}])
+    a = analyze(store, days=400)
+    order = [s["domain"] for s in a["new_sites"]]
+    assert order == sorted(order, key=lambda d: times[d], reverse=True)          # latest first, not by score
+    assert [c["domain"] for c in a["notable_changes"]] == ["new.ai", "mid.ai"]
+    page, md = render_html(a), render_markdown(a)
+    first = order[0]
+    assert f">https://www.{first}</a>" in page                                     # URL shown as the label
+    assert page.count("target='_blank'") == page.count("<a ")                      # every link opens a new tab
+    assert f"| 1 | " in md and f"[https://www.{first}](https://www.{first}/)" in md

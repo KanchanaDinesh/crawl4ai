@@ -73,10 +73,13 @@ def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
             "profiled": domain in profiles,
         }
 
-    new_sites = sorted((site_row(d) for d in new_qualified), key=lambda r: -(r["score"] or 0))[:max_listed]
+    # Latest discovered first; ties broken by higher score.
+    new_sites = sorted((site_row(d) for d in new_qualified),
+                       key=lambda r: (r["discovered_at"] or "", r["score"] or 0), reverse=True)[:max_listed]
     period_changes = [c for c in changes if _in_period(c["detected_at"], since)]
     change_types = Counter(c["change_type"] for c in period_changes)
-    notable = [c for c in period_changes if c["change_type"] != "content_changed"][:max_listed]
+    notable = sorted((c for c in period_changes if c["change_type"] != "content_changed"),
+                     key=lambda c: c["detected_at"], reverse=True)[:max_listed]   # latest first
 
     last_runs: dict[str, dict] = {}
     source_health: dict[str, tuple[str, str]] = {}   # source -> (state, detail) from the last run that used it

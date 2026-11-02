@@ -7,6 +7,7 @@ import html
 import logging
 from datetime import datetime, timezone
 
+from ..domains import homepage_url
 from .analyze import analyze
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,28 @@ CHANGE_LABELS = {
     "signal_on": "now has", "signal_off": "no longer has", "job_links_changed": "job links",
     "name_changed": "renamed", "description_changed": "new description", "content_changed": "updated page",
 }
+
+
+def local_time(value: str | None) -> str:
+    """'2026-11-01T14:02:00Z' -> '2026-11-01 19:32' in this computer's time zone."""
+    if not value:
+        return ""
+    try:
+        when = datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return value[:16]
+    return when.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def url_label(url: str) -> str:
+    """Show the URL itself, without the trailing slash."""
+    return url.rstrip("/") if url else ""
+
+
+def link(url: str, label: str | None = None) -> str:
+    """HTML link that opens in a new tab."""
+    e = html.escape
+    return f"<a href='{e(url)}' target='_blank' rel='noopener noreferrer'>{e(label or url_label(url))}</a>"
 
 
 def _change_text(c: dict) -> str:
@@ -36,7 +59,7 @@ def render_markdown(a: dict) -> str:
     t, p = a["totals"], a["period"]
     lines = [
         f"# Tech Intelligence Report: last {a['period_days']} days",
-        f"_Generated {a['generated_at']} (period from {a['period_start']})_",
+        f"_Generated {local_time(a['generated_at'])} (period from {local_time(a['period_start'])})_",
         "",
         "## Summary",
         f"- **{p['new_candidates']}** new domains discovered, **{p['new_qualified']}** qualified as tech sites",
@@ -58,9 +81,14 @@ def render_markdown(a: dict) -> str:
     lines += table("Discovered by TLD", p["candidates_by_tld"], "Domains")
 
     if a["new_sites"]:
-        lines += ["", "## New tech sites"]
-        for s in a["new_sites"]:
-            lines += ["", f"### [{s['name']}]({s['url']}) · `{s['category']}` · score {s['score']}",
+        lines += ["", f"## New tech sites ({len(a['new_sites'])}, latest first)", "",
+                  "| # | Date | Website | Name | Category | Score |", "|---:|---|---|---|---|---:|"]
+        for i, s in enumerate(a["new_sites"], 1):
+            lines.append(f"| {i} | {local_time(s['discovered_at'])} | [{url_label(s['url'])}]({s['url']}) | "
+                         f"{s['name']} | {s['category']} | {s['score']} |")
+        for i, s in enumerate(a["new_sites"], 1):
+            lines += ["", f"### {i}. {local_time(s['discovered_at'])} · [{url_label(s['url'])}]({s['url']})",
+                      f"**{s['name']}** · `{s['category']}` · score {s['score']}", "",
                       s["description"] or "_No description._"]
             meta = []
             if s["tech_stack"]:
@@ -70,7 +98,7 @@ def render_markdown(a: dict) -> str:
             if s["keywords"]:
                 meta.append("**Keywords:** " + ", ".join(s["keywords"]))
             src = s["source"] + (f" ({s['source_detail'].get('title')})" if s["source_detail"].get("title") else "")
-            meta.append(f"**Found via:** {src} on {(s['discovered_at'] or '')[:10]}")
+            meta.append(f"**Found via:** {src}")
             lines += [f"- {m}" for m in meta]
 
     if p["top_keywords_new_sites"]:
@@ -82,8 +110,8 @@ def render_markdown(a: dict) -> str:
         lines += table("Business signals (profiled sites)",
                        {k.replace("_", " "): f"{v['sites']} ({v['pct']}%)" for k, v in a["signals"].items()}, "Sites")
     if a["notable_changes"]:
-        lines += ["", "## Notable changes", *[f"- **{c['domain']}** {_change_text(c)} ({c['detected_at'][:10]})"
-                                              for c in a["notable_changes"]]]
+        lines += ["", "## Notable changes (latest first)",
+                  *[f"- {local_time(c['detected_at'])} · **{c['domain']}** {_change_text(c)}" for c in a["notable_changes"]]]
     lines += table("Why sites were not qualified", a["not_qualified_reasons"], "Sites")
     return "\n".join(lines) + "\n"
 
@@ -102,7 +130,10 @@ h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:32px 0 12px;border-bot
 .tag{display:inline-block;background:var(--line);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:12px}
 .warn{background:var(--warn);border-radius:10px;padding:10px 14px}
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
-a{color:var(--accent)}
+a{color:var(--accent);word-break:break-all}
+.scroll{overflow-x:auto}.list td,.list th{white-space:nowrap}.num{text-align:right}.date{white-space:nowrap;color:var(--muted)}
+.site .head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:4px;font-size:15px}
+.badge{background:var(--accent);color:var(--bg);border-radius:999px;min-width:24px;padding:0 7px;text-align:center;font-weight:600}
 """
 
 
@@ -121,32 +152,44 @@ def render_html(a: dict) -> str:
             ("Qualified (all time)", t["qualified"]), ("Profiled", t["profiled"]), ("Qualify rate", f"{t['qualification_rate_pct']}%")]
     out = [f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>",
            f"<title>Tech Intelligence Report</title><style>{CSS}</style></head><body><main>",
-           f"<h1>Tech Intelligence Report</h1><div class='muted'>Last {a['period_days']} days · generated {e(a['generated_at'])}</div>",
+           f"<h1>Tech Intelligence Report</h1><div class='muted'>Last {a['period_days']} days · generated {e(local_time(a['generated_at']))}</div>",
            "<div class='kpis'>" + "".join(f"<div class='kpi'><b>{e(str(v))}</b>{e(k)}</div>" for k, v in kpis) + "</div>"]
     if a["warnings"]:
         out.append("<h2>Pipeline warnings</h2><div class='warn'>" + "<br>".join(e(w) for w in a["warnings"]) + "</div>")
     out += ["<h2>New tech sites by category</h2>", _bars(p["new_qualified_by_category"]),
             "<h2>Discovered by source</h2>", _bars(p["candidates_by_source"])]
-    out.append(f"<h2>New tech sites ({len(a['new_sites'])})</h2>")
+    out.append(f"<h2>New tech sites ({len(a['new_sites'])}) <span class='muted'>· latest first</span></h2>")
     if not a["new_sites"]:
         out.append("<p class='muted'>None in this period.</p>")
-    for s in a["new_sites"]:
+    else:
+        rows = "".join(
+            f"<tr><td class='num'>{i}</td><td class='date'>{e(local_time(s['discovered_at']))}</td>"
+            f"<td>{link(s['url'])}</td><td>{e(s['name'])}</td><td>{e(str(s['category']))}</td>"
+            f"<td class='num'>{s['score']}</td></tr>"
+            for i, s in enumerate(a["new_sites"], 1))
+        out.append("<div class='scroll'><table class='list'><tr><th>#</th><th>Date</th><th>Website</th><th>Name</th>"
+                   f"<th>Category</th><th>Score</th></tr>{rows}</table></div>")
+    for i, s in enumerate(a["new_sites"], 1):
         tags = "".join(f"<span class='tag'>{e(x)}</span>" for x in s["tech_stack"])
         sig = ", ".join(x.replace("_", " ") for x in s["signals"])
-        out.append(f"<div class='site'><h3><a href='{e(s['url'])}'>{e(s['name'])}</a> "
-                   f"<span class='muted'>· {e(str(s['category']))} · score {s['score']}</span></h3>"
+        out.append(f"<div class='site'><div class='head'><span class='badge'>{i}</span>"
+                   f"<span class='date'>{e(local_time(s['discovered_at']))}</span>{link(s['url'])}</div>"
+                   f"<div><b>{e(s['name'])}</b> <span class='muted'>· {e(str(s['category']))} · score {s['score']}</span></div>"
                    f"<div>{e(s['description'] or 'No description.')}</div>"
                    f"<div style='margin-top:6px'>{tags}</div>"
                    + (f"<div class='muted'>Signals: {e(sig)}</div>" if sig else "")
                    + (f"<div class='muted'>Keywords: {e(', '.join(s['keywords']))}</div>" if s["keywords"] else "")
-                   + f"<div class='muted'>Found via {e(s['source'] or '')} on {e((s['discovered_at'] or '')[:10])}</div></div>")
+                   + f"<div class='muted'>Found via {e(s['source'] or '')}</div></div>")
     if p["top_keywords_new_sites"]:
         out.append("<h2>Trending keywords on new sites</h2><div>" +
                    "".join(f"<span class='tag'>{e(k)}</span>" for k in p["top_keywords_new_sites"]) + "</div>")
     out += ["<h2>Tech stack across profiled sites</h2>", _bars({x["name"]: x["sites"] for x in a["tech_stack"]})]
     if a["notable_changes"]:
-        out.append("<h2>Notable changes</h2><table><tr><th>Site</th><th>Change</th><th>Date</th></tr>" +
-                   "".join(f"<tr><td>{e(c['domain'])}</td><td>{e(_change_text(c))}</td><td>{e(c['detected_at'][:10])}</td></tr>"
+        out.append("<h2>Notable changes <span class='muted'>· latest first</span></h2><div class='scroll'><table>"
+                   "<tr><th>Date</th><th>Website</th><th>Change</th></tr>" +
+                   "".join(f"<tr><td class='date'>{e(local_time(c['detected_at']))}</td>"
+                           f"<td>{link(c.get('url') or homepage_url(c['domain']), c['domain'])}</td>"
+                           f"<td>{e(_change_text(c))}</td></tr>"
                            for c in a["notable_changes"]) + "</table>")
     out += ["<h2>Why sites were not qualified</h2>", _bars(a["not_qualified_reasons"]), "</main></body></html>"]
     return "\n".join(out)
