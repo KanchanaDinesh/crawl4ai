@@ -14,7 +14,7 @@ from ..fetch import Fetcher
 from ..models import Change
 from ..techstack import TechDetector
 from . import age_days, process_items
-from .profile import build_profile
+from .profile import BrowserDown, build_profile, forget_browser_failures
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ def diff_profiles(old: dict, new: dict) -> list[Change]:
 async def run(settings, store, limit: int | None = None, force: bool = False,
               domains: list[str] | None = None, max_minutes: float | None = None, **_) -> dict:
     interval = float(settings.section("monitor").get("interval_days", 7))
+    forget_browser_failures(store)
     latest = store.latest("profiles")
     todo = [p for d, p in latest.items()
             if (domains and d in domains) or (not domains and (force or age_days(p["profiled_at"]) >= interval))]
@@ -82,7 +83,7 @@ async def run(settings, store, limit: int | None = None, force: bool = False,
     domain_filter = DomainFilter(settings.section("domain_filter"))
     crawl = settings.section("crawl")
     mode = settings.section("profile").get("fetch_mode", "browser")
-    n_changes = 0
+    n_changes, browser_failed = 0, 0
     async with Fetcher(crawl, mode) as fetcher:
         async def one(old: dict) -> tuple[dict, list[Change]]:
             extra = {"category": old.get("category"), "tech_score": old.get("tech_score")}
@@ -91,16 +92,25 @@ async def run(settings, store, limit: int | None = None, force: bool = False,
             return new, diff_profiles(old, new)
 
         def save(result) -> None:
-            nonlocal n_changes
+            nonlocal n_changes, browser_failed
             new, diffs = result
+            if new["status"] == "browser_failed":     # says nothing about the site: check it next run
+                browser_failed += 1
+                return
             store.append("profiles", [new])
             store.append("changes", [c.to_dict() for c in diffs])
             n_changes += len(diffs)
 
         out = await process_items(
             todo, one, stage="monitor", on_result=save,
-            describe=lambda r: f"{r[0]['domain']:<28} {r[0]['status']:<11} {len(r[1])} change(s)",
+            describe=lambda r: f"{r[0]['domain']:<28} {r[0]['status']:<11} " + (
+                "not saved, tried again next run" if r[0]["status"] == "browser_failed" else f"{len(r[1])} change(s)"),
             concurrency=int(crawl.get("concurrency", 4)),
-            max_minutes=max_minutes or crawl.get("max_stage_minutes"))
-    return {"monitored": len(out["results"]), "changes": n_changes, "left_for_next_run": out["skipped"],
-            "seconds": out["seconds"]}
+            max_minutes=max_minutes or crawl.get("max_stage_minutes"),
+            stop=lambda: fetcher.dead)
+    left = out["skipped"] + browser_failed
+    summary = {"monitored": len(out["results"]) - browser_failed, "changes": n_changes, "browser_failed": browser_failed,
+               "left_for_next_run": left, "seconds": out["seconds"]}
+    if fetcher.dead:
+        raise BrowserDown(f"{fetcher.dead}; {left} site(s) left for the next run", summary)
+    return summary

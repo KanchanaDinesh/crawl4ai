@@ -120,8 +120,11 @@ async def run(settings, store, limit: int | None = None, recheck: bool = False,
                 async with browser_lock:
                     if browser is None:
                         browser = await stack.enter_async_context(Fetcher(crawl, "browser"))
-                browser_retries += 1
-                result = await browser.fetch(url)
+                if not browser.dead:
+                    browser_retries += 1
+                    retried = await browser.fetch(url)
+                    if not retried.browser_failed:    # a crashed browser says nothing: keep the HTTP answer
+                        result = retried
             return evaluate(cand, result, classifier, domain_filter)
 
         def save(q: Qualification) -> None:

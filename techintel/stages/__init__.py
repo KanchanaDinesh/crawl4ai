@@ -49,13 +49,15 @@ def _fmt_secs(seconds: float) -> str:
 
 
 async def process_items(items: list, worker, *, stage: str, describe, on_result=None,
-                        concurrency: int = 4, max_minutes: float | None = None, heartbeat: float = 20) -> dict:
+                        concurrency: int = 4, max_minutes: float | None = None, heartbeat: float = 20,
+                        stop=None) -> dict:
     """Run `worker(item)` for every item, at most `concurrency` at a time.
 
     - logs each result as it finishes:  "qualify  12/30  example.ai  qualified …  (eta 1m20s)"
     - logs a "still working" line every `heartbeat` seconds
     - calls `on_result(result)` straight away, so results are saved one by one (Ctrl+C keeps them)
     - after `max_minutes`, starts nothing new; the rest stays due and is picked up by the next run
+    - the same once `stop()` returns a reason (e.g. the browser is down): no point trying the rest now
     Returns {"results": [...], "skipped": n, "seconds": s}.
     """
     total = len(items)
@@ -63,11 +65,16 @@ async def process_items(items: list, worker, *, stage: str, describe, on_result=
     deadline = started + max_minutes * 60 if max_minutes else None
     sem = asyncio.Semaphore(max(1, concurrency))
     results: list = []
-    state = {"done": 0, "active": 0, "skipped": 0}
+    state = {"done": 0, "active": 0, "skipped": 0, "stopped": None}
 
     async def run_one(item):
         async with sem:
             if deadline and time.monotonic() > deadline:
+                state["skipped"] += 1
+                return
+            why = stop() if stop else None
+            if why:
+                state["stopped"] = why
                 state["skipped"] += 1
                 return
             state["active"] += 1
@@ -96,6 +103,9 @@ async def process_items(items: list, worker, *, stage: str, describe, on_result=
         await asyncio.gather(*(run_one(i) for i in items))
     finally:
         ticker.cancel()
-    if state["skipped"]:
+    if state["stopped"]:
+        _log.warning("%-8s stopped early: %s. %d site(s) left for the next run", stage, state["stopped"],
+                     state["skipped"])
+    elif state["skipped"]:
         _log.warning("%-8s time limit reached: %d site(s) left for the next run", stage, state["skipped"])
     return {"results": results, "skipped": state["skipped"], "seconds": round(time.monotonic() - started, 1)}

@@ -6,6 +6,10 @@
 Politeness is built in: limited concurrency, a delay between requests to the same
 site (different sites don't wait for each other), and robots.txt is respected
 (settings["crawl"]).
+
+When the browser itself crashes, that says nothing about the site: such results have
+browser_failed=True, so the stages don't save them as "unreachable". After a few restarts
+the Fetcher gives up (`dead`), and the stages stop instead of failing every site left.
 """
 
 import asyncio
@@ -32,6 +36,7 @@ class FetchResult:
     internal_links: list[dict] = field(default_factory=list)
     external_links: list[dict] = field(default_factory=list)
     error: str | None = None
+    browser_failed: bool = False      # our browser crashed: the site wasn't really tried
 
 
 ERROR_PATTERNS = (
@@ -43,8 +48,8 @@ ERROR_PATTERNS = (
     (("connection reset", "server disconnected", "err_connection_reset", "err_empty_response"), "connection dropped"),
     (("robots",), "robots.txt disallows crawling"),
     (("anti-bot", "captcha", "cloudflare"), "possible bot protection"),
-    (("has been closed", "target closed", "browser closed", "browser has disconnected"),
-     "browser closed unexpectedly (run: uv run python doctor.py)"),
+    (("has been closed", "target closed", "browser closed", "browser has disconnected",
+      "browser is not available"), "browser closed unexpectedly (run: uv run python doctor.py)"),
 )
 
 
@@ -63,12 +68,22 @@ def friendly_error(error: str | None) -> str | None:
 
 
 BROWSER_GONE = ("has been closed", "target closed", "browser closed", "browser has disconnected",
-                "connection closed", "browser.new_context", "context or browser")
+                "connection closed", "browser.new_context", "context or browser", "browser is not available")
+CHROMIUM_WHY = ("fatal", "check failed", "crash", "killed", "signal", "denied", "not permitted", "sandbox",
+                "icudtl", "gpu process", "out of memory", "exitcode=")
 
 
 def browser_died(error: str | None) -> bool:
     low = (error or "").lower()
     return any(s in low for s in BROWSER_GONE)
+
+
+def chromium_reason(error: str | None) -> str:
+    """The lines of crawl4ai's long error that say why Chromium died (its own log is inside the error)."""
+    lines = [ln.strip() for ln in (error or "").splitlines() if ln.strip()]
+    why = [ln for ln in lines if any(w in ln.lower() for w in CHROMIUM_WHY) and "<launching>" not in ln]
+    picked = why[-3:] or lines[:1]
+    return " | ".join(ln[:200] for ln in picked) or "no message"
 
 
 class Fetcher:
@@ -89,6 +104,8 @@ class Fetcher:
         self._restart_lock = asyncio.Lock()
         self._generation = 0                          # bumped each time the browser is restarted
         self.restarts = 0
+        self.max_restarts = int(crawl_config.get("max_browser_restarts", 3))
+        self.dead: str | None = None                  # why the browser is given up on, if it is
 
     async def __aenter__(self) -> "Fetcher":
         await self._start()
@@ -106,17 +123,35 @@ class Fetcher:
             self._crawler = AsyncWebCrawler(config=browser_config)
         await self._crawler.__aenter__()
 
-    async def _restart(self, seen_generation: int) -> None:
-        """Replace a browser that died. Several pages may notice at once: only the first restarts it."""
+    async def _restart(self, seen_generation: int, error: str | None) -> None:
+        """Replace a browser that died. Several pages may notice at once: only the first restarts it.
+
+        After max_restarts it gives up (self.dead): a browser that keeps dying won't get better by
+        itself, and every site tried with it would wrongly look unreachable.
+        """
         async with self._restart_lock:
-            if self._generation != seen_generation:
+            if self._generation != seen_generation or self.dead:
                 return
-            logger.warning("browser closed unexpectedly; restarting it (restart %d)", self.restarts + 1)
+            why = chromium_reason(error)
+            if self.restarts >= self.max_restarts:
+                self.dead = f"the browser crashed {self.restarts + 1} times (Chromium: {why})"
+                logger.error("browser keeps crashing; giving up for this run. Chromium said: %s", why)
+                logger.error("Check it with: uv run python doctor.py --verbose")
+                return
+            logger.warning("browser closed unexpectedly; restarting it (restart %d). Chromium said: %s",
+                           self.restarts + 1, why)
+            logger.debug("full browser error: %s", error)
             try:
                 await self._crawler.__aexit__(None, None, None)
             except Exception:  # noqa: BLE001  it's already gone
                 pass
-            await self._start()
+            try:
+                await self._start()
+            except Exception as e:  # noqa: BLE001
+                self.dead = f"the browser won't start again ({friendly_error(str(e))})"
+                logger.error("browser won't start again: %s. Check it with: uv run python doctor.py --verbose",
+                             chromium_reason(str(e)))
+                return
             self._generation += 1
             self.restarts += 1
 
@@ -146,20 +181,41 @@ class Fetcher:
         if start > now:
             await asyncio.sleep(start - now)
 
+    def _hard_timeout(self) -> float:
+        """A page can't take longer than this in total. crawl4ai's own page_timeout covers loading only;
+        with a crashed browser a call could otherwise wait forever (a run once hung for 10+ minutes)."""
+        page = float(self.config.get("page_timeout_ms", 30000)) / 1000
+        return float(self.config.get("fetch_hard_timeout_seconds") or page * 2 + 30)
+
+    def _browser_down(self, url: str) -> FetchResult:
+        return FetchResult(url=url, mode=self.mode, success=False, browser_failed=True,
+                           error=f"not tried: {self.dead}")
+
     async def fetch(self, url: str) -> FetchResult:
+        if self.dead:
+            return self._browser_down(url)
         await self._wait_for_host(url)
         for attempt in (1, 2):                       # one retry if the browser itself died
             generation = self._generation
             async with self._semaphore:
+                if self.dead:
+                    return self._browser_down(url)
                 try:
-                    result = await self._crawler.arun(url=url, config=self._run_config())
+                    result = await asyncio.wait_for(self._crawler.arun(url=url, config=self._run_config()),
+                                                    self._hard_timeout())
                     error = None if result.success else result.error_message
+                except asyncio.TimeoutError:
+                    result, error = None, f"timed out: no answer within {self._hard_timeout():.0f}s"
                 except Exception as e:  # network errors, timeouts, browser crashes
                     logger.debug("fetch %s failed: %s", url, e)
                     result, error = None, str(e)
-            if attempt == 1 and self.mode == "browser" and browser_died(error) and self.restarts < 3:
-                await self._restart(generation)
-                continue
+            if self.mode == "browser" and browser_died(error):
+                if attempt == 1:
+                    await self._restart(generation, error)
+                    if not self.dead:
+                        continue
+                return FetchResult(url=url, mode=self.mode, success=False, browser_failed=True,
+                                   error=friendly_error(error))
             break
         if result is None:
             return FetchResult(url=url, mode=self.mode, success=False, error=friendly_error(error))

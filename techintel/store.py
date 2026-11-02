@@ -157,6 +157,16 @@ class DuckStore:
             return {row[key] for row in self.read(table) if row.get(key)}
         return {k for (k,) in self.con.execute(f"select distinct key from {table} where key is not null").fetchall()}
 
+    def remove_where(self, table: str, condition: str) -> int:
+        """Delete rows matching a SQL condition on `data`. Only for undoing rows written by mistake;
+        `condition` comes from our own code, never from outside."""
+        if table not in TABLES:
+            raise ValueError(f"Unknown table {table!r}; expected one of {TABLES}")
+        n = self.con.execute(f"select count(*) from {table} where {condition}").fetchone()[0]
+        if n:
+            self.con.execute(f"delete from {table} where {condition}")
+        return n
+
     write_raw_page = FileStore.write_raw_page
 
     def close(self) -> None:

@@ -16,7 +16,9 @@ DuckDB (`data/techintel/techintel.duckdb`).
 uv sync --frozen
 uv run crawl4ai-setup                     # one-time: browser for the profile stage
 
-uv run python -m techintel run            # all stages, using the enabled sources
+uv run python -m techintel collect        # part 1: find and store new sites (fast, no browser)
+uv run python -m techintel update         # part 2: profile new sites, re-check known ones, report (browser)
+uv run python -m techintel run            # both parts in one go
 uv run python -m techintel status         # counts and last run of each stage
 open output/techintel/reports/            # the reports (macOS)
 ```
@@ -37,6 +39,25 @@ uv run python -m techintel report --days 7
 
 Re-running is always safe. Each stage only processes what's new or due: discover skips domains it
 already knows, qualify skips checked ones until they're due for a re-check, and so on.
+
+### Two parts: `collect` and `update`
+
+- **`collect`** = discover → qualify → enrich. New sites are found and saved within minutes. It needs no
+  browser (qualify only falls back to one for empty-looking pages), so a browser problem can't hold it up.
+- **`update`** = profile → monitor → report. The slow part, with a real browser: up to 6 pages per new site,
+  and known sites again after `monitor.interval_days`. It never fetches a site that is already profiled
+  and not yet due.
+- `./run_all.sh` runs them as two steps, `tech_collect` and `tech_update`.
+
+**When the browser crashes**, that says nothing about the site, so nothing is saved for it: it stays due
+for the next run. The log shows Chromium's own reason (`Chromium said: ...`). After
+`crawl.max_browser_restarts` (3) restarts the stage stops with one clear error instead of failing every
+site that's left, and `update` skips monitor. A page can take at most `crawl.fetch_hard_timeout_seconds`
+(default: twice the page timeout + 30s), so a run can't hang. Results saved as "unreachable" by older
+versions during a crash are removed automatically.
+
+**When rdap.org refuses us** (401/403/429), enrich stops asking for the rest of that run and saves nothing
+for those domains, so they're looked up next time. It sends an honest user agent (`enrich.user_agent`).
 
 ## Running it often: `quick` and `watch`
 

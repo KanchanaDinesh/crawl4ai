@@ -29,11 +29,21 @@ def parse_rdap(data: dict) -> dict:
     }
 
 
+class Refused(Exception):
+    """The RDAP service refused us (401/403/429): back off, don't record it as the domain's answer."""
+
+    def __init__(self, status: int, host: str):
+        super().__init__(f"{host} refused the request (HTTP {status})")
+        self.status = status
+
+
 async def lookup(session: aiohttp.ClientSession, domain: str, url_template: str, timeout: float) -> dict:
     url = url_template.format(domain=domain)
     async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout),
                            headers={"Accept": "application/rdap+json, application/json"}) as resp:
         if resp.status == 404:
             raise LookupError("no RDAP record (TLD may not support RDAP)")
+        if resp.status in (401, 403, 429):
+            raise Refused(resp.status, resp.url.host or "the RDAP server")
         resp.raise_for_status()
         return parse_rdap(await resp.json(content_type=None))

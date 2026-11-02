@@ -50,14 +50,15 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 ## Automation: run everything with one command
 
 ```bash
-./run_all.sh                       # run the default steps once: markets, news, tech, vehicles
+./run_all.sh                       # run the default steps once: markets, news, tech_collect, tech_update, vehicles
 ./run_all.sh --profile frequent    # a profile: tech_quick + vehicles
 ./run_all.sh markets vehicles      # only some steps
 ./run_all.sh --list                # steps, profiles and the exact commands
 ./run_all.sh --status              # the last runs
 ```
 
-**Steps:** `markets`, `news`, `tech` (the full tech-intel run), `tech_quick` (new domains → qualify →
+**Steps:** `markets`, `news`, `tech_collect` (find and store new tech sites, fast, no browser), `tech_update`
+(profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
 registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`. **Profiles** group steps that run at
 the same speed; they're defined in `automation.conf`.
 
@@ -155,7 +156,8 @@ uv run pytest                                        # automated tests (no inter
 
 uv run python -m worldnews check                     # 1. test every news source (3 headlines each)
 uv run python -m worldnews run                       # 2. collect the latest 10 per source into the database
-uv run python -m techintel run --limit 30            # 3. discover, qualify, enrich and profile tech sites
+uv run python -m techintel collect                  # 3. find and store new tech sites (no browser)
+uv run python -m techintel update --limit 30         #    profile them and re-check known ones (browser)
 uv run python -m markets run                         #    stocks, indices, gold/silver, FX, crypto top 100
 uv run python -m warehouse info                      # 4. check the databases filled up
 uv run python -m dashboard --open                    # 5. look at it all in the browser

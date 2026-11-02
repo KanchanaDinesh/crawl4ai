@@ -7,6 +7,9 @@ careers, contact) found among its links, then records:
   signals: has pricing / docs / blog / careers, hiring (job board links), open source (GitHub)
   external domains (fed back into discovery via the outlinks source)
 Page text is saved under data/techintel/raw/pages/ for re-processing later.
+
+If our browser crashes, nothing is saved for that site: it stays due for the next run.
+(Older versions saved such sites as "unreachable"; forget_browser_failures() removes those.)
 """
 
 import asyncio
@@ -49,6 +52,23 @@ def find_key_pages(links: list[dict], domain: str, key_pages: dict[str, list[str
     return {k: v for k, (_, v) in found.items()}
 
 
+BROWSER_FAILURE = ("(lower({col}) like 'browser closed unexpectedly%' "
+                   "or lower({col}) like 'browser is not available%' or lower({col}) like 'not tried: the browser%')")
+
+
+def forget_browser_failures(store) -> int:
+    """Remove profiles (and their site_down changes) that were saved while our browser had crashed.
+
+    They say nothing about the site, and kept it from being profiled again for days."""
+    n = store.remove_where("profiles", "data->>'status' = 'unreachable' and "
+                           + BROWSER_FAILURE.format(col="data->>'error'"))
+    store.remove_where("changes", "data->>'change_type' = 'site_down' and "
+                       + BROWSER_FAILURE.format(col="data->>'after'"))
+    if n:
+        logger.info("removed %d result(s) saved when the browser had crashed; those sites get profiled again", n)
+    return n
+
+
 def _name(page, domain: str) -> str:
     if page.site_name:
         return page.site_name
@@ -63,6 +83,8 @@ async def build_profile(fetcher: Fetcher, domain: str, url: str, settings, store
     base = {"domain": domain, "url": url, "profiled_at": utc_now(), "kind": kind, **(extra or {})}
 
     home = await fetcher.fetch(url)
+    if home.browser_failed:
+        return {**base, "status": "browser_failed", "error": home.error}
     if not home.success or (home.status or 0) >= 400:
         return {**base, "status": "unreachable", "error": home.error or f"HTTP {home.status}"}
 
@@ -70,6 +92,8 @@ async def build_profile(fetcher: Fetcher, domain: str, url: str, settings, store
     max_pages = int(config.get("max_pages", 6))
     page_urls = [u for u in dict.fromkeys(key_pages.values()) if u.rstrip("/") != (home.final_url or url).rstrip("/")]
     others: list[FetchResult] = await fetcher.fetch_many(page_urls[: max_pages - 1])
+    if any(r.browser_failed for r in others):   # half a profile would look like pages were removed
+        return {**base, "status": "browser_failed", "error": next(r.error for r in others if r.browser_failed)}
 
     url_type = {v: k for k, v in key_pages.items()}
     pages, texts, tech, external = [], [], {}, []
@@ -141,11 +165,14 @@ async def build_profile(fetcher: Fetcher, domain: str, url: str, settings, store
 
 def _describe(p: dict) -> str:
     detail = ", ".join(p.get("tech_stack", [])[:5]) if p["status"] == "ok" else (p.get("error") or "")[:70]
+    if p["status"] == "browser_failed":
+        detail = "not saved, tried again next run"
     return f"{p['domain']:<28} {p['status']:<11} {detail}"
 
 
 async def run(settings, store, limit: int | None = None, domains: list[str] | None = None,
               max_minutes: float | None = None, **_) -> dict:
+    forget_browser_failures(store)
     profiled = store.keys("profiles")
     qualifications = store.latest("qualifications")
     todo = [q for d, q in qualifications.items()
@@ -158,7 +185,7 @@ async def run(settings, store, limit: int | None = None, domains: list[str] | No
     domain_filter = DomainFilter(settings.section("domain_filter"))
     crawl = settings.section("crawl")
     mode = settings.section("profile").get("fetch_mode", "browser")
-    counts = {"ok": 0, "unreachable": 0}
+    counts = {"ok": 0, "unreachable": 0, "browser_failed": 0}
     async with Fetcher(crawl, mode) as fetcher:
         async def one(q: dict) -> dict:
             url = q.get("final_url") or q.get("url") or homepage_url(q["domain"])
@@ -167,10 +194,27 @@ async def run(settings, store, limit: int | None = None, domains: list[str] | No
                                        "initial", extra)
 
         def save(p: dict) -> None:
+            if p["status"] == "browser_failed":
+                counts["browser_failed"] += 1
+                return
             counts["ok" if p["status"] == "ok" else "unreachable"] += 1
             store.append("profiles", [p])
 
         out = await process_items(todo, one, stage="profile", on_result=save, describe=_describe,
                                   concurrency=int(crawl.get("concurrency", 4)),
-                                  max_minutes=max_minutes or crawl.get("max_stage_minutes"))
-    return {"profiled": len(out["results"]), **counts, "left_for_next_run": out["skipped"], "seconds": out["seconds"]}
+                                  max_minutes=max_minutes or crawl.get("max_stage_minutes"),
+                                  stop=lambda: fetcher.dead)
+    left = out["skipped"] + counts["browser_failed"]
+    summary = {"profiled": counts["ok"] + counts["unreachable"], **counts, "left_for_next_run": left,
+               "seconds": out["seconds"]}
+    if fetcher.dead:
+        raise BrowserDown(f"{fetcher.dead}; {left} site(s) left for the next run", summary)
+    return summary
+
+
+class BrowserDown(RuntimeError):
+    """The browser couldn't be kept running: the stage stopped early. Carries the partial summary."""
+
+    def __init__(self, message: str, summary: dict):
+        super().__init__(message)
+        self.summary = summary

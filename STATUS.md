@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 72 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 78 tests pass.
 
 ## Parts and how to run them
 
@@ -20,7 +20,7 @@ Run every command from the project folder, after `source env.sh`.
 
 | Part | Command | Status |
 |---|---|---|
-| Tech intel | `uv run python -m techintel run`. Stages: `discover`, `qualify`, `enrich`, `profile`, `monitor`, `report`, `status`. `quick` is the fast run; `watch` is the live listener | Working. Full run is time-limited (`--limit 50 --max-minutes 20` in automation.conf) |
+| Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working. Yahoo is used first, with fallback to Stooq and open.er-api.com. CoinGecko is used first, with fallback to CoinPaprika |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
@@ -119,8 +119,25 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     `bash -c "cd <project>; exec /bin/bash ./script ..."`, and `status` flags jobs in the old format.
     - Claude's shell can't install launchd jobs (blocked by Claude Code's permission check); Kanchana runs
       `./schedule.sh` from Terminal.
+21. Tech intel split into two parts (Kanchana's idea), plus browser-crash handling (2026-11-03):
+    - `techintel collect` (discover → qualify → enrich) and `techintel update` (profile → monitor → report);
+      run_all.sh steps `tech_collect` and `tech_update` are the default instead of `tech`.
+    - Fetcher: a crashed browser gives `browser_failed` results, which profile/monitor/qualify never save; after
+      `crawl.max_browser_restarts` it is `dead` and the stage stops with one error (`update` then skips monitor).
+      Each page has a hard time limit. The log shows Chromium's own reason.
+    - Old "unreachable" rows saved during crashes are removed automatically (profiles + their site_down changes).
+    - Enrich stops for the run when rdap.org refuses (401/403/429), saves nothing for those domains, and sends
+      an honest user agent.
 
 ## Open issues and things to watch
+
+- **Browser crashes in tech intel (2026-11-03), cause not known yet.** In Kanchana's `./run_all.sh` at 05:11 the
+  browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the
+  run then hung. The same fetcher worked fine from Claude's shell on vercel.com, ietf.org and astral.sh.
+  - Now (item 21): crashes aren't saved, the stage stops after 3 restarts, and the log line
+    `Chromium said: ...` shows the real reason. Next: Kanchana runs `./run_all.sh tech_update` and sends that line.
+  - Also seen: rdap.org answered 403 to every registration lookup. Enrich now backs off; if it keeps refusing,
+    consider querying the registries' own RDAP servers (IANA bootstrap file) instead of rdap.org.
 
 - **Scheduling is on hold (Kanchana's choice, 2026-11-03); runs are by hand with `./run_all.sh`.** If it's
   wanted again: `./schedule.sh recommended` from Terminal, then

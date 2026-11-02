@@ -59,9 +59,12 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 : "${STEP_news:=$UV run --frozen python -m worldnews run ${NEWS_ARGS:-}}"
 : "${STEP_tech:=$UV run --frozen python -m techintel run ${TECH_ARGS:-}}"
 : "${STEP_tech_quick:=$UV run --frozen python -m techintel quick ${TECH_QUICK_ARGS:-}}"
+: "${STEP_tech_collect:=$UV run --frozen python -m techintel collect ${TECH_COLLECT_ARGS:-}}"
+: "${STEP_tech_update:=$UV run --frozen python -m techintel update ${TECH_UPDATE_ARGS:-}}"
 : "${STEP_vehicles:=$UV run --frozen python -m vehicles run ${VEHICLES_ARGS:-}}"
 : "${STEP_lknews:=$UV run --frozen python -m scrapers.news ${LKNEWS_ARGS:-}}"
 : "${TOOL_markets:=markets}" "${TOOL_news:=news}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
+: "${TOOL_tech_collect:=tech}" "${TOOL_tech_update:=tech}"
 : "${TOOL_vehicles:=vehicles}" "${TOOL_lknews:=scrapers}"
 
 step_cmd() { local v="STEP_$1"; printf '%s' "${!v:-}"; }
@@ -74,17 +77,17 @@ if [ -n "$PROFILE" ]; then
 elif [ ${#ARGS[@]} -gt 0 ]; then
   STEP_LIST="${ARGS[*]}"; PROFILE="custom"
 else
-  STEP_LIST="${STEPS:-markets news tech vehicles}"; PROFILE="default"
+  STEP_LIST="${STEPS:-markets news tech_collect tech_update vehicles}"; PROFILE="default"
 fi
 
 if [ "$LIST" = 1 ]; then
-  echo "Default steps:  ${STEPS:-markets news tech vehicles}"
+  echo "Default steps:  ${STEPS:-markets news tech_collect tech_update vehicles}"
   for v in $(compgen -v PROFILE_); do echo "Profile ${v#PROFILE_}:$(printf '%*s' $((10 - ${#v} + 8)) '') ${!v}"; done
   echo; echo "Steps:"
   seen=""
-  for s in markets news tech tech_quick vehicles lknews $STEP_LIST; do
+  for s in markets news tech tech_collect tech_update tech_quick vehicles lknews $STEP_LIST; do
     case " $seen " in *" $s "*) continue ;; esac; seen="$seen $s"
-    printf '  %-11s [%s]  %s\n' "$s" "$(step_tool "$s")" "$(step_cmd "$s")"
+    printf '  %-12s [%s]  %s\n' "$s" "$(step_tool "$s")" "$(step_cmd "$s")"
   done
   exit 0
 fi
