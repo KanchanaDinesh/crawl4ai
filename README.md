@@ -65,6 +65,12 @@ the same speed; they're defined in `automation.conf`.
 
 Different parts change at different speeds, so they run at different speeds:
 
+One command sets up all three schedules below:
+
+```bash
+./schedule.sh recommended                    # = the three lines below, then shows the status
+```
+
 ```bash
 ./schedule.sh every 15m --profile frequent   # new tech domains + new vehicle ads
 ./schedule.sh every 1h  --profile hourly     # markets + news + full tech intel (time-limited)

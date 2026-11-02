@@ -1,8 +1,8 @@
 # Tech intelligence pipeline (prototype)
 
 Finds **new tech websites**, works out **what they do**, **tracks how they change**, and produces an
-**analytics report**. Built on crawl4ai. There's no AI API and no database yet: classification is
-rule-based and data is stored in JSON Lines files. Both are designed to be swapped later.
+**analytics report**. Built on crawl4ai. There's no AI API: classification is rule-based. Data is kept in
+DuckDB (`data/techintel/techintel.duckdb`).
 
 ```
  1. DISCOVER ─▶ 2. QUALIFY ─▶ 2b. ENRICH ─▶ 3. PROFILE ─▶ 4. MONITOR ─▶ 5. ANALYZE ─▶ 6. REPORT

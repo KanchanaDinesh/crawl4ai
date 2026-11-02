@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run ./run_all.sh automatically, and keep the live tech-intel listener running.
 #
+#   ./schedule.sh recommended                    set up everything below in one go (listener + 15m + hourly)
 #   ./schedule.sh every 15m --profile frequent   every 15 minutes: tech_quick + vehicles
 #   ./schedule.sh every 1h  --profile hourly     every hour: markets + news + full tech intel
 #   ./schedule.sh every 2h                       the default steps (STEPS in automation.conf)
@@ -33,7 +34,7 @@ done
 set -- "${ARGS[@]+"${ARGS[@]}"}"
 CMD="${1:-}"
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 label_for() { if [ "$1" = "default" ]; then echo "com.crawl4ai.runall"; else echo "com.crawl4ai.runall.$1"; fi; }
 mark_for() { echo "# crawl4ai-runall[$1]"; }
 WATCH_MARK="# crawl4ai-watch"
@@ -229,6 +230,17 @@ case "$CMD" in
     schedule daily "$@"
     ;;
   watch) watch_cmd "${2:-status}" ;;
+  recommended|setup)
+    # Tech intel runs all the time: the listener catches new domains live, tech_quick qualifies them every
+    # 15 minutes (with vehicles), and the hourly run does the deep work (profiles, monitoring) plus markets + news.
+    dry=(); [ "$DRY" = 1 ] && dry=(--dry-run)
+    for args in "watch on" "every 15m --profile frequent" "every 1h --profile hourly"; do
+      echo "── ./schedule.sh $args"
+      # shellcheck disable=SC2086
+      "$0" $args "${dry[@]+"${dry[@]}"}" || exit $?
+    done
+    [ "$DRY" = 1 ] || { echo; "$0" status; }
+    ;;
   off|remove|stop) stop_schedule "${2:-}" ;;
   status) status ;;
   run-now)
