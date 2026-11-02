@@ -21,6 +21,10 @@ cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 OS="${SCHEDULE_OS:-$(uname -s)}"   # SCHEDULE_OS=Darwin/Linux only for testing with --dry-run
 AGENTS="$HOME/Library/LaunchAgents"
+# launchd can't start a job whose folder or log file is on an external drive (it fails with exit code 78
+# before the script runs, and leaves no message anywhere). So the jobs start in $HOME and launchd's own
+# log goes here, on the Mac's drive; run_all.sh and watch.sh write their real logs to logs/ themselves.
+JOB_LOG_DIR="$HOME/Library/Logs/crawl4ai"
 WATCH_LABEL="com.crawl4ai.techwatch"
 DRY=0; PROFILE="default"; ARGS=()
 while [ $# -gt 0 ]; do
@@ -68,7 +72,7 @@ plist_head() {   # $1 label, $2.. program arguments
   <key>Label</key><string>$label</string>
   <key>ProgramArguments</key>
   <array>$(for a in "$@"; do printf '<string>%s</string>' "$a"; done)</array>
-  <key>WorkingDirectory</key><string>$PROJECT_DIR</string>
+  <key>WorkingDirectory</key><string>$HOME</string>
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>$PATH_FOR_JOBS</string></dict>
 EOF
@@ -78,8 +82,8 @@ run_plist() {   # $1 = "interval" minutes | "daily" times...
   local kind="$1"; shift
   # shellcheck disable=SC2046
   plist_head "$(label_for "$PROFILE")" /bin/bash "$PROJECT_DIR/run_all.sh" $(run_args "$PROFILE")
-  echo "  <key>StandardOutPath</key><string>$PROJECT_DIR/logs/scheduler.log</string>"
-  echo "  <key>StandardErrorPath</key><string>$PROJECT_DIR/logs/scheduler.log</string>"
+  echo "  <key>StandardOutPath</key><string>$JOB_LOG_DIR/scheduler.log</string>"
+  echo "  <key>StandardErrorPath</key><string>$JOB_LOG_DIR/scheduler.log</string>"
   echo "  <key>RunAtLoad</key><false/>"
   if [ "$kind" = "interval" ]; then
     echo "  <key>StartInterval</key><integer>$(( $1 * 60 ))</integer>"
@@ -96,8 +100,8 @@ run_plist() {   # $1 = "interval" minutes | "daily" times...
 
 watch_plist() {
   plist_head "$WATCH_LABEL" /bin/bash "$PROJECT_DIR/watch.sh" --foreground
-  echo "  <key>StandardOutPath</key><string>$PROJECT_DIR/logs/watch.log</string>"
-  echo "  <key>StandardErrorPath</key><string>$PROJECT_DIR/logs/watch.log</string>"
+  echo "  <key>StandardOutPath</key><string>$JOB_LOG_DIR/watch.log</string>"
+  echo "  <key>StandardErrorPath</key><string>$JOB_LOG_DIR/watch.log</string>"
   echo "  <key>RunAtLoad</key><true/>"
   echo "  <key>KeepAlive</key><true/>"
   echo "  <key>ThrottleInterval</key><integer>60</integer>"
@@ -107,7 +111,7 @@ watch_plist() {
 mac_load() {   # $1 label, stdin = plist
   local label="$1" file="$AGENTS/$1.plist" xml; xml="$(cat)"
   if [ "$DRY" = 1 ]; then echo "Would write $file:"; echo "$xml"; return; fi
-  mkdir -p "$AGENTS" "$PROJECT_DIR/logs"
+  mkdir -p "$AGENTS" "$JOB_LOG_DIR" "$PROJECT_DIR/logs"
   launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
   printf '%s\n' "$xml" > "$file"
   launchctl bootstrap "gui/$(id -u)" "$file"
@@ -127,18 +131,44 @@ mac_describe() {   # $1 plist file
   fi
 }
 
+# What launchd can't tell you itself: schedules written by an older version (log on the external drive, so
+# they never start), and macOS blocking the drive for background jobs ("Operation not permitted").
+mac_problems() {   # $@ = extra log files to check (whole file) for the macOS block
+  local f old=0 blocked=0
+  for f in "$AGENTS"/com.crawl4ai.*.plist; do
+    if [ -e "$f" ] && grep -qF "<string>$PROJECT_DIR/logs/" "$f"; then old=1; fi
+  done
+  for f in "$JOB_LOG_DIR"/*.log; do   # only the latest lines: an old message may have been fixed since
+    if [ -e "$f" ] && tail -n 5 "$f" | grep -q "Operation not permitted"; then blocked=1; fi
+  done
+  for f in "$@"; do
+    if [ -e "$f" ] && grep -q "Operation not permitted" "$f"; then blocked=1; fi
+  done
+  if [ "$old" = 1 ]; then
+    echo "Problem: these schedules were set up by an older version and can't start (launchd can't keep their"
+    echo "  log on the external drive). Set them up again with: ./schedule.sh recommended"
+  fi
+  if [ "$blocked" = 1 ]; then
+    echo "Problem: macOS blocks scheduled runs from using the external drive (\"Operation not permitted\")."
+    echo "  Fix: System Settings → Privacy & Security → Full Disk Access → + → press ⌘⇧G, type /bin/bash, Open."
+    echo "  Make sure its switch is on, then check with: ./schedule.sh doctor"
+  fi
+  return 0
+}
+
 # Run doctor.py once inside the scheduler (launchd on a Mac, a cron-like bare environment on Linux), with
 # Chromium's own messages, because scheduled runs have a different environment and permissions than Terminal.
 DOCTOR_LABEL="com.crawl4ai.doctor"
 scheduled_doctor() {
-  local log="$PROJECT_DIR/logs/doctor-scheduled.log"
+  local log="$PROJECT_DIR/logs/doctor-scheduled.log" job_log="$PROJECT_DIR/logs/doctor-scheduled.log"
+  [ "$OS" = "Darwin" ] && job_log="$JOB_LOG_DIR/doctor.log"   # see JOB_LOG_DIR; copied to $log at the end
   local cmd="cd '$PROJECT_DIR' && uv run --frozen python doctor.py --verbose; echo \"=== doctor finished (exit \$?) ===\""
   if [ "$DRY" = 1 ]; then echo "Would run in the scheduler: $cmd  > $log"; return; fi
-  mkdir -p "$PROJECT_DIR/logs"; : > "$log"
+  mkdir -p "$PROJECT_DIR/logs" "$(dirname "$job_log")"; : > "$job_log"
   if [ "$OS" = "Darwin" ]; then
     { plist_head "$DOCTOR_LABEL" /bin/bash -c "$cmd"
-      echo "  <key>StandardOutPath</key><string>$log</string>"
-      echo "  <key>StandardErrorPath</key><string>$log</string>"
+      echo "  <key>StandardOutPath</key><string>$job_log</string>"
+      echo "  <key>StandardErrorPath</key><string>$job_log</string>"
       echo "  <key>RunAtLoad</key><true/>"
       echo "</dict>"; echo "</plist>"; } | mac_load "$DOCTOR_LABEL"
   else
@@ -146,14 +176,16 @@ scheduled_doctor() {
   fi
   echo "Running the health check in the scheduler (up to 3 minutes)..."
   local i=0
-  while [ $i -lt 180 ] && ! grep -q "=== doctor finished" "$log" 2>/dev/null; do sleep 1; i=$((i + 1)); done
+  while [ $i -lt 180 ] && ! grep -q "=== doctor finished" "$job_log" 2>/dev/null; do sleep 1; i=$((i + 1)); done
   [ "$OS" = "Darwin" ] && mac_unload "$DOCTOR_LABEL"
+  [ "$job_log" = "$log" ] || cp "$job_log" "$log"
   # the verdict lines, plus only the Chromium messages that explain a crash (the rest is normal noise)
   echo; grep -vE "^\s*$" "$log" | grep -E -v "pw:browser" | tail -60
   local why; why="$(grep -E "pw:browser" "$log" | grep -iE "exitCode=[1-9]|signal=[A-Z]|FATAL|Check failed|crash|denied|not permitted|killed|sandbox" | cut -c1-240 | tail -15)"
   [ -n "$why" ] && { echo; echo "Chromium said:"; echo "$why"; }
   grep -q "=== doctor finished" "$log" || echo "(it did not finish within 3 minutes; full output: logs/doctor-scheduled.log)"
   echo; echo "Full output: logs/doctor-scheduled.log"
+  if [ "$OS" = "Darwin" ]; then echo; mac_problems "$log"; fi
 }
 
 # ── Linux: cron ───────────────────────────────────────────────────────────
@@ -236,6 +268,7 @@ status() {
     for f in "$AGENTS"/com.crawl4ai.runall*.plist; do [ -e "$f" ] && { any=1; mac_describe "$f"; }; done
     [ "$any" = 1 ] || echo "  none"
     [ -e "$AGENTS/$WATCH_LABEL.plist" ] && echo "  $WATCH_LABEL: listener, always on"
+    mac_problems
   else
     local lines; lines="$(crontab -l 2>/dev/null | grep -F "# crawl4ai-" || true)"
     if [ -n "$lines" ]; then echo "$lines" | sed -E 's/cd [^&]*&& //; s/>> logs[^#]*//; s/^/  /'; else echo "  none"; fi

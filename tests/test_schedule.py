@@ -1,6 +1,7 @@
 """schedule.sh: the one-command recommended setup, checked with --dry-run (nothing is installed)."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -30,3 +31,48 @@ def test_doctor_runs_inside_the_scheduler_dry_run(tmp_path):
     out = subprocess.run(["bash", str(ROOT / "schedule.sh"), "doctor", "--dry-run"], capture_output=True, text=True,
                          env=env, timeout=60)
     assert out.returncode == 0 and "doctor.py --verbose" in out.stdout and "doctor-scheduled.log" in out.stdout
+
+
+def test_launchd_jobs_keep_their_folder_and_log_off_the_project_drive(tmp_path):
+    """launchd can't start a job whose folder or log is on an external drive (exit 78, no message anywhere)."""
+    env = {**os.environ, "SCHEDULE_OS": "Darwin", "HOME": str(tmp_path)}
+    out = subprocess.run(["bash", str(ROOT / "schedule.sh"), "recommended", "--dry-run"], capture_output=True,
+                         text=True, env=env, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert f"<key>WorkingDirectory</key><string>{tmp_path}</string>" in out.stdout
+    assert f"<string>{tmp_path}/Library/Logs/crawl4ai/scheduler.log</string>" in out.stdout
+    assert f"<string>{tmp_path}/Library/Logs/crawl4ai/watch.log</string>" in out.stdout
+    assert f"<string>{ROOT}/logs/" not in out.stdout and f"<string>{ROOT}</string>" not in out.stdout
+
+
+def test_status_explains_old_schedules_and_the_macos_block(tmp_path):
+    agents = tmp_path / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True)
+    (agents / "com.crawl4ai.runall.frequent.plist").write_text(
+        f"<key>StartInterval</key><integer>900</integer>\n"
+        f"<key>StandardOutPath</key><string>{ROOT}/logs/scheduler.log</string>\n")
+    job_logs = tmp_path / "Library" / "Logs" / "crawl4ai"
+    job_logs.mkdir(parents=True)
+    (job_logs / "watch.log").write_text(f"/bin/bash: {ROOT}/watch.sh: Operation not permitted\n")
+    env = {**os.environ, "SCHEDULE_OS": "Darwin", "HOME": str(tmp_path)}
+    out = subprocess.run(["bash", str(ROOT / "schedule.sh"), "status"], capture_output=True, text=True, env=env,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert "set up by an older version" in out.stdout and "./schedule.sh recommended" in out.stdout
+    assert "Full Disk Access" in out.stdout and "/bin/bash" in out.stdout
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+@pytest.mark.parametrize("script", ["run_all.sh", "watch.sh"])
+def test_scripts_say_clearly_when_the_project_folder_is_blocked(script, tmp_path):
+    shutil.copy(ROOT / script, tmp_path / script)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    logs.chmod(0o500)                       # like macOS blocking the drive: logs/ can't be written
+    try:
+        out = subprocess.run(["bash", str(tmp_path / script), "--status"], capture_output=True, text=True,
+                             timeout=60)
+    finally:
+        logs.chmod(0o700)
+    assert out.returncode == 1
+    assert "Operation not permitted" in out.stderr and "Full Disk Access" in out.stderr

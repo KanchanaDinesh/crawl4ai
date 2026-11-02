@@ -107,9 +107,14 @@ Other schedule commands: `every 2h` (default steps), `daily 07:30 19:30 [--profi
 
 - They run while you're logged in and the Mac is awake; a run missed during sleep happens when it wakes. The
   listener restarts by itself if it stops. The external drive must be connected.
-- If `logs/scheduler.log` or `logs/watch.log` shows "Operation not permitted", macOS is blocking background access
-  to the external drive: open **System Settings → Privacy & Security → Full Disk Access**, click **+**, press
-  ⌘⇧G, type `/bin/bash`, and add it. Then run `./schedule.sh run-now` to test.
+- **Give `/bin/bash` Full Disk Access once**, or macOS blocks scheduled runs from the external drive
+  ("Operation not permitted"): open **System Settings → Privacy & Security → Full Disk Access**, click **+**,
+  press ⌘⇧G, type `/bin/bash`, add it and make sure its switch is on. Then run `./schedule.sh doctor` to test.
+- launchd's own messages (problems before a run can even start) go to `~/Library/Logs/crawl4ai/` on the Mac's
+  drive, because launchd can't start a job whose log is on an external drive. `./schedule.sh status` reads them
+  and says what to fix. The runs and the listener still write their logs to `logs/`.
+- Schedules set up before 2026-11-03 kept their log on the external drive and never started: run
+  `./schedule.sh recommended` once to set them up again.
 
 **On a Linux server** the same commands use your crontab (other cron jobs are left untouched); the listener is
 kept running by a cron check every 5 minutes and restarted at boot.

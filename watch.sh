@@ -14,7 +14,12 @@ cd "$(dirname "$0")" || exit 1
 PROJECT_DIR="$(pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
 PIDFILE="$LOG_DIR/watch.pid"
-mkdir -p "$LOG_DIR"
+# Same check as run_all.sh: under launchd, macOS may block the external drive (see ./schedule.sh status).
+if ! { mkdir -p "$LOG_DIR" && touch "$LOG_DIR/.access-check"; } 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') Can't write to $LOG_DIR: Operation not permitted." >&2
+  echo "  On a Mac, give /bin/bash Full Disk Access (System Settings → Privacy & Security), then run ./schedule.sh doctor." >&2
+  exit 1
+fi
 # shellcheck disable=SC1091
 source ./env.sh
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -59,7 +64,8 @@ case "${1:-}" in
   ""|--foreground)
     rotate_log
     echo $$ > "$PIDFILE"
-    exec "${RUN[@]}"
+    # launchd's own log is on the Mac's drive (see schedule.sh), so the listener writes logs/watch.log itself
+    if [ -t 1 ]; then exec "${RUN[@]}"; else exec "${RUN[@]}" >> "$LOG_DIR/watch.log" 2>&1; fi
     ;;
   -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown option $1 (try --help)"; exit 2 ;;

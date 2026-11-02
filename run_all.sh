@@ -32,7 +32,14 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-mkdir -p "$LOG_DIR"
+# A scheduled run on a Mac may not be allowed to touch the external drive at all. Say so in one line
+# (it lands in ~/Library/Logs/crawl4ai/scheduler.log, which ./schedule.sh status checks) instead of
+# failing later with a confusing error deep inside a tool.
+if ! { mkdir -p "$LOG_DIR" && touch "$LOG_DIR/.access-check"; } 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') Can't write to $LOG_DIR: Operation not permitted." >&2
+  echo "  On a Mac, give /bin/bash Full Disk Access (System Settings → Privacy & Security), then run ./schedule.sh doctor." >&2
+  exit 1
+fi
 if [ "$STATUS" = 1 ]; then
   if [ -f "$LOG_DIR/history.log" ]; then tail -n 15 "$LOG_DIR/history.log"; else echo "No runs yet."; fi
   exit 0

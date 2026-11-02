@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-02. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-03. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 66 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 71 tests pass.
 
 ## Parts and how to run them
 
@@ -48,15 +48,18 @@ Set all three up with one command, then check them:
 
 - **Mac:** schedules are launchd LaunchAgents (`~/Library/LaunchAgents/com.crawl4ai.*`). They run while
   Kanchana is logged in and the external drive is connected; a run missed during sleep happens on wake.
-- **"Operation not permitted"** in `logs/scheduler.log`: give `/bin/bash` Full Disk Access in
-  System Settings → Privacy & Security.
+- **Needs Full Disk Access for `/bin/bash`** (System Settings → Privacy & Security), or macOS blocks
+  background jobs from the external drive ("Operation not permitted"). `./schedule.sh status` says so.
+- launchd's own log is in `~/Library/Logs/crawl4ai/` (on the Mac's drive), and the jobs start in `$HOME`:
+  launchd can't start a job whose folder or log is on an external drive (exit 78, no message anywhere).
 - **Turning them off:** `./schedule.sh off all` and `./schedule.sh watch off`.
 - **Logs:** `logs/latest.log`, `logs/history.log`, `logs/watch.log`; also `./run_all.sh --status`.
 - **Overlapping runs:** each tool has a lock (`logs/.lock-<tool>`). If a tool is still busy, that step is
   skipped for that run, not failed.
 
-**Still to confirm with Kanchana:** whether `./schedule.sh recommended` has been run on the Mac and the
-schedules are active. Ask them to run `./schedule.sh status`.
+**State on the Mac (2026-11-03):** the schedules are installed (`./schedule.sh recommended` was re-run with the
+fix), but they can't use the drive until Kanchana gives `/bin/bash` Full Disk Access. Then `./schedule.sh doctor`
+should say "All good", and `tail -3 logs/history.log` should show `(scheduled)` runs.
 
 ## History (what was done, oldest first)
 
@@ -95,17 +98,23 @@ schedules are active. Ask them to run `./schedule.sh status`.
 18. Added `./schedule.sh doctor` to run the health check inside the scheduler.
     - `doctor.py` now prints its environment, has `--verbose` (Chromium's own output), and also tests the
       vehicles page settings (magic mode).
+19. Found why scheduled runs never worked (2026-11-03). No scheduled job had ever run:
+    - launchd can't start a job whose WorkingDirectory or log file is on the external drive: exit 78 and no
+      message (`launchctl print gui/$(id -u)/com.crawl4ai.techwatch` showed it). Jobs now start in `$HOME` and
+      launchd's log is in `~/Library/Logs/crawl4ai/`. `run_all.sh` and `watch.sh` write their own logs to `logs/`.
+    - Once started, bash is blocked from the drive ("Operation not permitted") until `/bin/bash` has Full Disk
+      Access. `run_all.sh` and `watch.sh` now say so in one line, and `./schedule.sh status` / `doctor` print the fix.
+    - The "vehicles FAILED after 3s" run (03:38) was actually a manual run with a broken Chromium install
+      (`icudtl.dat not found`, then "GPU process isn't usable"). The browser was reinstalled at 03:47, and vehicles
+      has worked by hand since.
 
 ## Open issues and things to watch
 
-- **Vehicles failed in a scheduled run (2026-11-02), cause not known yet.** It failed after about 3s.
-  `doctor.py` on the Mac says "All good: the browser works here", so the browser and drive are fine when run by hand.
-  - **Cause narrowed down (2026-11-03):** in scheduled runs Chromium starts and dies at once.
-    The log shows `BrowserContext.new_page: Target page, context or browser has been closed` for both sites.
-    By hand, it works.
-  - Next: Kanchana runs `./schedule.sh doctor`, which runs doctor.py inside launchd with Chromium's own
-    messages, and sends the output. Then fix whatever launchd blocks: environment, permissions, sandbox.
-  - Other checks: `tail -3 logs/history.log` shows the reason for new failures.
+- **Scheduled runs wait for Full Disk Access (2026-11-03).** See history item 19. Next: Kanchana adds `/bin/bash`
+  to Full Disk Access, runs `./schedule.sh doctor`, then checks `./schedule.sh status` after 15 minutes. If a
+  scheduled vehicles run still fails, `tail -3 logs/history.log` shows why.
+  - If "icudtl.dat not found" or "GPU process isn't usable" comes back, the browser install is broken again:
+    `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
 - **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive
   supports symlinks, so `BROWSERS_ON_SYSTEM_DRIVE` isn't needed. If "browser has been closed" errors come
   back, run `uv run python doctor.py` again.
