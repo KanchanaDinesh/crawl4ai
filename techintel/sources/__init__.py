@@ -22,8 +22,9 @@ class SourceContext:
 
 
 def get_sources() -> dict:
-    from . import certstream, crtsh, hackernews, outlinks, seeds
+    from . import certstream, crtsh, hackernews, outlinks, seeds, stream
     return {
+        "stream": stream.collect,
         "seeds": seeds.collect,
         "hackernews": hackernews.collect,
         "crtsh": crtsh.collect,

@@ -70,3 +70,9 @@ th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--fg)}th.sorted{
 td.coin{white-space:nowrap}td.coin img{width:16px;height:16px;vertical-align:-3px;margin-right:6px;border-radius:50%}
 svg.chart{width:100%;height:220px;display:block}svg.chart polyline{fill:none;stroke:var(--accent);stroke-width:2}
 svg.chart text{fill:var(--muted);font-size:11px}svg.chart line{stroke:var(--line)}
+
+.ad{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);align-items:start}
+.ad:last-child{border-bottom:0}.ad img{width:96px;height:72px;object-fit:cover;border-radius:8px;background:var(--bg)}
+.ad .noimg{width:96px;height:72px;border-radius:8px;background:var(--bg)}
+.ad .t{font-weight:600}.ad .m{color:var(--muted);font-size:12.5px}.ad .p{text-align:right;white-space:nowrap;font-weight:700}
+@media (max-width:600px){.ad{grid-template-columns:72px minmax(0,1fr)}.ad img,.ad .noimg{width:72px;height:54px}.ad .p{grid-column:2;text-align:left}}

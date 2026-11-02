@@ -38,6 +38,24 @@ uv run python -m techintel report --days 7
 Re-running is always safe. Each stage only processes what's new or due: discover skips domains it
 already knows, qualify skips checked ones until they're due for a re-check, and so on.
 
+## Running it often: `quick` and `watch`
+
+```bash
+uv run python -m techintel quick     # every 10-15 min: new domains (listener queue, Hacker News, seeds) -> qualify -> enrich
+uv run python -m techintel watch     # live listener: runs until stopped, queues new domains from the certificate stream
+```
+
+- **`watch`** keeps a connection to the Certificate Transparency stream (`sources.certstream.url`) and writes every
+  interesting new root domain to `data/techintel/stream/pending.jsonl`, skipping domains already known. It never
+  opens the database, so it never blocks other runs. It reconnects on its own and logs one line per batch
+  (`watch.batch_minutes`, default 5) plus `stream/status.json`.
+- **`quick`** takes the queued domains (the `stream` source), adds Hacker News and your seeds, then qualifies and
+  enriches the new ones, within `quick.qualify_max_minutes`. Profiling and monitoring stay in the hourly `run`.
+- To run them automatically: `./schedule.sh watch on` and `./schedule.sh every 15m --profile frequent` (see the
+  main README, "Automation").
+- The public CertStream server isn't always available. For reliable use, run your own
+  ([certstream-server-go](https://github.com/d-Rickyy-b/certstream-server-go)) and set `sources.certstream.url`.
+
 ## How long does a run take?
 
 Each stage prints progress as it goes (`qualify 12/30 example.ai qualified … (eta 1m20s)`), plus a

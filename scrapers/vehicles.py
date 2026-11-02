@@ -196,7 +196,13 @@ def main() -> None:
     else:
         sites = [s for s in sites if s.get("enabled", True)]
 
-    asyncio.run(run(sites, args.limit, args.save_html, args.quiet))
+    reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet))
+    total = sum(r.get("count", 0) for r in reports)
+    logger.info("Done: %d ads from %d site(s): %s", total, len(reports),
+                ", ".join(f"{r['site']} {r.get('count', 0)}" for r in reports))
+    if total == 0:
+        logger.error("No ads from any site (no internet, or the sites changed: see output/html_dumps/).")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

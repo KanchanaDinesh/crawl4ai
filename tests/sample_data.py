@@ -155,3 +155,31 @@ def build_markets(root, now: datetime | None = None, runs: int = 6) -> None:
                    {"source": "yahoo BRK-B", "group": "us", "ok": False, "count": 0, "error": "BRK-B: HTTP 404", "seconds": 0.3}]
         store.save_run(iso(run_at, micro=True), iso(run_at + timedelta(seconds=20)), quotes, sources)
     store.close()
+
+
+def build_vehicles(runs: int = 3) -> None:
+    """Saved through scrapers.common.save_json (as the real scraper does): a few runs, new ads, a price drop.
+    Uses PROJECT_DATA_DIR / SCRAPERS_OUTPUT_DIR from the environment."""
+    import importlib
+    import time as _time
+    import project_paths
+    import warehouse
+    import warehouse.scrapers_db as sdb
+    import scrapers.common as common
+    for mod in (project_paths, warehouse, sdb, common):
+        importlib.reload(mod)
+    ikman = [("Toyota Aqua 2015", "Colombo", 6_450_000), ("Honda Vezel 2016", "Gampaha", 9_350_000),
+             ("Suzuki Alto 2012", "Kandy", 2_650_000), ("Nissan Leaf 2014", "Colombo", 4_150_000)]
+    riya = [("Toyota Vitz KSP90 2008", "Nugegoda", 4_890_000), ("Suzuki Wagon R FX 2014", "Ambalangoda", 4_200_000),
+            ("Mitsubishi Montero 2010", "Kurunegala", 21_500_000)]
+    for n in range(runs):
+        cars_i = ikman[: 2 + n]                      # a new ad appears on each run
+        ads_i = [{"rank": i + 1, "title": t, "url": f"https://ikman.lk/en/ad/{t.lower().replace(' ', '-')}",
+                  "price": f"Rs {p:,}", "price_lkr": p - (250_000 if (t.startswith("Honda") and n == runs - 1) else 0),
+                  "location": loc, "posted": f"{5 + i * 7} mins", "image": None} for i, (t, loc, p) in enumerate(cars_i)]
+        ads_r = [{"rank": i + 1, "title": t, "url": f"https://riyasewana.com/buy/{t.lower().replace(' ', '-')}-{1000 + i}",
+                  "price": f"Rs. {p:,}", "price_lkr": p, "year": t.split()[-1], "mileage": f"{80 + i * 15},000 km",
+                  "posted": "2026-11-02", "image": None} for i, (t, _, p) in enumerate(riya[: 1 + n])]
+        common.save_json({"site": "ikman", "count": len(ads_i), "ads": ads_i}, "vehicles_ikman.json")
+        common.save_json({"site": "riyasewana", "count": len(ads_r), "ads": ads_r}, "vehicles_riyasewana.json")
+        _time.sleep(0.02)

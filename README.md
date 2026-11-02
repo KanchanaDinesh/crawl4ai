@@ -11,7 +11,7 @@ Five parts:
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
 - **`markets/`**: Sri Lankan and US stocks and indices, gold, silver, oil, exchange rates and the crypto top 100,
   with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
-- **`dashboard/`**: a local web dashboard for World News, Tech Intel and Markets, reading live from the databases.
+- **`dashboard/`**: a local web dashboard for World News, Tech Intel, Markets and Vehicles, reading live from the databases.
   `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
 
 All three use
@@ -48,40 +48,63 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 ## Automation: run everything with one command
 
 ```bash
-./run_all.sh                    # run everything once: markets -> news -> tech intel
-./run_all.sh markets news       # only some steps (markets, news, tech, vehicles, lknews)
-./run_all.sh --status           # the last runs
-./run_all.sh --list             # the steps and the exact commands they run
+./run_all.sh                       # run the default steps once: markets, news, tech, vehicles
+./run_all.sh --profile frequent    # a profile: tech_quick + vehicles
+./run_all.sh markets vehicles      # only some steps
+./run_all.sh --list                # steps, profiles and the exact commands
+./run_all.sh --status              # the last runs
 ```
 
-Run it by hand whenever you like, or let it run automatically:
+**Steps:** `markets`, `news`, `tech` (the full tech-intel run), `tech_quick` (new domains → qualify →
+registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`. **Profiles** group steps that run at
+the same speed; they're defined in `automation.conf`.
+
+### Recommended schedule
+
+Different parts change at different speeds, so they run at different speeds:
 
 ```bash
-./schedule.sh every 1h              # every hour (also 30m, 2h, 10h, ...)
-./schedule.sh daily 07:30 19:30     # at fixed times every day
-./schedule.sh status                # is it on, and the last runs
-./schedule.sh run-now               # start a run now in the background
-./schedule.sh off                   # stop the automatic runs
+./schedule.sh every 15m --profile frequent   # new tech domains + new vehicle ads
+./schedule.sh every 1h  --profile hourly     # markets + news + full tech intel (time-limited)
+./schedule.sh watch on                       # live certificate listener: new domains within seconds
+./schedule.sh status                         # everything at a glance
 ```
 
-- **Each step runs even if an earlier one failed.** The run's result is "ok" only if every step succeeded;
-  a step counts as failed if it crashed or collected nothing at all (e.g. no internet).
-- **Logs:** each run writes `logs/run-<date>-<time>.log` (`logs/latest.log` points to the newest), plus a
-  one-line summary in `logs/history.log`. The dashboard header shows the last run; hover over it for the
-  recent history. Logs older than 30 days are deleted.
-- **No overlapping runs:** if a run is still going when the next one is due, the new one is skipped.
-- **Settings** are in `automation.conf`: which steps run by default, and options per step (for example tech
-  intel is limited to 50 sites and 20 minutes per stage).
+| What | How often | Why |
+|---|---|---|
+| Certificate listener (`watch`) | always on | New domains appear every second; the stream pushes them, so nothing is polled |
+| `tech_quick` | every 10–15 min | Adds the listener's domains + Hacker News launches and qualifies them while they're new; quick because it only touches new domains |
+| `vehicles` | every 10–15 min | New ads are caught soon after they're posted; every run adds to the history and price-change tracking |
+| `markets`, `news` | hourly (or more often for markets) | Prices and headlines |
+| `tech` (full run) | hourly | crt.sh, profiling (a browser opens up to 6 pages per site), monitoring known sites every 7 days; time-limited |
 
-**On the Mac** `schedule.sh` uses launchd (`~/Library/LaunchAgents/com.crawl4ai.runall.plist`):
+Other schedule commands: `every 2h` (default steps), `daily 07:30 19:30 [--profile NAME]`,
+`off --profile frequent`, `off all`, `watch off`, `run-now [--profile NAME]`.
 
-- Runs happen while you're logged in and the Mac is awake. If the Mac was asleep at run time, the run
-  happens when it wakes. The external drive must be connected; otherwise the run is skipped.
-- If `logs/scheduler.log` shows "Operation not permitted", macOS is blocking background access to the
-  external drive: open **System Settings → Privacy & Security → Full Disk Access**, click **+**, press
+### How runs behave
+
+- **Each step runs even if an earlier one failed.** The run is "ok" only if every step succeeded; a step fails if
+  it crashed or collected nothing at all (e.g. no internet).
+- **One lock per tool:** jobs can overlap safely. If a step's tool is still busy (say the hourly tech run is
+  profiling when the 15-minute run starts), that step is skipped for this run, not failed, and the other steps run.
+- **Logs:** `logs/run-<date>-<time>-<profile>.log` (`logs/latest.log` is the newest), one summary line per run in
+  `logs/history.log`, listener output in `logs/watch.log`. The dashboard header shows the last run; hover for the
+  history. Run logs older than 30 days are deleted.
+- **The listener never opens the database.** It queues new domains in `data/techintel/stream/pending.jsonl`, and
+  the next `tech_quick` adds them. If the stream drops, it reconnects (waiting up to 10 minutes between attempts).
+- **Settings** are in `automation.conf`: profiles, the default steps, and options per step (for example vehicles
+  takes 20 ads per site per run, and the full tech run is limited to 50 sites and 20 minutes per stage).
+
+**On the Mac** schedules are launchd LaunchAgents (`~/Library/LaunchAgents/com.crawl4ai.*.plist`):
+
+- They run while you're logged in and the Mac is awake; a run missed during sleep happens when it wakes. The
+  listener restarts by itself if it stops. The external drive must be connected.
+- If `logs/scheduler.log` or `logs/watch.log` shows "Operation not permitted", macOS is blocking background access
+  to the external drive: open **System Settings → Privacy & Security → Full Disk Access**, click **+**, press
   ⌘⇧G, type `/bin/bash`, and add it. Then run `./schedule.sh run-now` to test.
 
-**On a Linux server** the same commands use your crontab (other cron jobs are left untouched).
+**On a Linux server** the same commands use your crontab (other cron jobs are left untouched); the listener is
+kept running by a cron check every 5 minutes and restarted at boot.
 
 ## Dashboard
 
@@ -96,6 +119,8 @@ uv run python -m dashboard --open        # http://localhost:8050
   gold per pawn in LKR, with sparklines; sortable tables for indices, US stocks, all CSE companies, crypto top 100,
   gold/silver/oil (incl. LKR) and exchange rates; top gainers/losers; market and crypto news; click any row for its
   price history chart.
+- **Vehicles:** ikman.lk and riyasewana ads, newest first with photos and NEW badges; price drops ("was Rs …");
+  filters for site, period, new in the last run and search; new ads per day and when each site was last collected.
 - **Tech Intel:** discovered domains latest first, with status, category, score, registration date and source;
   filters for period, status, category, source and search. **Click a row** for the full profile: tech stack,
   signals, key pages, changes and check history. Side panels show per-day discoveries, categories, tech stack,
@@ -178,6 +203,7 @@ virtualenv first with `source .venv/bin/activate`. Run `source env.sh` first in 
 pyproject.toml           dependencies (crawl4ai version pinned here)
 env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
 run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); settings in automation.conf
+watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               DuckDB helpers and the `python -m warehouse` query tool
 dashboard/               local web dashboard (python -m dashboard)

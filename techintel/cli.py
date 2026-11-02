@@ -8,6 +8,8 @@
     analyze   [--days N]
     report    [--days N]
     run       all stages in order (discover -> qualify -> enrich -> profile -> monitor -> report)
+    quick     frequent run (every 10-15 min): live queue + Hacker News + seeds -> qualify -> enrich
+    watch     live listener: queue new domains from the certificate stream (runs until stopped)
     status    counts per stage, and the last run of each stage
 
 Global: --config PATH (a different settings.json), -v for debug logging.
@@ -116,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
         s = sub.add_parser(name, help=f"{name.title()} the collected data")
         s.add_argument("--days", type=int, help="Reporting period in days")
 
+    q = sub.add_parser("quick", help="Frequent run: new domains (live queue, Hacker News, seeds) -> qualify -> enrich")
+    q.add_argument("--max-minutes", type=float, dest="max_minutes", help="Time limit for qualify (default: quick.qualify_max_minutes)")
+    w = sub.add_parser("watch", help="Live listener: queue new domains from the certificate stream, without stopping")
+    w.add_argument("--batch-minutes", type=float, dest="batch_minutes", help="Log/flush every N minutes (default 5)")
+    w.add_argument("--batches", type=int, help="Stop after N batches (default: run forever)")
+
     r = sub.add_parser("run", help="Run all stages in order")
     r.add_argument("--source", action="append", dest="sources", help="Discovery sources (default: enabled ones)")
     r.add_argument("--minutes", type=float, help="certstream listening time, if certstream is used")
@@ -135,6 +143,14 @@ async def main_async(args) -> None:
 
     if args.command == "status":
         status(store)
+        return
+    if args.command == "quick":
+        cfg = settings.section("quick")
+        t = time.monotonic()
+        await run_stage("discover", settings, store, sources=cfg.get("sources") or ["stream", "hackernews", "seeds"])
+        await run_stage("qualify", settings, store, max_minutes=options.get("max_minutes") or cfg.get("qualify_max_minutes", 8))
+        await run_stage("enrich", settings, store, max_minutes=cfg.get("enrich_max_minutes", 3))
+        print(f"\nquick run done in {_dur(time.monotonic() - t)}")
         return
     if args.command == "run":
         timings = []
@@ -161,6 +177,17 @@ async def main_async(args) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.command == "watch":
+        logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                            format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        logging.getLogger("aiohttp").setLevel(logging.WARNING)
+        from .watch import watch
+        settings = load_settings(args.config)
+        try:
+            asyncio.run(watch(settings, args.batch_minutes or settings.section("watch").get("batch_minutes", 5), args.batches))
+        except KeyboardInterrupt:
+            print("\nStopped listening. Queued domains are added by the next `python -m techintel quick`.")
+        return
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S")
     for noisy in ("crawl4ai", "asyncio", "aiohttp", "urllib3", "httpx", "filelock"):

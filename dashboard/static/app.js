@@ -450,6 +450,69 @@ for (const id of ["mk-cards", "mk-gainers", "mk-losers"]) {
   $(id).addEventListener("click", (e) => { const c = e.target.closest("[data-sym]"); if (c) openSymbol(c.dataset.cls, c.dataset.sym); });
 }
 
+// ───────────────────────────── VEHICLES ─────────────────────────────
+const vh = { days: 30, site: "", q: "", new: false, offset: 0 };
+const lkr = (v) => (v === null || v === undefined) ? "–" : `Rs ${Math.round(v).toLocaleString()}`;
+
+async function loadVehicles() {
+  const [summary, changes] = await Promise.all([api("/api/vehicles/summary"), api("/api/vehicles/changes")]);
+  setBanner([summary, changes]);
+  const s = summary.data;
+  if (!s) {
+    $("vh-kpis").innerHTML = "";
+    $("vh-list").innerHTML = `<div class="empty">No vehicle ads yet.<br>Run <code>./run_all.sh vehicles</code> (or <code>uv run python -m scrapers.vehicles</code>), then refresh.</div>`;
+    return;
+  }
+  const c = s.counts;
+  $("vh-kpis").innerHTML = [[fmtNum(c.ads), "Ads tracked"], [fmtNum(c.new_last_run), "New in last run"], [fmtNum(c.new_24h), "New in 24 hours"],
+    [fmtNum(c.price_drops), "Price drops (7 days)"], [lkr(c.median_price), "Median price"]]
+    .map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+  $("vh-sites").innerHTML = [`<button class="chip ${vh.site ? "" : "active"}" data-site="">All<small>${c.ads}</small></button>`]
+    .concat((s.sites || []).map((x) => `<button class="chip ${vh.site === x.site ? "active" : ""}" data-site="${esc(x.site)}">${esc(x.site)}<small>${x.ads}</small></button>`)).join(" ");
+  $("vh-site-table").innerHTML = `<table><tr><th>Site</th><th class="num">Ads</th><th class="num">New</th><th>Last collected</th></tr>${(s.sites || []).map((x) => `
+    <tr><td>${esc(x.site)}</td><td class="num">${x.ads}</td><td class="num">${x.new_last_run}</td><td class="nowrap">${esc(fmtTime(x.last_saved))}<div class="muted small">${esc(ago(x.last_saved))}</div></td></tr>`).join("")}</table>`;
+  dayColumns($("vh-days-chart"), s.by_day, "n");
+  $("vh-changes").innerHTML = (changes.data || []).length ? changes.data.slice(0, 15).map((x) => {
+    const down = x.price_lkr < x.previous_price_lkr;
+    return `<div class="news-item"><div>${link(x.url, x.title)}</div><div class="meta"><span class="${down ? "up" : "down"}">${down ? "▼" : "▲"} ${lkr(x.previous_price_lkr)} → ${lkr(x.price_lkr)}</span> · ${esc(x.site)} · ${esc(ago(x.changed_at))}</div></div>`;
+  }).join("") : `<div class="muted small">No price changes seen yet. They appear when an ad is seen again at a different price.</div>`;
+  await loadVehicleAds(true);
+}
+
+let vhReq = 0;
+async function loadVehicleAds(reset) {
+  const ticket = ++vhReq;
+  const offset = reset ? 0 : vh.offset;
+  const res = await api("/api/vehicles/ads", { days: vh.days, site: vh.site, q: vh.q, new: vh.new ? 1 : "", limit: PAGE, offset });
+  if (ticket !== vhReq) return;
+  const d = res.data || { total: 0, items: [] };
+  $("vh-count").textContent = `${fmtNum(d.total)} · newest first`;
+  const html = d.items.map((a) => {
+    const drop = a.previous_price_lkr && a.price_lkr !== null && a.price_lkr !== a.previous_price_lkr;
+    const meta = [a.location, a.year, a.mileage].filter(Boolean).join(" · ");
+    return `<div class="ad">${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy">` : `<div class="noimg"></div>`}
+      <div><div class="t">${a.is_new ? `<span class="badge b-new">NEW</span>` : ""}${link(a.url, a.title)}</div>
+        <div class="m">${esc(meta || a.posted || "")}</div>
+        <div class="m">${esc(a.site)} · first seen ${esc(fmtTime(a.first_seen))} (${esc(ago(a.first_seen))})${a.times_seen > 1 ? ` · seen in ${a.times_seen} runs` : ""}</div></div>
+      <div class="p">${a.price_lkr ? lkr(a.price_lkr) : esc(a.price || "–")}${drop ? `<div class="small ${a.price_lkr < a.previous_price_lkr ? "up" : "down"}">was ${lkr(a.previous_price_lkr)}</div>` : ""}</div></div>`;
+  }).join("");
+  if (reset) { vh.offset = 0; $("vh-list").innerHTML = html || `<div class="empty">No ads match these filters.</div>`; }
+  else $("vh-list").insertAdjacentHTML("beforeend", html);
+  vh.offset = offset + d.items.length;
+  $("vh-more").hidden = vh.offset >= d.total;
+}
+
+$("vh-sites").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-site]"); if (!b) return;
+  vh.site = b.dataset.site;
+  document.querySelectorAll("#vh-sites .chip").forEach((c) => c.classList.toggle("active", c === b));
+  loadVehicleAds(true);
+});
+$("vh-days").addEventListener("change", (e) => { vh.days = +e.target.value; loadVehicleAds(true); });
+$("vh-new").addEventListener("change", (e) => { vh.new = e.target.checked; loadVehicleAds(true); });
+$("vh-q").addEventListener("input", debounce((e) => { vh.q = e.target.value.trim(); loadVehicleAds(true); }));
+$("vh-more").addEventListener("click", () => loadVehicleAds(false));
+
 // ───────────────────────────── shell ─────────────────────────────
 let view = "news";
 async function loadAutomation() {
@@ -466,16 +529,16 @@ async function loadAutomation() {
 async function refresh() {
   loadAutomation();
   try {
-    await ({ news: loadNews, tech: loadTech, markets: loadMarkets })[view]();
+    await ({ news: loadNews, tech: loadTech, markets: loadMarkets, vehicles: loadVehicles })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;
   } catch (err) {
     setBanner([{ error: `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
   }
 }
 function show(v) {
-  view = ["news", "tech", "markets"].includes(v) ? v : "news";
+  view = ["news", "tech", "markets", "vehicles"].includes(v) ? v : "news";
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
-  ["news", "tech", "markets"].forEach((n) => { $(`view-${n}`).hidden = view !== n; });
+  ["news", "tech", "markets", "vehicles"].forEach((n) => { $(`view-${n}`).hidden = view !== n; });
   if (location.hash !== `#${view}`) history.replaceState(null, "", `#${view}`);
   refresh();
 }

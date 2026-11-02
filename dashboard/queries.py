@@ -234,3 +234,53 @@ def markets_history(con, asset_class: str, symbol: str, days: int = 90) -> dict:
                [asset_class, symbol])
     latest = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol])
     return {"quote": latest, "points": pts, "spark": _spark(con, asset_class, symbol, days)}
+
+
+# ── vehicles (scrapers.duckdb) ────────────────────────────────────────────
+VEHICLE_BASE = """
+    with site_last as (select site, max(saved_at) as last_saved from v_vehicle_ads group by site),
+         changes as (select url, price_lkr as new_price, previous_price_lkr, saved_at as changed_at
+                     from v_vehicle_price_changes qualify row_number() over (partition by url order by saved_at desc) = 1)
+    select l.*, l.first_seen >= s.last_saved as is_new, c.previous_price_lkr, c.changed_at
+    from v_vehicle_ads_latest l join site_last s using (site) left join changes c using (url)
+"""
+
+
+def vehicles_summary(con, days: int = 7) -> dict:
+    d = int(days)
+    counts = one(con, f"""select count(*) as ads,
+            count(*) filter (where is_new) as new_last_run,
+            count(*) filter (where first_seen >= now() - interval 1 day) as new_24h,
+            count(*) filter (where previous_price_lkr is not null and price_lkr < previous_price_lkr
+                             and changed_at >= now() - interval {d} day) as price_drops,
+            round(median(price_lkr)) as median_price
+        from ({VEHICLE_BASE})""")
+    sites = rows(con, f"""select site, count(*) as ads, count(*) filter (where is_new) as new_last_run,
+            {_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) group by site order by site""")
+    per_day = rows(con, """select strftime(date_trunc('day', first_seen), '%Y-%m-%d') as day, count(*) as n
+        from v_vehicle_ads_latest where first_seen >= now() - interval 14 day group by 1 order by 1""")
+    return {"counts": counts, "sites": sites, "by_day": per_day}
+
+
+def vehicle_ads(con, *, site=None, q=None, new=False, days=30, limit=100, offset=0) -> dict:
+    where, params = [f"first_seen >= now() - interval {int(days)} day"], []
+    if site:
+        where.append("site = ?"); params.append(site)
+    if new:
+        where.append("is_new")
+    if q:
+        where.append("(title ilike ? or coalesce(location, '') ilike ?)"); params += [f"%{q}%"] * 2
+    cond = " and ".join(where)
+    total = con.execute(f"select count(*) from ({VEHICLE_BASE}) where {cond}", params).fetchone()[0]
+    items = rows(con, f"""select site, title, url, price, price_lkr, previous_price_lkr, location, year, mileage, posted,
+            image, times_seen, is_new, {_ts('first_seen')} as first_seen, {_ts('saved_at')} as last_seen,
+            {_ts('changed_at')} as changed_at
+        from ({VEHICLE_BASE}) b where {cond} order by b.first_seen desc, b.rank nulls last
+        limit {int(limit)} offset {int(offset)}""", params)
+    return {"total": total, "items": items}
+
+
+def vehicle_price_changes(con, days: int = 30, limit: int = 30) -> list[dict]:
+    return rows(con, f"""select site, title, url, previous_price_lkr, price_lkr, {_ts('saved_at')} as changed_at
+        from v_vehicle_price_changes where saved_at >= now() - interval {int(days)} day
+        order by saved_at desc limit {int(limit)}""")

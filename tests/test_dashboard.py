@@ -140,3 +140,25 @@ def test_automation_history(dash, monkeypatch, tmp_path):
     data, = call(server, "/api/automation")
     assert [(r["when"], r["ok"], r["skipped"]) for r in data["runs"]] == [
         ("2026-11-02 10:00:30", False, True), ("2026-11-02 10:00:01", False, False), ("2026-11-02 09:00:01", True, False)]
+
+
+def test_vehicles_endpoints(dash, tmp_path, monkeypatch):
+    server, _ = dash
+    monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
+    monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
+    from sample_data import build_vehicles
+    build_vehicles(runs=3)
+    import importlib, warehouse, dashboard.server as srv
+    importlib.reload(warehouse); importlib.reload(srv); srv._cache.clear()
+    summary, ads, new, riya, search, changes = call(
+        srv, "/api/vehicles/summary", "/api/vehicles/ads", "/api/vehicles/ads?new=1",
+        "/api/vehicles/ads?site=riyasewana", "/api/vehicles/ads?q=vezel", "/api/vehicles/changes")
+    c = summary["data"]["counts"]
+    assert (c["ads"], c["new_last_run"], c["price_drops"]) == (7, 2, 1)       # 4 ikman + 3 riyasewana; 1 new each in last run
+    titles = [a["title"] for a in ads["data"]["items"]]
+    assert set(titles[:2]) == {"Nissan Leaf 2014", "Mitsubishi Montero 2010"}   # newest first (sub-second order too)
+    assert {a["title"] for a in new["data"]["items"]} == {"Nissan Leaf 2014", "Mitsubishi Montero 2010"}
+    assert riya["data"]["total"] == 3 and all(a["site"] == "riyasewana" for a in riya["data"]["items"])
+    vezel = search["data"]["items"][0]
+    assert (vezel["price_lkr"], vezel["previous_price_lkr"], vezel["times_seen"]) == (9_100_000, 9_350_000, 3)
+    assert changes["data"][0]["title"] == "Honda Vezel 2016"

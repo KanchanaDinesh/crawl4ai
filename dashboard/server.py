@@ -136,6 +136,24 @@ async def markets_history(request):
     return web.json_response(_query("markets", lambda c: queries.markets_history(c, cls, sym, days), f"mh:{cls}:{sym}:{days}"))
 
 
+async def vehicles_summary(request):
+    days = _int(request, "days", 7)
+    return web.json_response(_query("scrapers", lambda c: queries.vehicles_summary(c, days), f"veh_summary:{days}"))
+
+
+async def vehicle_ads(request):
+    q = request.query
+    args = dict(site=q.get("site") or None, q=(q.get("q") or "").strip() or None, new=q.get("new") == "1",
+                days=_int(request, "days", 30), limit=_int(request, "limit", 100, hi=1000),
+                offset=_int(request, "offset", 0, lo=0))
+    return web.json_response(_query("scrapers", lambda c: queries.vehicle_ads(c, **args), f"veh_ads:{sorted(args.items())}"))
+
+
+async def vehicle_changes(request):
+    days = _int(request, "days", 30)
+    return web.json_response(_query("scrapers", lambda c: queries.vehicle_price_changes(c, days), f"veh_changes:{days}"))
+
+
 async def automation(request):
     """Last lines of logs/history.log written by run_all.sh (manual and scheduled runs)."""
     path = project_paths.REPO_ROOT / "logs" / "history.log"
@@ -165,6 +183,9 @@ def build_app() -> web.Application:
         web.get("/api/tech/changes", tech_changes),
         web.get("/api/tech/runs", tech_runs),
         web.get("/api/automation", automation),
+        web.get("/api/vehicles/summary", vehicles_summary),
+        web.get("/api/vehicles/ads", vehicle_ads),
+        web.get("/api/vehicles/changes", vehicle_changes),
         web.get("/api/markets/summary", markets_summary),
         web.get("/api/markets/quotes", markets_quotes),
         web.get("/api/markets/history", markets_history),

@@ -1,5 +1,8 @@
 {
   "sources": {
+    "stream": {
+      "enabled": true
+    },
     "seeds": {
       "enabled": true,
       "file": "seeds.txt"
@@ -132,6 +135,16 @@
     "ats_hosts": ["greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "bamboohr.com",
                   "recruitee.com", "smartrecruiters.com", "breezy.hr", "teamtailor.com", "wellfound.com"],
     "top_keywords": 20
+  },
+
+  "quick": {
+    "sources": ["stream", "hackernews", "seeds"],
+    "qualify_max_minutes": 8,
+    "enrich_max_minutes": 3
+  },
+
+  "watch": {
+    "batch_minutes": 5
   },
 
   "monitor": {

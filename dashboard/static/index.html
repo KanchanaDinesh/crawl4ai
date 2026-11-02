@@ -15,6 +15,7 @@
       <button class="tab" data-view="news">World News</button>
       <button class="tab" data-view="tech">Tech Intel</button>
       <button class="tab" data-view="markets">Markets</button>
+      <button class="tab" data-view="vehicles">Vehicles</button>
     </nav>
     <div class="hright">
       <span id="lastrun"></span>
@@ -116,6 +117,33 @@
         <div class="panel"><h3>Market news <small><a href="#news" id="mk-more-mkt">more</a></small></h3><div id="mk-news"></div></div>
         <div class="panel"><h3>Crypto news</h3><div id="mk-crypto-news"></div></div>
         <div class="panel"><h3>Data sources <small>last run</small></h3><div id="mk-sources" class="scroll"></div></div>
+      </aside>
+    </div>
+  </section>
+  <!-- ─────────────── VEHICLES ─────────────── -->
+  <section id="view-vehicles" hidden>
+    <div class="kpis" id="vh-kpis"></div>
+    <div class="filters">
+      <select id="vh-days" title="First seen">
+        <option value="1">New in the last 24 hours</option><option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option><option value="3650">All time</option>
+      </select>
+      <span id="vh-sites"></span>
+      <label class="tog"><input type="checkbox" id="vh-new"> New in last run</label>
+      <input type="search" id="vh-q" placeholder="Search make, model, location…">
+    </div>
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h3>Ads <small id="vh-count"></small></h3>
+          <div id="vh-list"></div>
+          <button class="btn more" id="vh-more" hidden>Load more</button>
+        </div>
+      </div>
+      <aside>
+        <div class="panel"><h3>New ads per day <small>14 days</small></h3><div id="vh-days-chart"></div></div>
+        <div class="panel"><h3>Sites</h3><div id="vh-site-table" class="scroll"></div></div>
+        <div class="panel"><h3>Price changes</h3><div id="vh-changes"></div></div>
       </aside>
     </div>
   </section>
