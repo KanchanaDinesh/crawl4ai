@@ -532,7 +532,12 @@ async function refresh() {
     await ({ news: loadNews, tech: loadTech, markets: loadMarkets, vehicles: loadVehicles })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;
   } catch (err) {
-    setBanner([{ error: `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
+    const outdated = / HTTP 404$/.test(err.message);   // page is newer than the running server
+    setBanner([{ error: outdated
+      ? `Could not load data: ${err.message}. The dashboard server is running older code than this page `
+        + "(the project was updated after it started). Restart it: press Ctrl+C in its Terminal window, "
+        + "then run: uv run python -m dashboard --open"
+      : `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
   }
 }
 function show(v) {
