@@ -176,6 +176,16 @@ def test_end_to_end(news_env):
     first = {s["name"]: s for s in snap3["sources"]}["Feed Site"]["items"][0]
     assert first["title"] == "Breaking: brand new story" and first["is_new"] and snap3["totals"]["new"] == 1
 
+    # the database has the history: unique headlines, how often each was seen, per-source health
+    con = store.con
+    assert con.execute("select count(*) from news_items").fetchone()[0] == 24
+    assert con.execute("select times_seen from news_items where title = 'Feed story number 0 about markets'").fetchone()[0] == 3
+    assert con.execute("select count(*) from news_runs").fetchone()[0] == 3
+    assert con.execute("select count(*) from news_source_runs where status = 'failed'").fetchone()[0] == 6
+    assert con.execute("select list_contains(topics, 'tech') from news_items where source = 'Disc Site'").fetchone()[0]
+    assert con.execute("select feed_url from feed_cache").fetchone()[0].endswith("/feed")
+    store.close()
+
     paths = write_report(snap3, settings)
     page = open(paths["html"], encoding="utf-8").read()
     assert page.index("id='US'") < page.index("id='LK'") < page.index("id='TECH'")      # priority order
@@ -185,3 +195,16 @@ def test_end_to_end(news_env):
     assert open(paths["csv"], encoding="utf-8").read().count("\n") == 1 + 23
     for s in (feedsite, discsite, homesite, selsite, broken, blocked):
         s.server.shutdown()
+
+
+def test_old_jsonl_history_is_imported(news_env):
+    settings = load_settings(news_env)
+    settings.data_dir.mkdir(parents=True)
+    (settings.data_dir / "items.jsonl").write_text(json.dumps(
+        {"url": "https://x.com/a", "title": "Old headline", "source": "X", "group": "US", "topics": ["tech"],
+         "collected_at": "2026-10-01T00:00:00Z", "published_at": "2026-09-30T23:00:00Z"}) + "\n")
+    (settings.data_dir / "feed_cache.json").write_text('{"X": "https://x.com/feed"}')
+    store = NewsStore(settings.data_dir)
+    assert store.known_urls() == {"https://x.com/a"} and store.feed_cache() == {"X": "https://x.com/feed"}
+    assert (settings.data_dir / "items.jsonl.imported").exists() and not (settings.data_dir / "items.jsonl").exists()
+    store.close()

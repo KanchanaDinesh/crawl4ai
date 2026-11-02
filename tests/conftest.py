@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from techintel.settings import CONFIG_DIR, load_settings  # noqa: E402
-from techintel.store import FileStore  # noqa: E402
+from techintel.store import DuckStore  # noqa: E402
 
 
 @pytest.fixture
@@ -30,4 +30,6 @@ def settings(tmp_path, monkeypatch):
 
 @pytest.fixture
 def store(settings):
-    return FileStore(settings.data_dir)
+    s = DuckStore(settings.data_dir)      # tests run on the real database backend
+    yield s
+    s.close()

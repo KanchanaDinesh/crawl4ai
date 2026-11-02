@@ -15,3 +15,6 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# Local tools and caches (see env.sh)
+.local/

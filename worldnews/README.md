@@ -83,11 +83,18 @@ The same data is saved as `.md`, `.csv` (for Excel or Numbers) and `.json` next 
 
 ## Data
 
-```
-data/worldnews/items.jsonl        every headline ever collected (once), for history and analytics later
-data/worldnews/runs/<time>.json   full snapshot of each run
-data/worldnews/feed_cache.json    feeds found by auto-discovery
-```
+Stored in the DuckDB database `data/worldnews/worldnews.duckdb` (see the main README):
+
+| Table | Contents |
+|---|---|
+| `news_items` | Every headline ever collected, once per URL: title, summary, published time, source, country group, topics, first/last seen, times seen |
+| `news_runs` | One row per run: limit, sources OK, headlines, new |
+| `news_source_runs` | One row per source per run: status, method used, error. Use it to spot sources that keep failing |
+| `news_run_items` | Which headlines each run collected, and their position |
+| `feed_cache` | Feeds found by auto-discovery |
+
+Each run is also saved as a JSON file in `data/worldnews/runs/`. Query the database with
+`uv run python -m warehouse sql "..."`, prefixing tables with `news.`.
 
 Only headlines, summaries, dates and links are stored, not full article text.
 

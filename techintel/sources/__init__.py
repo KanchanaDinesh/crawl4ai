@@ -10,13 +10,13 @@ from dataclasses import dataclass, field
 
 from ..domains import DomainFilter
 from ..settings import Settings
-from ..store import FileStore
+from ..store import DuckStore, FileStore
 
 
 @dataclass
 class SourceContext:
     settings: Settings
-    store: FileStore
+    store: DuckStore | FileStore
     domain_filter: DomainFilter
     options: dict = field(default_factory=dict)   # CLI options, e.g. {"minutes": 5}
 

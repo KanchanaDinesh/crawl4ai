@@ -98,20 +98,27 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 ## Data layout
 
 ```
-data/techintel/                 pipeline state (git-ignored)
-  candidates.jsonl  qualifications.jsonl  registrations.jsonl  profiles.jsonl  changes.jsonl  runs.jsonl
-  raw/pages/<domain>/<hash>.md  page text as crawled, for re-processing
-output/techintel/               analysis JSON and reports (git-ignored)
+data/techintel/techintel.duckdb   all pipeline tables (DuckDB; git-ignored)
+data/techintel/raw/pages/<domain>/<hash>.md   page text as crawled, for re-processing
+output/techintel/                 analysis JSON and reports (git-ignored)
 ```
 
-Each `.jsonl` file is append-only: a domain's current state is its **latest** row, and older rows
-are its history. Override the folders with `TECHINTEL_DATA_DIR` and `TECHINTEL_OUTPUT_DIR`.
+Tables: `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`. Each row keeps
+the full record as JSON; a domain's current state is its **latest** row, and older rows are its history.
+Typed views make SQL easy: `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles` and
+`v_changes`. For example:
+
+```bash
+uv run python -m warehouse sql "select category, count(*) from tech.v_qualifications where status='qualified' group by 1"
+```
+
+Older `.jsonl` files in `data/techintel/` are imported automatically and renamed to `*.jsonl.imported`.
+Override the folders with `TECHINTEL_DATA_DIR` and `TECHINTEL_OUTPUT_DIR`.
 
 ## Designed for the next steps
 
-- **Database:** all reads and writes go through `techintel/store.py` (`append`, `read`, `latest`,
-  `write_raw_page`). A DuckDB version with the same methods replaces it without touching the stages.
-  The JSONL files can be loaded straight into DuckDB with `read_json_auto('data/techintel/*.jsonl')`.
+- **Database:** all reads and writes go through `techintel/store.py`. `DuckStore` (DuckDB) is used by
+  default; `FileStore` (JSON Lines) has the same methods.
 - **AI:** `techintel/classify.py` has a `RuleClassifier` with an `assess()` method. An LLM classifier
   with the same method can replace it, and LLM-written profile summaries can be added to `profile.py`.
 - **Scheduling:** e.g. `cron` on the Mac: `0 */6 * * * cd /path/to/repo && uv run python -m techintel run`.

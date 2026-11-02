@@ -27,7 +27,7 @@ os.environ.setdefault("CRAWL4AI_NO_CLOUD_NOTICE", "1")   # hide crawl4ai's promo
 from .models import utc_now
 from .settings import load_settings
 from .stages import STAGE_ORDER
-from .store import FileStore
+from .store import open_store
 
 logger = logging.getLogger("techintel")
 
@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def main_async(args) -> None:
     settings = load_settings(args.config)
-    store = FileStore(settings.data_dir)
+    store = open_store(settings.data_dir)
     options = {k: v for k, v in vars(args).items() if k not in ("config", "verbose", "command")}
 
     if args.command == "status":

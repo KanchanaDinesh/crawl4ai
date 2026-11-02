@@ -50,10 +50,19 @@ def load_json(filename: str, default: Any = None) -> Any:
         return default
 
 
+def _record(filename: str, data: Any) -> None:
+    """Also keep the result in data/scrapers/scrapers.duckdb (history across runs)."""
+    if os.environ.get("SCRAPERS_NO_DB"):
+        return
+    from warehouse.scrapers_db import record_output
+    record_output(Path(filename).stem, data)
+
+
 def save_json(data: Any, filename: str) -> Path:
     path = output_path(filename)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    _record(filename, data)
     return path
 
 
@@ -69,4 +78,5 @@ def save_csv(rows: Iterable[dict], filename: str) -> Path:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+    _record(filename, rows)
     return path

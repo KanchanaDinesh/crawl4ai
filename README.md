@@ -10,18 +10,60 @@ Three parts, all built on crawl4ai:
   Canada, China, plus world and technology news, in one daily report.
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
 
-The scrapers use
+All three use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
 installed library, pinned in `pyproject.toml`.
 
-## Setup
+## Setup (everything stays inside this folder)
 
-Requires [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+Everything lives inside the project folder, so it can sit on an external drive such as `MAC-DISK2`:
+
+| Folder | What's in it |
+|---|---|
+| `.venv/` | Python packages (crawl4ai, DuckDB, ...) |
+| `.local/` | uv's download cache, the Chromium browser, crawl4ai's cache, and Python if uv downloads one |
+| `data/` | **Your databases** (DuckDB) and collected data |
+| `output/` | Reports and exported files |
+
+One-time setup (needs [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`):
 
 ```bash
-uv sync                      # creates .venv and installs crawl4ai + dependencies
-uv run crawl4ai-setup        # one-time: installs the Playwright browser
+bash setup_local.sh
 ```
+
+Then, in each new Terminal window:
+
+```bash
+source env.sh
+```
+
+`env.sh` points uv, the browser and crawl4ai at `.local/`. The Python tools also apply the crawl4ai and
+browser settings on their own, so runs still use the project folder if you forget it. Only uv's own
+small program (`~/.local/bin/uv`) stays on the main drive.
+
+## Database (DuckDB)
+
+Each tool stores its data in its own DuckDB file inside `data/`, so they can run at the same time:
+
+| Database | Contents |
+|---|---|
+| `data/worldnews/worldnews.duckdb` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
+| `data/techintel/techintel.duckdb` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` |
+| `data/scrapers/scrapers.duckdb` | `scraper_rows` (every scraper output, every run), plus views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes`, `v_news_headlines`, `v_products` |
+
+Query all three together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.` or `scrapers.`:
+
+```bash
+uv run python -m warehouse info                    # sizes, tables, row counts
+uv run python -m warehouse examples                # ready-made queries
+uv run python -m warehouse sql "select published_at, source, title from news.news_items order by published_at desc limit 20"
+uv run python -m warehouse sql "select * from scrapers.v_vehicle_price_changes" --csv price_changes.csv
+uv run python -m warehouse sql                     # interactive prompt
+```
+
+Scraper output files (`output/*.json`, `.csv`) are still written as before; each save is also added to the
+database, so results build up into a history (for example vehicle price changes). Data saved by older
+versions as `.jsonl` files is imported automatically the first time.
 
 ## Running
 
@@ -42,7 +84,7 @@ Run everything from the repository root as modules:
 | `python -m scrapers.inspect_site <url\|site name\|file.html>` | Find or test CSS selectors for a new site | `html_dumps/` with `--save-html` |
 
 Prefix each command with `uv run` (e.g. `uv run python -m scrapers.news`), or activate the
-virtualenv first with `source .venv/bin/activate`.
+virtualenv first with `source .venv/bin/activate`. Run `source env.sh` first in each new Terminal window.
 
 `output/` is git-ignored. Set `SCRAPERS_OUTPUT_DIR` to write somewhere else.
 
@@ -50,6 +92,10 @@ virtualenv first with `source .venv/bin/activate`.
 
 ```
 pyproject.toml           dependencies (crawl4ai version pinned here)
+env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
+project_paths.py         where data/, .local/ and the databases live
+warehouse/               DuckDB helpers and the `python -m warehouse` query tool
+data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)
 scrapers/
 ├── common.py            shared paths, logging, JSON/CSV saving
@@ -144,6 +190,7 @@ by ad number, newest first, so older pinned ads are skipped. `price_lkr` is `nul
 Change the version in `pyproject.toml` (for example `"crawl4ai==0.9.6"`), then:
 
 ```bash
+source env.sh
 uv sync
 uv run crawl4ai-setup        # in case the new version needs a newer browser
 ```

@@ -175,7 +175,7 @@ async def collect_source(ctx: Context, source: dict, limit: int) -> dict:
 
 async def run_collection(settings, store: NewsStore, sources: list[dict], limit: int,
                          article_meta: bool = True, use_browser: bool = True) -> dict:
-    run_at = utc_now()
+    run_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")   # unique per run
     known = store.known_urls()
     cache = store.feed_cache()
     async with AsyncExitStack() as stack:

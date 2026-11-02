@@ -64,9 +64,12 @@ async def cmd_run(settings, args, check: bool = False) -> None:
         sys.exit("No sources matched.")
     store = NewsStore(settings.data_dir if not check else settings.data_dir / "_check")
     limit = 3 if check else (args.limit or int(settings.raw.get("limit_per_source", 10)))
-    snapshot = await run_collection(settings, store, sources, limit,
-                                    article_meta=not (check or args.no_article_meta),
-                                    use_browser=not getattr(args, "no_browser", False))
+    try:
+        snapshot = await run_collection(settings, store, sources, limit,
+                                        article_meta=not (check or args.no_article_meta),
+                                        use_browser=not getattr(args, "no_browser", False))
+    finally:
+        store.close()
     t = snapshot["totals"]
     if check:
         print(f"\n{'SOURCE':<28} {'GROUP':<7} {'STATUS':<7} {'VIA':<20} N  FIRST HEADLINE / ERROR")
@@ -82,7 +85,9 @@ async def cmd_run(settings, args, check: bool = False) -> None:
 
 
 def cmd_report(settings, _args) -> None:
-    snapshot = NewsStore(settings.data_dir).latest_snapshot()
+    store = NewsStore(settings.data_dir)
+    snapshot = store.latest_snapshot()
+    store.close()
     if not snapshot:
         sys.exit("No runs yet. Run:  python -m worldnews run")
     print(f"Report: {write_report(snapshot, settings)['html']}")
