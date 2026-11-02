@@ -59,9 +59,12 @@ Set all three up with one command, then check them:
 
 **State on the Mac (2026-11-03):** Kanchana gave `/bin/bash` Full Disk Access, and `./schedule.sh doctor` (run from
 their Terminal) said "All good" inside launchd. The listener and run jobs were still blocked, because they named
-the script on the drive directly (see history item 20). **Not confirmed yet:** Kanchana runs
-`./schedule.sh recommended` from Terminal (Claude isn't allowed to install launchd jobs), then checks that
-`tail -n 3 ~/Library/Logs/crawl4ai/watch.log` ends with "listener started".
+the script on the drive directly (see history item 20).
+
+**Decision (2026-11-03): Kanchana doesn't want scheduling for now.** They run everything by hand with
+`./run_all.sh` (default steps: markets news tech vehicles). Don't push scheduling; the launchd fix (item 20) is
+in the code but was never confirmed on the Mac. To turn off the jobs still installed:
+`./schedule.sh off all && ./schedule.sh watch off`.
 
 ## History (what was done, oldest first)
 
@@ -119,11 +122,9 @@ the script on the drive directly (see history item 20). **Not confirmed yet:** K
 
 ## Open issues and things to watch
 
-- **Scheduled runs: confirm they work (2026-11-03).** See history items 19 and 20. Full Disk Access is on. Next:
-  Kanchana runs `./schedule.sh recommended` from Terminal, then
-  `launchctl kickstart gui/$(id -u)/com.crawl4ai.runall.frequent` to run the 15-minute job at once. `./schedule.sh status` should show no
-  "Problem" lines, the listener running, and a `(scheduled)` run. If a scheduled vehicles run still fails,
-  `tail -3 logs/history.log` shows why.
+- **Scheduling is on hold (Kanchana's choice, 2026-11-03); runs are by hand with `./run_all.sh`.** If it's
+  wanted again: `./schedule.sh recommended` from Terminal, then
+  `launchctl kickstart gui/$(id -u)/com.crawl4ai.runall.frequent`, and check `./schedule.sh status` (see items 19, 20).
   - If "icudtl.dat not found" or "GPU process isn't usable" comes back, the browser install is broken again:
     `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
 - **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive
