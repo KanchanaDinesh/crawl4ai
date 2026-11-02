@@ -18,3 +18,6 @@ venv/
 
 # Local tools and caches (see env.sh)
 .local/
+
+# Run logs (run_all.sh)
+logs/

@@ -45,6 +45,44 @@ source env.sh
 browser settings on their own, so runs still use the project folder if you forget it. Only uv's own
 small program (`~/.local/bin/uv`) stays on the main drive.
 
+## Automation: run everything with one command
+
+```bash
+./run_all.sh                    # run everything once: markets -> news -> tech intel
+./run_all.sh markets news       # only some steps (markets, news, tech, vehicles, lknews)
+./run_all.sh --status           # the last runs
+./run_all.sh --list             # the steps and the exact commands they run
+```
+
+Run it by hand whenever you like, or let it run automatically:
+
+```bash
+./schedule.sh every 1h              # every hour (also 30m, 2h, 10h, ...)
+./schedule.sh daily 07:30 19:30     # at fixed times every day
+./schedule.sh status                # is it on, and the last runs
+./schedule.sh run-now               # start a run now in the background
+./schedule.sh off                   # stop the automatic runs
+```
+
+- **Each step runs even if an earlier one failed.** The run's result is "ok" only if every step succeeded;
+  a step counts as failed if it crashed or collected nothing at all (e.g. no internet).
+- **Logs:** each run writes `logs/run-<date>-<time>.log` (`logs/latest.log` points to the newest), plus a
+  one-line summary in `logs/history.log`. The dashboard header shows the last run; hover over it for the
+  recent history. Logs older than 30 days are deleted.
+- **No overlapping runs:** if a run is still going when the next one is due, the new one is skipped.
+- **Settings** are in `automation.conf`: which steps run by default, and options per step (for example tech
+  intel is limited to 50 sites and 20 minutes per stage).
+
+**On the Mac** `schedule.sh` uses launchd (`~/Library/LaunchAgents/com.crawl4ai.runall.plist`):
+
+- Runs happen while you're logged in and the Mac is awake. If the Mac was asleep at run time, the run
+  happens when it wakes. The external drive must be connected; otherwise the run is skipped.
+- If `logs/scheduler.log` shows "Operation not permitted", macOS is blocking background access to the
+  external drive: open **System Settings → Privacy & Security → Full Disk Access**, click **+**, press
+  ⌘⇧G, type `/bin/bash`, and add it. Then run `./schedule.sh run-now` to test.
+
+**On a Linux server** the same commands use your crontab (other cron jobs are left untouched).
+
 ## Dashboard
 
 ```bash
@@ -82,7 +120,8 @@ uv run python -m warehouse info                      # 4. check the databases fi
 uv run python -m dashboard --open                    # 5. look at it all in the browser
 ```
 
-Steps 2 and 3 can run in two Terminal windows at the same time: each tool has its own database. Leave the
+Or run steps 2–3 (and markets) together with `./run_all.sh`. They can also run in separate Terminal windows
+at the same time: each tool has its own database. Leave the
 dashboard running and press **Refresh** (or turn on auto-refresh) to see new data as runs finish.
 
 ## Database (DuckDB)
@@ -138,6 +177,7 @@ virtualenv first with `source .venv/bin/activate`. Run `source env.sh` first in 
 ```
 pyproject.toml           dependencies (crawl4ai version pinned here)
 env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
+run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); settings in automation.conf
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               DuckDB helpers and the `python -m warehouse` query tool
 dashboard/               local web dashboard (python -m dashboard)

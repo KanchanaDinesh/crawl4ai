@@ -53,8 +53,13 @@ async def run_stage(name: str, settings, store, **options) -> dict:
         logger.exception("stage %s failed", name)
         summary, status = {"error": str(e)}, "failed"
     record(status, summary)
+    if status == "failed":
+        FAILED_STAGES.append(name)
     logger.info("%s done in %s: %s", name, _dur(time.monotonic() - t0), json.dumps(summary, ensure_ascii=False))
     return summary
+
+
+FAILED_STAGES: list[str] = []
 
 
 def _dur(seconds: float) -> str:
@@ -165,6 +170,9 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         print("\nStopped. Finished results are saved; run the same command again to continue.")
         sys.exit(130)
+    if FAILED_STAGES:
+        print(f"Failed stage(s): {', '.join(FAILED_STAGES)} (see the errors above)")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

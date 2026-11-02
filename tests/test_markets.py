@@ -197,3 +197,15 @@ def test_yahoo_blocked_falls_back_to_stooq_and_fx_api(monkeypatch):
     assert [s for s in snap["sources"] if not s["ok"]] == []     # everything covered by some source
     for s in (yahoo_site, stooq_site, er_site):
         s.server.shutdown()
+
+
+def test_saving_a_run_with_no_prices(tmp_path):
+    """No internet: nothing collected, but the run and its failed sources are still recorded."""
+    from markets.store import MarketStore
+    store = MarketStore(tmp_path)
+    store.save_run("2026-11-02T10:00:00.000001Z", "2026-11-02T10:00:05Z", [],
+                   [{"source": "cse indices", "group": "lk", "ok": False, "count": 0, "error": "offline", "seconds": 1.0}])
+    store.save_run("2026-11-02T11:00:00.000001Z", "2026-11-02T11:00:05Z", [], [])
+    assert store.con.execute("select count(*) from runs").fetchone()[0] == 2
+    assert store.con.execute("select error from source_runs").fetchone()[0] == "offline"
+    store.close()

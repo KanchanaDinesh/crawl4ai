@@ -81,6 +81,9 @@ async def cmd_run(settings, args, check: bool = False) -> None:
         return
     paths = write_report(snapshot, settings)
     print(f"\n{t['headlines']} headlines ({t['new']} new) from {t['ok']}/{t['sources']} sources.")
+    if t["ok"] == 0:
+        print("No source returned headlines: check your internet connection.")
+        sys.exit(1)
     print(f"Report: {paths['html']}\n        (also {settings.output_dir / 'latest.html'})")
 
 

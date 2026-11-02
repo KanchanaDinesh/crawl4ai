@@ -452,7 +452,19 @@ for (const id of ["mk-cards", "mk-gainers", "mk-losers"]) {
 
 // ───────────────────────────── shell ─────────────────────────────
 let view = "news";
+async function loadAutomation() {
+  try {
+    const runs = (await api("/api/automation")).runs || [];
+    const last = runs.find((r) => !r.skipped);
+    $("lastrun").innerHTML = last
+      ? `Last collection run: ${esc(last.when.slice(5, 16))} ${pill(last.ok ? "ok" : "failed")}`
+      : "";
+    $("lastrun").title = runs.map((r) => `${r.when}  ${r.text}`).join("\n");
+  } catch { /* the dashboard still works without it */ }
+}
+
 async function refresh() {
+  loadAutomation();
   try {
     await ({ news: loadNews, tech: loadTech, markets: loadMarkets })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;

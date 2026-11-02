@@ -71,6 +71,9 @@ async def cmd_run(args, save: bool) -> None:
         print("No price from any source for:")
         for s in failed:
             print(f"  {s['source']:<24} {s['error'][:150]}")
+    if not snap["quotes"]:
+        print("\nNo prices at all: check your internet connection (or the errors above).")
+        sys.exit(1)
     key = {"^GSPC", "^IXIC", "^DJI", "ASPI", "S&P SL20", "GC=F", "SI=F", "LKR=X", "BTC", "ETH", "GOLD24K_LKR_PAWN"}
     rows = [q for q in snap["quotes"] if q["symbol"] in key and (q["asset_class"] != "crypto" or q["rank"] in (1, 2))]
     if rows:

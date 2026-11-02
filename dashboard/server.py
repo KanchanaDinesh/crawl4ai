@@ -136,6 +136,17 @@ async def markets_history(request):
     return web.json_response(_query("markets", lambda c: queries.markets_history(c, cls, sym, days), f"mh:{cls}:{sym}:{days}"))
 
 
+async def automation(request):
+    """Last lines of logs/history.log written by run_all.sh (manual and scheduled runs)."""
+    path = project_paths.REPO_ROOT / "logs" / "history.log"
+    lines = path.read_text(encoding="utf-8").splitlines()[-10:] if path.exists() else []
+    runs = []
+    for line in reversed(lines):
+        when, _, rest = line[:19], line[19:21], line[21:]
+        runs.append({"when": when, "ok": rest.startswith("ok"), "skipped": rest.startswith("skipped"), "text": rest.strip()})
+    return web.json_response({"runs": runs})
+
+
 async def index(request):
     return web.FileResponse(STATIC / "index.html")
 
@@ -153,6 +164,7 @@ def build_app() -> web.Application:
         web.get("/api/tech/domain/{domain}", tech_domain),
         web.get("/api/tech/changes", tech_changes),
         web.get("/api/tech/runs", tech_runs),
+        web.get("/api/automation", automation),
         web.get("/api/markets/summary", markets_summary),
         web.get("/api/markets/quotes", markets_quotes),
         web.get("/api/markets/history", markets_history),

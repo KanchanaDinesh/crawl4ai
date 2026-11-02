@@ -37,12 +37,14 @@ class MarketStore:
         self.con.execute(SCHEMA)
 
     def save_run(self, run_at: str, finished_at: str, quotes: list[dict], sources: list[dict]) -> None:
-        self.con.executemany(
-            f"insert into quotes (run_at, {', '.join(COLUMNS)}, extra) values ({', '.join(['?'] * (len(COLUMNS) + 2))})",
-            [(run_at, *[q.get(c) for c in COLUMNS], json.dumps(q.get("extra") or {}, default=str)) for q in quotes])
-        self.con.executemany("insert into source_runs values (?, ?, ?, ?, ?, ?, ?)",
-                             [(run_at, s["source"], s["group"], s["ok"], s["count"], s.get("error"), s["seconds"])
-                              for s in sources])
+        if quotes:     # (DuckDB rejects an empty batch; a run with no prices still records its sources)
+            self.con.executemany(
+                f"insert into quotes (run_at, {', '.join(COLUMNS)}, extra) values ({', '.join(['?'] * (len(COLUMNS) + 2))})",
+                [(run_at, *[q.get(c) for c in COLUMNS], json.dumps(q.get("extra") or {}, default=str)) for q in quotes])
+        if sources:
+            self.con.executemany("insert into source_runs values (?, ?, ?, ?, ?, ?, ?)",
+                                 [(run_at, s["source"], s["group"], s["ok"], s["count"], s.get("error"), s["seconds"])
+                                  for s in sources])
         errors = {s["source"]: s["error"] for s in sources if s.get("error")}
         self.con.execute("insert or replace into runs values (?, ?, ?, ?)", [run_at, finished_at, len(quotes), json.dumps(errors)])
 

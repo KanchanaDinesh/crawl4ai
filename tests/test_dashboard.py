@@ -126,3 +126,17 @@ def test_news_topic_and_multi_group_filters(dash):
     tech, both = call(server, "/api/news/items?topic=tech", "/api/news/items?group=US,LK")
     assert tech["data"]["total"] == 11
     assert both["data"]["total"] == 13 and {i["group_code"] for i in both["data"]["items"]} == {"US", "LK"}
+
+
+def test_automation_history(dash, monkeypatch, tmp_path):
+    server, _ = dash
+    import project_paths
+    monkeypatch.setattr(project_paths, "REPO_ROOT", tmp_path)
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "history.log").write_text(
+        "2026-11-02 09:00:01  ok  total 4m02s | markets ok 20s | news ok 1m10s | tech ok 2m32s  log: logs/run-1.log\n"
+        "2026-11-02 10:00:01  1 step(s) failed  total 3m | markets FAILED(exit 1) 5s  log: logs/run-2.log\n"
+        "2026-11-02 10:00:30  skipped: another run is still going (pid 42)\n")
+    data, = call(server, "/api/automation")
+    assert [(r["when"], r["ok"], r["skipped"]) for r in data["runs"]] == [
+        ("2026-11-02 10:00:30", False, True), ("2026-11-02 10:00:01", False, False), ("2026-11-02 09:00:01", True, False)]
