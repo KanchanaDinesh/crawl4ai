@@ -107,7 +107,7 @@ def test_end_to_end_with_fake_apis(tmp_path, monkeypatch):
     assert by[("crypto", "BTC")]["source"] == "coinpaprika" and by[("crypto", "BTC")]["rank"] == 1
     assert ("commodity_lkr", "GOLD24K_LKR_PAWN") in by
     failed = {s["source"]: s["error"] for s in snap["sources"] if not s["ok"]}
-    assert list(failed) == ["yahoo MISSING"]                                          # one bad symbol, rest fine
+    assert list(failed) == ["MISSING"]                                                # one bad symbol, rest fine
 
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     from markets.store import MarketStore
@@ -120,4 +120,80 @@ def test_end_to_end_with_fake_apis(tmp_path, monkeypatch):
     assert con.execute("select count(*) from source_runs where not ok").fetchone()[0] == 2
     store.close()
     for s in (yahoo_site, cse_site, paprika_site):
+        s.server.shutdown()
+
+
+def stooq_csv(closes):
+    rows = "\n".join(f"2026-10-{27 + i},{c},{c},{c},{c},1000" for i, c in enumerate(closes))
+    return f"Date,Open,High,Low,Close,Volume\n{rows}\n"
+
+
+def test_stooq_and_fx_api_parsers():
+    from markets.providers import fxapi, stooq
+    q = stooq.parse_history_csv(stooq_csv([5700.0, 5728.8]), "index", "^GSPC", "S&P 500", "USD")
+    assert (q["price"], q["prev_close"], q["source"], q["as_of"]) == (5728.8, 5700.0, "stooq", "2026-10-28T00:00:00Z")
+    with pytest.raises(ValueError):
+        stooq.parse_history_csv("No data", "index", "^GSPC", "S&P 500")
+    assert stooq.default_symbol("BRK-B") == "brk-b.us"
+    data = {"result": "success", "time_last_update_unix": 1762041600, "rates": {"LKR": 300.0, "EUR": 0.8, "INR": 88.0}}
+    got = {q["symbol"]: q for q in fxapi.parse_rates(data, [{"symbol": "LKR=X", "lkr_rate": True}, {"symbol": "EURUSD=X"},
+                                                            {"symbol": "DX-Y.NYB"}])}
+    assert got["LKR=X"]["price"] == 300.0 and got["EURUSD=X"]["price"] == pytest.approx(1.25)
+    assert "DX-Y.NYB" not in got and got["LKR=X"]["change_pct"] is None
+    with pytest.raises(ValueError):
+        fxapi.parse_rates({"result": "error", "error-type": "unsupported-code"}, [])
+
+
+def test_fill_change_from_previous_day_only():
+    from markets.collect import fill_change_from_previous
+    from markets.providers import quote
+    today = quote("fx", "LKR=X", "USD/LKR", 303.0, as_of="2026-11-02T00:00:00Z")
+    same_day = quote("fx", "INR=X", "USD/INR", 88.0, as_of="2026-11-02T00:00:00Z")
+    fill_change_from_previous([today, same_day], {("fx", "LKR=X"): {"price": 300.0, "as_of": "2026-11-01T00:00:00Z"},
+                                                  ("fx", "INR=X"): {"price": 87.0, "as_of": "2026-11-02T00:00:00Z"}})
+    assert today["change_pct"] == pytest.approx(1.0) and today["extra"]["change_vs"] == "previous saved rate"
+    assert same_day["change_pct"] is None                       # same day: no fake "change"
+
+
+def test_yahoo_blocked_falls_back_to_stooq_and_fx_api(monkeypatch):
+    from markets.providers import fxapi, stooq
+    hits = {"yahoo": 0}
+
+    yahoo_site = Site({})
+    # the fake Yahoo answers 429 to everything, like the real one does when it rate-limits
+    import test_pipeline_e2e as t
+    orig = t.Handler.do_GET
+
+    def do_get(self):
+        if self.site is yahoo_site:
+            hits["yahoo"] += 1
+            self.send_response(429); self.end_headers(); return
+        return orig(self)
+    monkeypatch.setattr(t.Handler, "do_GET", do_get)
+
+    prices = {"^spx": [5700.0, 5728.8], "aapl.us": [230.0, 225.0], "msft.us": [400.0, 410.0],
+              "xauusd": [2400.0, 2500.0], "xagusd": [30.0, 31.0]}       # no usdlkr / eurusd on this fake Stooq
+    stooq_site = Site({"/q/d/l/": lambda full: next((stooq_csv(v) for k, v in prices.items() if f"s={k.replace('^', '%5E')}&" in full
+                                                     or f"s={k}&" in full), "No data")})
+    er_site = Site({"/v6/latest/USD": json.dumps({"result": "success", "time_last_update_unix": 1762041600,
+                                                  "rates": {"LKR": 300.0, "EUR": 0.8}})})
+    monkeypatch.setattr(yahoo, "HOSTS", (f"http://{yahoo_site.domain}",))
+    monkeypatch.setattr(stooq, "API", f"http://{stooq_site.domain}/q/d/l/")
+    monkeypatch.setattr(fxapi, "API", f"http://{er_site.domain}/v6/latest/USD")
+    settings = {"us_indices": [{"symbol": "^GSPC", "name": "S&P 500", "stooq": "^spx"}], "us_stocks": ["AAPL", "MSFT"],
+                "commodities": [{"symbol": "GC=F", "name": "Gold", "metal": "gold", "stooq": "xauusd"},
+                                {"symbol": "SI=F", "name": "Silver", "metal": "silver", "stooq": "xagusd"}],
+                "fx": [{"symbol": "LKR=X", "name": "USD/LKR", "lkr_rate": True, "stooq": "usdlkr"},
+                       {"symbol": "EURUSD=X", "name": "EUR/USD", "stooq": "eurusd"}],
+                "cse": {"enabled": False}, "fetch": {"timeout_seconds": 5, "concurrency": 1}}
+    snap = asyncio.run(run_collection(settings, only=["us", "metals", "fx"]))
+    by = {q["symbol"]: q for q in snap["quotes"]}
+    assert hits["yahoo"] == 1                                    # asked once, then left alone for the run
+    assert "429" in snap["yahoo_backoff"]
+    assert {by[s]["source"] for s in ("^GSPC", "AAPL", "MSFT", "GC=F", "SI=F")} == {"stooq"}
+    assert by["AAPL"]["change"] == pytest.approx(-5.0) and by["GC=F"]["price"] == 2500.0
+    assert by["LKR=X"]["source"] == "open.er-api.com" and by["EURUSD=X"]["price"] == pytest.approx(1.25)
+    assert "GOLD24K_LKR_PAWN" in by                              # LKR gold works with the fallback FX rate
+    assert [s for s in snap["sources"] if not s["ok"]] == []     # everything covered by some source
+    for s in (yahoo_site, stooq_site, er_site):
         s.server.shutdown()

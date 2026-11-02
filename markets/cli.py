@@ -47,7 +47,12 @@ async def cmd_run(args, save: bool) -> None:
     only = [g.strip() for g in args.only.split(",")] if args.only else None
     if only and set(only) - set(GROUPS):
         sys.exit(f"--only takes: {', '.join(GROUPS)}")
-    snap = await run_collection(settings, only)
+    previous = {}
+    if (data_dir() / "markets.duckdb").exists():
+        store = MarketStore(data_dir())
+        previous = store.latest_prices()
+        store.close()
+    snap = await run_collection(settings, only, previous)
     ok = sum(s["ok"] for s in snap["sources"])
     failed = [s for s in snap["sources"] if not s["ok"]]
     if save:
@@ -56,8 +61,14 @@ async def cmd_run(args, save: bool) -> None:
         store.close()
     print(f"\n{len(snap['quotes'])} prices from {ok}/{len(snap['sources'])} sources"
           + ("  (saved)" if save else "  (check only, nothing saved)"))
+    via = {}
+    for q in snap["quotes"]:
+        via[q["source"]] = via.get(q["source"], 0) + 1
+    print("Prices by source: " + ", ".join(f"{k} {v}" for k, v in sorted(via.items(), key=lambda x: -x[1])))
+    if snap.get("yahoo_backoff"):
+        print(f"Note: {snap['yahoo_backoff']}, so Yahoo was skipped this run and backup sources were used.")
     if failed:
-        print("Failed sources:")
+        print("No price from any source for:")
         for s in failed:
             print(f"  {s['source']:<24} {s['error'][:150]}")
     key = {"^GSPC", "^IXIC", "^DJI", "ASPI", "S&P SL20", "GC=F", "SI=F", "LKR=X", "BTC", "ETH", "GOLD24K_LKR_PAWN"}

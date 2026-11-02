@@ -48,6 +48,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         body = self.site.pages.get(self.path.split("?")[0])
+        if callable(body):                     # dynamic answer from the full URL (path + query)
+            body = body(self.path)
         if body is None:
             self.send_response(404)
             self.end_headers()

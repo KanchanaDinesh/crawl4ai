@@ -46,5 +46,10 @@ class MarketStore:
         errors = {s["source"]: s["error"] for s in sources if s.get("error")}
         self.con.execute("insert or replace into runs values (?, ?, ?, ?)", [run_at, finished_at, len(quotes), json.dumps(errors)])
 
+    def latest_prices(self) -> dict:
+        """{(asset_class, symbol): {"price", "as_of"}} from the last saved run of each instrument."""
+        rows = self.con.execute("select asset_class, symbol, price, strftime(as_of, '%Y-%m-%dT%H:%M:%SZ') from v_latest").fetchall()
+        return {(c, s): {"price": p, "as_of": a} for c, s, p, a in rows}
+
     def close(self) -> None:
         self.con.close()

@@ -20,13 +20,20 @@ adds a point to the history and the dashboard charts.
 
 ## What's collected
 
-| Group | Instruments | Source (free, no API key) |
+| Group | Instruments | Sources, in order (the first that works is used) |
 |---|---|---|
 | `lk` | **ASPI** and **S&P SL20** (with P/E, P/BV, dividend yield, turnover), and **every CSE-listed company**: price, change, volume, turnover, market cap | cse.lk's own API |
-| `us` | S&P 500, Dow Jones, Nasdaq Composite, Nasdaq 100, Russell 2000, VIX, plus the `us_stocks` watchlist | Yahoo Finance chart data |
-| `metals` | Gold, silver, platinum (COMEX futures, USD/oz), WTI and Brent crude, plus **gold and silver in LKR** | Yahoo Finance |
-| `fx` | USD/LKR, EUR/USD, GBP/USD, USD/INR, USD/JPY, US Dollar Index | Yahoo Finance |
-| `crypto` | **Top 100 by market cap**: price, 1h/24h/7d change, market cap, 24h volume | CoinGecko; CoinPaprika as a backup |
+| `us` | S&P 500, Dow Jones, Nasdaq Composite, Nasdaq 100, Russell 2000, VIX, plus the `us_stocks` watchlist | Yahoo Finance → Stooq |
+| `metals` | Gold, silver, platinum (USD/oz), WTI and Brent crude, plus **gold and silver in LKR** | Yahoo Finance → Stooq |
+| `fx` | USD/LKR, EUR/USD, GBP/USD, USD/INR, USD/JPY, US Dollar Index | Yahoo Finance → Stooq → open.er-api.com (daily rates) |
+| `crypto` | **Top 100 by market cap**: price, 1h/24h/7d change, market cap, 24h volume | CoinGecko → CoinPaprika |
+
+All sources are free and need no API key. **Yahoo Finance often blocks automated requests.** The
+collector doesn't try to get around that: on Yahoo's first "blocked" or "too many requests" answer it
+stops asking Yahoo for the rest of the run and uses the next source instead. `run` prints how many
+prices came from each source. Stooq gives daily closing prices (today's price while the market is
+open), so its prices may lag slightly behind Yahoo's. Requests identify themselves honestly with the
+`fetch.user_agent` setting.
 
 **Gold and silver in LKR** (per gram, and gold 24K/22K per pawn of 8 g) are calculated from the
 international USD price and USD/LKR. They're a **reference price, not a local jeweller's rate**, which
@@ -40,6 +47,8 @@ includes duties and margins.
 | `commodities`, `fx` | Yahoo symbols for commodities and exchange rates (`"metal": "gold"` marks metals converted to LKR) |
 | `crypto.top_n` | How many coins (default 100, max 250) |
 | `cse.enabled` | Turn the Colombo Stock Exchange off or on |
+| `"stooq": "..."` on an instrument | Its Stooq symbol (e.g. `^spx`, `xauusd`, `usdlkr`); US stocks default to `<ticker>.us` |
+| `fetch.try_yahoo`, `fetch.stooq_fallback`, `fetch.fx_api_fallback` | Turn individual sources off or on (set `try_yahoo` to `false` if Yahoo always blocks you) |
 
 ## Data
 
@@ -56,7 +65,6 @@ Query with `uv run python -m warehouse sql "select * from markets.v_latest where
 
 ## Notes
 
-- Yahoo Finance and CoinGecko are free public endpoints without keys. They can rate-limit or change
-  without notice. A failing source shows under "Data sources" in the dashboard; other sources keep working,
-  and crypto automatically falls back to CoinPaprika.
+- These are free public endpoints without keys. They can rate-limit or change without notice. A price
+  that no source could provide shows under "Data sources" in the dashboard; everything else keeps working.
 - Prices may be delayed (typically 15 minutes for exchanges). Use them for tracking and research, not trading.

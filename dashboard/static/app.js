@@ -404,7 +404,7 @@ function renderMarketTable() {
     ${rows.map((r) => `<tr class="click" data-cls="${esc(r.asset_class)}" data-sym="${esc(r.symbol)}">${cols.map(([k]) => cell(r, k)).join("")}</tr>`).join("")}</table>`
     : `<div class="empty">No prices for this market yet.</div>`;
   const notes = [...new Set(mk.rows.map((r) => r.note).filter(Boolean))];
-  $("mk-note").textContent = notes.length ? `LKR gold/silver: ${notes[0]}.` : (mk.cls === "metals" ? "Gold and silver are COMEX futures prices in USD per troy ounce." : "");
+  $("mk-note").textContent = notes.length ? `LKR gold/silver: ${notes[0]}.` : (mk.cls === "metals" ? "Gold and silver in USD per troy ounce (COMEX futures from Yahoo, or spot price from Stooq; click a row to see the source)." : "");
 }
 
 async function openSymbol(cls, sym) {

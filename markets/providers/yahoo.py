@@ -2,6 +2,10 @@
 
 GET https://query1.finance.yahoo.com/v8/finance/chart/<symbol>?range=5d&interval=1d
 The last 5 daily closes give the previous close (for the day's change) and a small sparkline.
+
+Yahoo often blocks or rate-limits automated requests. We don't try to get around that: on the
+first "blocked" (401/403) or "too many requests" (429) answer, Yahoo is skipped for the rest of
+the run (YahooBackoff), and collect.py uses Stooq / open.er-api.com instead.
 """
 
 from urllib.parse import quote as urlquote
@@ -10,7 +14,18 @@ import aiohttp
 
 from . import iso_from_epoch, quote
 
-HOSTS = ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com")
+HOSTS = ("https://query1.finance.yahoo.com",)
+
+
+class YahooBlocked(ValueError):
+    pass
+
+
+class YahooBackoff:
+    """Shared per run: once Yahoo says no, stop asking it."""
+
+    def __init__(self):
+        self.reason: str | None = None
 
 
 def parse_chart(data: dict, asset_class: str, name: str | None = None, extra: dict | None = None) -> dict:
@@ -33,18 +48,27 @@ def parse_chart(data: dict, asset_class: str, name: str | None = None, extra: di
 
 
 async def fetch(session: aiohttp.ClientSession, symbol: str, asset_class: str, name: str | None = None,
-                extra: dict | None = None, timeout: float = 25) -> dict:
+                extra: dict | None = None, timeout: float = 25, backoff: YahooBackoff | None = None) -> dict:
+    if backoff and backoff.reason:
+        raise YahooBlocked(f"skipped: {backoff.reason}")
     last_error = None
     for host in HOSTS:
         url = f"{host}/v8/finance/chart/{urlquote(symbol, safe='')}?range=5d&interval=1d"
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+                if resp.status in (401, 403, 429):
+                    reason = f"Yahoo answered HTTP {resp.status} ({'rate limited' if resp.status == 429 else 'blocked'})"
+                    if backoff:
+                        backoff.reason = reason
+                    raise YahooBlocked(reason)
                 data = await resp.json(content_type=None)
                 if resp.status >= 400 and not (data or {}).get("chart"):
                     raise ValueError(f"HTTP {resp.status}")
                 q = parse_chart(data, asset_class, name, extra)
                 q["symbol"] = symbol
                 return q
+        except YahooBlocked:
+            raise
         except (aiohttp.ClientError, TimeoutError, ValueError) as e:
             last_error = e
     raise ValueError(f"{symbol}: {last_error}")
