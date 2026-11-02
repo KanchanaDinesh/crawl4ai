@@ -105,6 +105,15 @@
                "tutoring", "upskilling"]
   },
 
+  "enrich": {
+    "rdap_enabled": true,
+    "rdap_url": "https://rdap.org/domain/{domain}",
+    "timeout_seconds": 20,
+    "concurrency": 3,
+    "delay_seconds": 0.5,
+    "retry_failed_after_days": 30
+  },
+
   "profile": {
     "fetch_mode": "browser",
     "max_pages": 6,
@@ -128,6 +137,7 @@
 
   "report": {
     "default_days": 7,
-    "max_sites_listed": 50
+    "max_sites_listed": 200,
+    "max_domains_listed": 5000
   }
 }

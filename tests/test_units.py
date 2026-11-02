@@ -173,5 +173,63 @@ def test_report_lists_latest_first_with_url_and_new_tab_links(store):
     page, md = render_html(a), render_markdown(a)
     first = order[0]
     assert f">https://www.{first}</a>" in page                                     # URL shown as the label
-    assert page.count("target='_blank'") == page.count("<a ")                      # every link opens a new tab
+    assert page.count("target='_blank'") == page.count("<a href='http")             # every website link opens a new tab
     assert f"| 1 | " in md and f"[https://www.{first}](https://www.{first}/)" in md
+
+
+def test_parse_rdap():
+    from techintel.rdap import parse_rdap
+    data = {"events": [{"eventAction": "registration", "eventDate": "2026-10-20T08:15:00Z"},
+                       {"eventAction": "expiration", "eventDate": "2027-10-20T08:15:00Z"}],
+            "entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["version", {}, "text", "4.0"],
+                                                                           ["fn", {}, "text", "Namecheap, Inc."]]]}]}
+    assert parse_rdap(data) == {"registered_at": "2026-10-20T08:15:00Z", "expires_at": "2027-10-20T08:15:00Z",
+                                "updated_at": None, "registrar": "Namecheap, Inc."}
+
+
+def test_enrich_and_report_dates_and_all_domains(settings, store, monkeypatch):
+    import asyncio
+    from techintel import rdap
+    from techintel.stages import enrich
+    from techintel.stages.analyze import analyze
+    from techintel.stages.report import render_html, render_markdown, write_domains_csv
+    from techintel.models import utc_now
+
+    async def fake_lookup(session, domain, url_template, timeout):
+        if domain.endswith(".lk"):
+            raise LookupError("no RDAP record (TLD may not support RDAP)")
+        return {"registered_at": "2026-10-20T08:15:00Z", "expires_at": None, "updated_at": None, "registrar": "X"}
+    monkeypatch.setattr(rdap, "lookup", fake_lookup)
+
+    now = utc_now()
+    found = now                                              # all found in the same run...
+    rows = [  # ...but seen online at different times (HN post / certificate), and different outcomes
+        ("hn-old.ai", "2026-10-30T09:00:00.000Z", "qualified"),
+        ("cert-new.dev", now[:11] + "00:00:01Z", "qualified"),
+        ("shop.lk", now[:11] + "00:00:00Z", "rejected"),
+        ("pending.io", "2026-10-31T09:00:00Z", None),       # not checked yet
+    ]
+    for domain, seen, status in rows:
+        store.append("candidates", [{"domain": domain, "url": f"https://{domain}/", "source": "hackernews",
+                                     "discovered_at": found, "signal_at": seen, "detail": {"title": f"Show HN: {domain}"}}])
+        if status:
+            store.append("qualifications", [{"domain": domain, "url": f"https://{domain}/", "status": status,
+                                             "reason": "parked: 'x'" if status == "rejected" else "ok", "checked_at": found,
+                                             "category": "ai_ml" if status == "qualified" else None, "score": 9}])
+    assert asyncio.run(enrich.run(settings, store)) == {"looked_up": 2, "with_date": 2, "failed": 0}
+    assert asyncio.run(enrich.run(settings, store)) == {"looked_up": 0}             # nothing left to look up
+
+    a = analyze(store, days=30)
+    assert [s["domain"] for s in a["new_sites"]] == ["cert-new.dev", "hn-old.ai"]   # by seen date, not found date
+    assert a["new_sites"][0]["registered_at"] == "2026-10-20T08:15:00Z"
+    assert a["all_domains_total"] == 4
+    assert [d["status"] for d in a["all_domains"]] == ["qualified", "rejected", "not checked", "qualified"]
+    page, md = render_html(a), render_markdown(a)
+    assert "All discovered domains (4)" in page and "id='q'" in page and "not checked" in page
+    assert page.count("target='_blank'") == page.count("<a href='http")             # website links: new tab
+    assert "<a class='kpi' href='#all-domains'>" in page                            # KPI jumps to the list
+    assert "Registered" in md and "pending.io" in md
+    csv_path = settings.output_dir / "d.csv"
+    settings.output_dir.mkdir(parents=True, exist_ok=True)
+    write_domains_csv(a, csv_path)
+    assert len(csv_path.read_text().splitlines()) == 5

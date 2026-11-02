@@ -2,11 +2,12 @@
 
     discover  [--source NAME ...] [--minutes N] [--seeds-file FILE]
     qualify   [--limit N] [--recheck] [--domain D ...]
+    enrich    [--limit N] [--domain D ...]      registration dates (RDAP)
     profile   [--limit N] [--domain D ...]
     monitor   [--limit N] [--force] [--domain D ...]
     analyze   [--days N]
     report    [--days N]
-    run       all stages in order (discover -> qualify -> profile -> monitor -> report)
+    run       all stages in order (discover -> qualify -> enrich -> profile -> monitor -> report)
     status    counts per stage, and the last run of each stage
 
 Global: --config PATH (a different settings.json), -v for debug logging.
@@ -52,6 +53,9 @@ def status(store) -> None:
     quals = Counter(q["status"] for q in store.latest("qualifications").values())
     print(f"candidates      {len(store.keys('candidates'))}")
     print(f"qualified       {quals.get('qualified', 0)}   watch {quals.get('watch', 0)}   rejected {quals.get('rejected', 0)}")
+    regs = store.latest("registrations")
+    print(f"registrations   {sum(1 for r in regs.values() if r.get('registered_at'))} with date, "
+          f"{sum(1 for r in regs.values() if r.get('error'))} without")
     print(f"profiled        {len(store.keys('profiles'))}")
     print(f"changes         {sum(1 for _ in store.read('changes'))}")
     last = {r["stage"]: r for r in store.read("runs")}
@@ -74,7 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--minutes", type=float, help="How long to listen (certstream)")
     d.add_argument("--seeds-file", help="Seeds file instead of the configured one")
 
-    for name, help_text in (("qualify", "Cheap homepage check"), ("profile", "Deep crawl of qualified sites"),
+    for name, help_text in (("qualify", "Cheap homepage check"),
+                            ("enrich", "Look up domain registration dates (RDAP)"),
+                            ("profile", "Deep crawl of qualified sites"),
                             ("monitor", "Re-crawl profiled sites and record changes")):
         s = sub.add_parser(name, help=help_text)
         s.add_argument("--limit", type=int, help="Process at most N sites")
@@ -108,7 +114,7 @@ async def main_async(args) -> None:
         return
     if args.command == "run":
         await run_stage("discover", settings, store, sources=options.get("sources"), minutes=options.get("minutes"))
-        for stage in ("qualify", "profile", "monitor"):
+        for stage in ("qualify", "enrich", "profile", "monitor"):
             await run_stage(stage, settings, store, limit=options.get("limit"))
         summary = await run_stage("report", settings, store, days=options.get("days"))
         if "html" in summary:

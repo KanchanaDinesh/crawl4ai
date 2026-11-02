@@ -5,9 +5,9 @@ Finds **new tech websites**, works out **what they do**, **tracks how they chang
 rule-based and data is stored in JSON Lines files. Both are designed to be swapped later.
 
 ```
- 1. DISCOVER ─▶ 2. QUALIFY ─▶ 3. PROFILE ─▶ 4. MONITOR ─▶ 5. ANALYZE ─▶ 6. REPORT
- new domains     cheap check:   deep crawl:    re-crawl and    summary      Markdown +
- from sources    tech or not?   what they do   record changes  numbers      HTML report
+ 1. DISCOVER ─▶ 2. QUALIFY ─▶ 2b. ENRICH ─▶ 3. PROFILE ─▶ 4. MONITOR ─▶ 5. ANALYZE ─▶ 6. REPORT
+ new domains     cheap check:   registration   deep crawl:    re-crawl and    summary      Markdown, HTML
+ from sources    tech or not?   date (RDAP)    what they do   record changes  numbers      and CSV
 ```
 
 ## Quick start
@@ -28,6 +28,7 @@ uv run python -m techintel discover                       # all enabled sources
 uv run python -m techintel discover --source hackernews   # one source
 uv run python -m techintel discover --source certstream --minutes 10
 uv run python -m techintel qualify  --limit 50
+uv run python -m techintel enrich                         # registration dates (RDAP)
 uv run python -m techintel profile  --limit 20
 uv run python -m techintel monitor                        # sites not checked for monitor.interval_days
 uv run python -m techintel monitor --force --domain foo.ai
@@ -43,10 +44,25 @@ already knows, qualify skips checked ones until they're due for a re-check, and 
 |---|---|---|---|
 | **discover** | Collects domains from the sources below. Keeps only the **first sighting** of each root domain (`app.foo.com.lk` becomes `foo.com.lk`) and drops ignored platforms (GitHub, `*.vercel.app`...) | sources | `candidates.jsonl` |
 | **qualify** | Fetches the homepage in cheap **HTTP mode** (browser fallback for JavaScript sites) and decides: **qualified** (real tech site), **watch** ("coming soon", unreachable; re-checked after 7 days) or **rejected** (parked, for sale, not tech, robots.txt says no; re-checked after 30 days) | candidates | `qualifications.jsonl` |
+| **enrich** | Looks up the **domain registration date** (and registrar) via RDAP for qualified and watched domains. Generic TLDs (.com, .io, .dev, .ai...) usually work; `.lk` has no public RDAP, so its date stays empty | qualified/watch | `registrations.jsonl` |
 | **profile** | Crawls the homepage plus key pages (about, product, pricing, docs, blog, careers, contact) with a **real browser** and records name, description, category, tech stack, social links, signals (pricing, docs, hiring, open source), keywords and outbound links. Page text is saved under `raw/pages/` | qualified sites | `profiles.jsonl`, `raw/` |
 | **monitor** | Re-profiles sites every `interval_days`, compares with the last snapshot, and records changes: started using X, added pricing page, started hiring, new description, went offline... | profiles | `profiles.jsonl`, `changes.jsonl` |
 | **analyze** | Turns everything into numbers: funnel, new sites by category, source and TLD, tech stack popularity, signals, keywords, changes, and pipeline health warnings | all | `output/techintel/analysis-<date>.json` |
-| **report** | Renders the analysis as Markdown and a standalone HTML page | all | `output/techintel/reports/report-<date>.{md,html}` |
+| **report** | Renders the analysis as Markdown, a standalone HTML page and a CSV of all discovered domains | all | `output/techintel/reports/report-<date>.{md,html}`, `domains-<date>.csv` |
+
+### Reading the report
+
+- **New tech sites:** qualified sites, **latest first**, numbered, with the website URL as the link
+  (opens in a new tab). Three dates per site:
+  - **Seen:** when the source saw the site online (Hacker News post time, certificate logged time).
+    This is what the list is sorted by. Sources without a date (seeds, outlinks) use the Found date.
+  - **Registered:** domain registration date from RDAP, where the registry provides one.
+  - **Found:** when this pipeline discovered it. On a first run everything is found within minutes,
+    so this date says little about the site itself.
+- **All discovered domains:** every domain found in the period with its status (qualified, watch,
+  rejected, not checked) and the reason, latest first. Use the search box and status buttons to filter.
+  The same list is saved as `domains-<date>.csv` for Excel or Numbers.
+- The numbers at the top are links: click "New domains" to jump to the full list.
 
 Every run of every stage is logged in `runs.jsonl`. The report warns you when a source fails or
 suddenly finds nothing.
@@ -72,6 +88,8 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 | `settings.json` → `domain_filter` | TLDs and name keywords that look interesting; platforms to ignore |
 | `settings.json` → `categories` | **The classifier:** keywords per category. Add categories or terms freely |
 | `settings.json` → `qualify` | `min_score`, `min_words`, parked and placeholder phrases, re-check intervals |
+| `settings.json` → `enrich` | Turn RDAP lookups on or off; timeout and politeness |
+| `settings.json` → `report` | Period, and how many sites and domains to list (`max_sites_listed`, `max_domains_listed`) |
 | `settings.json` → `profile` | Which key pages to look for, max pages per site, job-board hosts |
 | `settings.json` → `crawl` | Politeness: concurrency, delay between requests, robots.txt, user agent |
 | `fingerprints.json` | Tech stack detection rules (HTML regex / headers / meta generator) |
@@ -81,7 +99,7 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 
 ```
 data/techintel/                 pipeline state (git-ignored)
-  candidates.jsonl  qualifications.jsonl  profiles.jsonl  changes.jsonl  runs.jsonl
+  candidates.jsonl  qualifications.jsonl  registrations.jsonl  profiles.jsonl  changes.jsonl  runs.jsonl
   raw/pages/<domain>/<hash>.md  page text as crawled, for re-processing
 output/techintel/               analysis JSON and reports (git-ignored)
 ```
@@ -114,7 +132,7 @@ No internet is needed.
 - Classification is keyword-based. It's good at "is this tech, and roughly which area", but it
   can't explain *what's novel*; that's what the AI step is for. Keywords in reports are simple
   frequency counts.
-- The internet sources (Hacker News, crt.sh, CertStream) are written against their public
-  formats but couldn't be run from the development environment. Run them once and check the
+- The internet sources (Hacker News, crt.sh, CertStream) and the RDAP lookup are written against
+  their public formats but couldn't be run from the development environment. Run them once and check the
   output, then adjust `settings.json` (queries, filters) to your needs.
 - Be polite: keep `crawl.delay_seconds` and `concurrency` modest, and leave `check_robots_txt` on.

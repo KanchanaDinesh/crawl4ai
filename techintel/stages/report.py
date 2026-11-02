@@ -3,6 +3,7 @@
 Writes output/techintel/reports/report-<date>.md and .html.
 """
 
+import csv
 import html
 import logging
 from datetime import datetime, timezone
@@ -40,6 +41,21 @@ def link(url: str, label: str | None = None) -> str:
     """HTML link that opens in a new tab."""
     e = html.escape
     return f"<a href='{e(url)}' target='_blank' rel='noopener noreferrer'>{e(label or url_label(url))}</a>"
+
+
+def local_date(value: str | None) -> str:
+    return local_time(value)[:10]
+
+
+def _shown(a: dict) -> str:
+    """'(12)' or '(showing 200 of 340)' when the list was capped."""
+    shown, total = len(a["new_sites"]), a.get("new_sites_total", len(a["new_sites"]))
+    return f"({total})" if shown == total else f"(showing {shown} of {total})"
+
+
+def _source_text(row: dict) -> str:
+    title = row.get("source_title") or (row.get("source_detail") or {}).get("title")
+    return f"{row.get('source') or ''}" + (f": {title}" if title else "")
 
 
 def _change_text(c: dict) -> str:
@@ -81,13 +97,15 @@ def render_markdown(a: dict) -> str:
     lines += table("Discovered by TLD", p["candidates_by_tld"], "Domains")
 
     if a["new_sites"]:
-        lines += ["", f"## New tech sites ({len(a['new_sites'])}, latest first)", "",
-                  "| # | Date | Website | Name | Category | Score |", "|---:|---|---|---|---|---:|"]
+        lines += ["", f"## New tech sites {_shown(a)}, latest first",
+                  "_Seen = when the source saw it online (HN post / certificate); "
+                  "Registered = domain registration date; Found = when this pipeline found it._", "",
+                  "| # | Seen | Website | Name | Category | Score | Registered |", "|---:|---|---|---|---|---:|---|"]
         for i, s in enumerate(a["new_sites"], 1):
-            lines.append(f"| {i} | {local_time(s['discovered_at'])} | [{url_label(s['url'])}]({s['url']}) | "
-                         f"{s['name']} | {s['category']} | {s['score']} |")
+            lines.append(f"| {i} | {local_time(s['seen_at'])} | [{url_label(s['url'])}]({s['url']}) | "
+                         f"{s['name']} | {s['category']} | {s['score']} | {local_date(s['registered_at']) or '–'} |")
         for i, s in enumerate(a["new_sites"], 1):
-            lines += ["", f"### {i}. {local_time(s['discovered_at'])} · [{url_label(s['url'])}]({s['url']})",
+            lines += ["", f"### {i}. {local_time(s['seen_at'])} · [{url_label(s['url'])}]({s['url']})",
                       f"**{s['name']}** · `{s['category']}` · score {s['score']}", "",
                       s["description"] or "_No description._"]
             meta = []
@@ -97,9 +115,18 @@ def render_markdown(a: dict) -> str:
                 meta.append("**Signals:** " + ", ".join(x.replace("_", " ") for x in s["signals"]))
             if s["keywords"]:
                 meta.append("**Keywords:** " + ", ".join(s["keywords"]))
-            src = s["source"] + (f" ({s['source_detail'].get('title')})" if s["source_detail"].get("title") else "")
-            meta.append(f"**Found via:** {src}")
+            meta.append(f"**Dates:** seen {local_time(s['seen_at'])} · registered {local_date(s['registered_at']) or 'unknown'}"
+                        f" · found {local_time(s['found_at'])}")
+            meta.append(f"**Source:** {_source_text(s)}")
             lines += [f"- {m}" for m in meta]
+
+    if a.get("all_domains"):
+        lines += ["", f"## All discovered domains ({a['all_domains_total']}), latest first", "",
+                  "Status: " + ", ".join(f"{k} {v}" for k, v in a["all_domains_by_status"].items()), "",
+                  "| # | Seen | Website | Status | Category | Reason | Source |", "|---:|---|---|---|---|---|---|"]
+        for i, d in enumerate(a["all_domains"], 1):
+            lines.append(f"| {i} | {local_time(d['seen_at'])} | [{url_label(d['url'])}]({d['url']}) | {d['status']} | "
+                         f"{d['category'] or ''} | {d['reason']} | {_source_text(d)} |")
 
     if p["top_keywords_new_sites"]:
         lines += ["", "## Trending keywords on new sites", ", ".join(p["top_keywords_new_sites"])]
@@ -133,8 +160,35 @@ table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--li
 a{color:var(--accent);word-break:break-all}
 .scroll{overflow-x:auto}.list td,.list th{white-space:nowrap}.num{text-align:right}.date{white-space:nowrap;color:var(--muted)}
 .site .head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:4px;font-size:15px}
+.small{font-size:13px}a.kpi{text-decoration:none;color:inherit;word-break:normal}a.kpi:hover{outline:2px solid var(--accent)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.filters input{flex:1 1 220px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:4px 11px;cursor:pointer;font:inherit;font-size:13px}
+.chip.active{border-color:var(--accent);outline:1px solid var(--accent)}
+.st{border-radius:999px;padding:1px 8px;font-size:12px;background:var(--line)}
+.st-qualified{background:#d6f5df;color:#0f5a2a}.st-rejected{background:#fde2e1;color:#8a1c17}.st-watch{background:#fff1cc;color:#6b4b00}
+@media (prefers-color-scheme:dark){.st-qualified{background:#163d24;color:#9be3b2}.st-rejected{background:#45201e;color:#f5aaa5}.st-watch{background:#43360f;color:#f3d27a}}
+#domains td.reason,#domains td:last-child{white-space:normal;min-width:180px}
 .badge{background:var(--accent);color:var(--bg);border-radius:999px;min-width:24px;padding:0 7px;text-align:center;font-weight:600}
 """
+
+
+FILTER_JS = """<script>
+(() => {
+  const q = document.getElementById('q'), rows = [...document.querySelectorAll('#domains tr[data-status]')];
+  let status = '';
+  const apply = () => {
+    const term = q.value.toLowerCase();
+    rows.forEach(r => { r.style.display = (!status || r.dataset.status === status) &&
+      (!term || r.textContent.toLowerCase().includes(term)) ? '' : 'none'; });
+  };
+  document.querySelectorAll('.filters .chip').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.filters .chip').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); status = b.dataset.status; apply();
+  }));
+  q.addEventListener('input', apply);
+})();
+</script>"""
 
 
 def _bars(data: dict) -> str:
@@ -148,44 +202,72 @@ def _bars(data: dict) -> str:
 def render_html(a: dict) -> str:
     e = html.escape
     t, p = a["totals"], a["period"]
-    kpis = [("New domains", p["new_candidates"]), ("New tech sites", p["new_qualified"]), ("Changes", p["changes"]),
-            ("Qualified (all time)", t["qualified"]), ("Profiled", t["profiled"]), ("Qualify rate", f"{t['qualification_rate_pct']}%")]
+    kpis = [("New domains", p["new_candidates"], "all-domains"), ("New tech sites", p["new_qualified"], "new-sites"),
+            ("Changes", p["changes"], "changes" if a["notable_changes"] else None),
+            ("Qualified (all time)", t["qualified"], None), ("Profiled", t["profiled"], None),
+            ("Qualify rate", f"{t['qualification_rate_pct']}%", None)]
     out = [f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>",
            f"<title>Tech Intelligence Report</title><style>{CSS}</style></head><body><main>",
            f"<h1>Tech Intelligence Report</h1><div class='muted'>Last {a['period_days']} days · generated {e(local_time(a['generated_at']))}</div>",
-           "<div class='kpis'>" + "".join(f"<div class='kpi'><b>{e(str(v))}</b>{e(k)}</div>" for k, v in kpis) + "</div>"]
+           "<div class='kpis'>" + "".join(
+               f"<a class='kpi' href='#{anchor}'><b>{e(str(v))}</b>{e(k)}</a>" if anchor else
+               f"<div class='kpi'><b>{e(str(v))}</b>{e(k)}</div>" for k, v, anchor in kpis) + "</div>"]
     if a["warnings"]:
         out.append("<h2>Pipeline warnings</h2><div class='warn'>" + "<br>".join(e(w) for w in a["warnings"]) + "</div>")
     out += ["<h2>New tech sites by category</h2>", _bars(p["new_qualified_by_category"]),
             "<h2>Discovered by source</h2>", _bars(p["candidates_by_source"])]
-    out.append(f"<h2>New tech sites ({len(a['new_sites'])}) <span class='muted'>· latest first</span></h2>")
+    out.append(f"<h2 id='new-sites'>New tech sites {_shown(a)} <span class='muted'>· latest first</span></h2>"
+               "<p class='muted small'>Seen = when the source saw the site online (Hacker News post, certificate logged). "
+               "Registered = domain registration date. Found = when this pipeline found it.</p>")
     if not a["new_sites"]:
         out.append("<p class='muted'>None in this period.</p>")
     else:
         rows = "".join(
-            f"<tr><td class='num'>{i}</td><td class='date'>{e(local_time(s['discovered_at']))}</td>"
+            f"<tr><td class='num'>{i}</td><td class='date'>{e(local_time(s['seen_at']))}</td>"
             f"<td>{link(s['url'])}</td><td>{e(s['name'])}</td><td>{e(str(s['category']))}</td>"
-            f"<td class='num'>{s['score']}</td></tr>"
+            f"<td class='num'>{s['score']}</td><td class='date'>{e(local_date(s['registered_at']) or '–')}</td></tr>"
             for i, s in enumerate(a["new_sites"], 1))
-        out.append("<div class='scroll'><table class='list'><tr><th>#</th><th>Date</th><th>Website</th><th>Name</th>"
-                   f"<th>Category</th><th>Score</th></tr>{rows}</table></div>")
+        out.append("<div class='scroll'><table class='list'><tr><th>#</th><th>Seen</th><th>Website</th><th>Name</th>"
+                   f"<th>Category</th><th>Score</th><th>Registered</th></tr>{rows}</table></div>")
     for i, s in enumerate(a["new_sites"], 1):
         tags = "".join(f"<span class='tag'>{e(x)}</span>" for x in s["tech_stack"])
         sig = ", ".join(x.replace("_", " ") for x in s["signals"])
         out.append(f"<div class='site'><div class='head'><span class='badge'>{i}</span>"
-                   f"<span class='date'>{e(local_time(s['discovered_at']))}</span>{link(s['url'])}</div>"
+                   f"<span class='date'>{e(local_time(s['seen_at']))}</span>{link(s['url'])}</div>"
                    f"<div><b>{e(s['name'])}</b> <span class='muted'>· {e(str(s['category']))} · score {s['score']}</span></div>"
                    f"<div>{e(s['description'] or 'No description.')}</div>"
                    f"<div style='margin-top:6px'>{tags}</div>"
                    + (f"<div class='muted'>Signals: {e(sig)}</div>" if sig else "")
                    + (f"<div class='muted'>Keywords: {e(', '.join(s['keywords']))}</div>" if s["keywords"] else "")
-                   + f"<div class='muted'>Found via {e(s['source'] or '')}</div></div>")
+                   + f"<div class='muted'>Seen {e(local_time(s['seen_at']))} · registered "
+                     f"{e(local_date(s['registered_at']) or 'unknown')} · found {e(local_time(s['found_at']))}</div>"
+                   + f"<div class='muted'>Source: {e(_source_text(s))}</div></div>")
+
+    if a.get("all_domains"):
+        chips = "".join(f"<button class='chip' data-status='{e(k)}'>{e(k)} <b>{v}</b></button>"
+                        for k, v in a["all_domains_by_status"].items())
+        rows = "".join(
+            f"<tr data-status='{e(d['status'])}'><td class='num'>{i}</td><td class='date'>{e(local_time(d['seen_at']))}</td>"
+            f"<td>{link(d['url'])}</td><td><span class='st st-{e(d['status'].replace(' ', '-'))}'>{e(d['status'])}</span></td>"
+            f"<td>{e(d['category'] or '')}</td><td class='reason'>{e(d['reason'])}</td><td>{e(_source_text(d))}</td></tr>"
+            for i, d in enumerate(a["all_domains"], 1))
+        capped = ("" if len(a["all_domains"]) == a["all_domains_total"]
+                  else f" <span class='muted'>(showing {len(a['all_domains'])})</span>")
+        out.append(f"<h2 id='all-domains'>All discovered domains ({a['all_domains_total']}){capped} "
+                   "<span class='muted'>· latest first</span></h2>"
+                   "<div class='filters'><input id='q' type='search' placeholder='Search domain, reason, source…'>"
+                   f"<button class='chip active' data-status=''>all <b>{a['all_domains_total']}</b></button>{chips}</div>"
+                   "<div class='scroll'><table class='list' id='domains'><tr><th>#</th><th>Seen</th><th>Website</th>"
+                   f"<th>Status</th><th>Category</th><th>Reason</th><th>Source</th></tr>{rows}</table></div>"
+                   "<p class='muted small'>Also saved as CSV next to this report.</p>")
+        out.append(FILTER_JS)
+
     if p["top_keywords_new_sites"]:
         out.append("<h2>Trending keywords on new sites</h2><div>" +
                    "".join(f"<span class='tag'>{e(k)}</span>" for k in p["top_keywords_new_sites"]) + "</div>")
     out += ["<h2>Tech stack across profiled sites</h2>", _bars({x["name"]: x["sites"] for x in a["tech_stack"]})]
     if a["notable_changes"]:
-        out.append("<h2>Notable changes <span class='muted'>· latest first</span></h2><div class='scroll'><table>"
+        out.append("<h2 id='changes'>Notable changes <span class='muted'>· latest first</span></h2><div class='scroll'><table>"
                    "<tr><th>Date</th><th>Website</th><th>Change</th></tr>" +
                    "".join(f"<tr><td class='date'>{e(local_time(c['detected_at']))}</td>"
                            f"<td>{link(c.get('url') or homepage_url(c['domain']), c['domain'])}</td>"
@@ -195,15 +277,29 @@ def render_html(a: dict) -> str:
     return "\n".join(out)
 
 
+def write_domains_csv(a: dict, path) -> None:
+    """Every discovered domain in the period, for Excel / Numbers."""
+    fields = ["seen_local", "url", "domain", "status", "category", "score", "reason", "title", "source",
+              "source_title", "registered_at", "found_local"]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        for d in a.get("all_domains", []):
+            writer.writerow({**d, "seen_local": local_time(d["seen_at"]), "found_local": local_time(d["found_at"])})
+
+
 async def run(settings, store, days: int | None = None, **_) -> dict:
     report_cfg = settings.section("report")
     days = days or int(report_cfg.get("default_days", 7))
-    a = analyze(store, days, int(report_cfg.get("max_sites_listed", 50)))
+    a = analyze(store, days, int(report_cfg.get("max_sites_listed", 200)), int(report_cfg.get("max_domains_listed", 5000)))
     folder = settings.output_dir / "reports"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = f"{datetime.now(timezone.utc):%Y-%m-%d}"
     md, page = folder / f"report-{stamp}.md", folder / f"report-{stamp}.html"
     md.write_text(render_markdown(a), encoding="utf-8")
     page.write_text(render_html(a), encoding="utf-8")
+    csv_path = folder / f"domains-{stamp}.csv"
+    write_domains_csv(a, csv_path)
     logger.info("report saved to %s and %s", md, page)
-    return {"markdown": str(md), "html": str(page), "new_sites": len(a["new_sites"])}
+    return {"markdown": str(md), "html": str(page), "csv": str(csv_path), "new_sites": a.get("new_sites_total", 0),
+            "domains": a.get("all_domains_total", 0)}

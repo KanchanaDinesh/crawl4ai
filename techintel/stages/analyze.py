@@ -32,7 +32,7 @@ def _pct(part: int, whole: int) -> float:
     return round(100 * part / whole, 1) if whole else 0.0
 
 
-def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
+def analyze(store, days: int = 7, max_listed: int = 200, max_domains: int = 5000) -> dict:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     candidates = list(store.read("candidates"))
     qualifications = store.latest("qualifications")
@@ -40,6 +40,22 @@ def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
     changes = list(store.read("changes"))
     runs = list(store.read("runs"))
     cand_by_domain = {c["domain"]: c for c in candidates}
+    registrations = store.latest("registrations")
+
+    def dates(domain: str) -> dict:
+        """The three dates we know for a domain.
+
+        seen_at        when the source saw it: HN post time, certificate logged time
+                       (falls back to found_at for sources without a date, e.g. seeds)
+        registered_at  domain registration date (RDAP), if the registry provides it
+        found_at       when this pipeline discovered it
+        """
+        c = cand_by_domain.get(domain, {})
+        return {
+            "seen_at": c.get("signal_at") or c.get("discovered_at"),
+            "registered_at": registrations.get(domain, {}).get("registered_at"),
+            "found_at": c.get("discovered_at"),
+        }
 
     status_counts = Counter(q["status"] for q in qualifications.values())
     new_candidates = [c for c in candidates if _in_period(c["discovered_at"], since)]
@@ -70,12 +86,31 @@ def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
             "source": c.get("source"),
             "source_detail": c.get("detail", {}),
             "discovered_at": c.get("discovered_at"),
+            **dates(domain),
             "profiled": domain in profiles,
         }
 
-    # Latest discovered first; ties broken by higher score.
-    new_sites = sorted((site_row(d) for d in new_qualified),
-                       key=lambda r: (r["discovered_at"] or "", r["score"] or 0), reverse=True)[:max_listed]
+    # Latest first by when the site was seen online; ties broken by higher score.
+    all_new_sites = sorted((site_row(d) for d in new_qualified),
+                           key=lambda r: (r["seen_at"] or "", r["score"] or 0), reverse=True)
+    new_sites = all_new_sites[:max_listed]
+
+    # Every domain discovered in the period, whatever happened to it.
+    def domain_row(c: dict) -> dict:
+        q = qualifications.get(c["domain"], {})
+        return {
+            "domain": c["domain"],
+            "url": q.get("final_url") or c.get("url") or homepage_url(c["domain"]),
+            "status": q.get("status", "not checked"),
+            "reason": q.get("reason", "waiting for the qualify stage"),
+            "category": q.get("category"),
+            "score": q.get("score"),
+            "title": q.get("title"),
+            "source": c.get("source"),
+            "source_title": (c.get("detail") or {}).get("title"),
+            **dates(c["domain"]),
+        }
+    all_domains = sorted((domain_row(c) for c in new_candidates), key=lambda r: r["seen_at"] or "", reverse=True)
     period_changes = [c for c in changes if _in_period(c["detected_at"], since)]
     change_types = Counter(c["change_type"] for c in period_changes)
     notable = sorted((c for c in period_changes if c["change_type"] != "content_changed"),
@@ -132,6 +167,10 @@ def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
                        for t, n in tech.most_common(25)],
         "signals": {name: {"sites": n, "pct": _pct(n, len(profiles))} for name, n in signals.most_common()},
         "new_sites": new_sites,
+        "new_sites_total": len(all_new_sites),
+        "all_domains": all_domains[:max_domains],
+        "all_domains_total": len(all_domains),
+        "all_domains_by_status": dict(Counter(r["status"] for r in all_domains).most_common()),
         "notable_changes": notable,
         "pipeline": {stage: {"finished_at": r.get("finished_at"), "summary": r.get("summary")}
                      for stage, r in last_runs.items()},
@@ -142,7 +181,8 @@ def analyze(store, days: int = 7, max_listed: int = 50) -> dict:
 async def run(settings, store, days: int | None = None, **_) -> dict:
     report_cfg = settings.section("report")
     days = days or int(report_cfg.get("default_days", 7))
-    result = analyze(store, days, int(report_cfg.get("max_sites_listed", 50)))
+    result = analyze(store, days, int(report_cfg.get("max_sites_listed", 200)),
+                     int(report_cfg.get("max_domains_listed", 5000)))
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     path = settings.output_dir / f"analysis-{datetime.now(timezone.utc):%Y-%m-%d}.json"
     path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -1,4 +1,4 @@
-"""The pipeline stages, in order: discover -> qualify -> profile -> monitor -> analyze -> report.
+"""The pipeline stages, in order: discover -> qualify -> enrich -> profile -> monitor -> analyze -> report.
 
 Each stage module has `async def run(settings, store, **options) -> dict` that
 reads what earlier stages stored, appends its own results, and returns a
@@ -7,7 +7,7 @@ summary (which the CLI also records in the `runs` table).
 
 from datetime import datetime, timezone
 
-STAGE_ORDER = ("discover", "qualify", "profile", "monitor", "analyze", "report")
+STAGE_ORDER = ("discover", "qualify", "enrich", "profile", "monitor", "analyze", "report")
 
 
 def parse_time(value: str | None) -> datetime | None:

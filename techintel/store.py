@@ -5,6 +5,7 @@ For now everything is append-only JSON Lines files, one file per table:
     data/techintel/
         candidates.jsonl      discover: one row per newly found domain
         qualifications.jsonl  qualify:  one row per check (re-checks append a new row)
+        registrations.jsonl   enrich:   domain registration date / registrar (RDAP)
         profiles.jsonl        profile/monitor: one snapshot per crawl (history kept)
         changes.jsonl         monitor:  one row per detected change
         runs.jsonl            every stage: one row per run (counts, errors), for health checks
@@ -21,7 +22,7 @@ import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-TABLES = ("candidates", "qualifications", "profiles", "changes", "runs")
+TABLES = ("candidates", "qualifications", "registrations", "profiles", "changes", "runs")
 
 
 class FileStore:
