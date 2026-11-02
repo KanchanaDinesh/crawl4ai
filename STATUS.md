@@ -95,16 +95,14 @@ schedules are active. Ask them to run `./schedule.sh status`.
 
 ## Open issues and things to watch
 
-- **Vehicles failed in a scheduled run (2026-11-02), cause not known yet.** The fast failure (about 3s)
-  points to the browser not starting, e.g. a missing or mismatched browser, or the exFAT drive.
-  Ask Kanchana for the reason now shown in `tail -3 logs/history.log`, or for the output of
-  `uv run python -m vehicles run` and `uv run python doctor.py`.
-
-- **Browser on the external drive:** if Kanchana sees "browser has been closed" errors again, ask for the
-  output of `uv run python doctor.py`.
-  - If the drive is exFAT, set `BROWSERS_ON_SYSTEM_DRIVE=1` in automation.conf, then run
-    `source env.sh && uv run crawl4ai-setup`.
-  - Not yet confirmed what MAC-DISK2's file system is.
+- **Vehicles failed in a scheduled run (2026-11-02), cause not known yet.** It failed after about 3s.
+  `doctor.py` on the Mac says "All good: the browser works here", so the browser and drive are fine when run by hand.
+  - Next: check the reason in `tail -3 logs/history.log` after the next scheduled run (the reason is shown now).
+  - If only scheduled runs fail, look at launchd differences: environment, Full Disk Access, the drive
+    not being mounted yet.
+- **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive
+  supports symlinks, so `BROWSERS_ON_SYSTEM_DRIVE` isn't needed. If "browser has been closed" errors come
+  back, run `uv run python doctor.py` again.
 - **ikman speed:** each run now logs `ikman: N ads in Xs`. If it often logs `gave up after 120s`, try
   `--no-stealth`. If that doesn't help, ikman may be blocking the browser. Then don't work around it:
   lower the frequency, or accept fewer runs.
