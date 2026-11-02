@@ -8,7 +8,7 @@
     sites                                   list the configured sites
 
 Sites and selectors: vehicles/config/sites.json
-Output: output/vehicles_<site>.json, history in data/scrapers/scrapers.duckdb
+Output: output/vehicles_<site>.json (latest run), history in data/vehicles/vehicles.duckdb
 """
 
 import argparse
@@ -53,7 +53,7 @@ def cmd_run(args) -> None:
 
 def _db():
     from warehouse import DB_FILES, connect
-    path = DB_FILES["scrapers"]
+    path = DB_FILES["vehicles"]
     if not path.exists():
         sys.exit("No vehicle ads saved yet. Run:  uv run python -m vehicles run")
     return connect(path, read_only=True)

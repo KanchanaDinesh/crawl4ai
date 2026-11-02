@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 62 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 64 tests pass.
 
 ## Parts and how to run them
 
@@ -23,7 +23,7 @@ Run every command from the project folder, after `source env.sh`.
 | Tech intel | `uv run python -m techintel run`. Stages: `discover`, `qualify`, `enrich`, `profile`, `monitor`, `report`, `status`. `quick` is the fast run; `watch` is the live listener | Working. Full run is time-limited (`--limit 50 --max-minutes 20` in automation.conf) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working. Yahoo is used first, with fallback to Stooq and open.er-api.com. CoinGecko is used first, with fallback to CoinPaprika |
-| Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`) |
+| Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News, Tech Intel, Markets, Vehicles. **Restart it after every `git pull`** |
 | Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.` |
@@ -84,6 +84,10 @@ schedules are active. Ask them to run `./schedule.sh status`.
 13. The dashboard says to restart the server when the page is newer than the server (an HTTP 404 from `/api/`).
 14. Vehicles became its own module, `python -m vehicles`, laid out like the others.
 15. Added `./schedule.sh recommended`, plus this STATUS.md and CLAUDE.md for handing over between sessions.
+16. Vehicles got its own database, `data/vehicles/vehicles.duckdb`, like the other tools.
+    - Before, its ads were in `data/scrapers/scrapers.duckdb` and Kanchana couldn't find them in `data/`.
+    - The old history is copied in once, automatically. The dashboard and `warehouse sql` (`vehicles.` prefix) use it.
+    - Tests now always use a temp folder.
 
 ## Open issues and things to watch
 

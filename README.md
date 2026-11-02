@@ -166,15 +166,16 @@ Each tool stores its data in its own DuckDB file inside `data/`, so they can run
 | `data/worldnews/worldnews.duckdb` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
 | `data/techintel/techintel.duckdb` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` |
 | `data/markets/markets.duckdb` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
-| `data/scrapers/scrapers.duckdb` | `scraper_rows` (every scraper output, every run), plus views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes`, `v_news_headlines`, `v_products` |
+| `data/vehicles/vehicles.duckdb` | `ads` (every ad from every run), `runs` (per site: ok?, ads, seconds, error), views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes` |
+| `data/scrapers/scrapers.duckdb` | `scraper_rows` (every output of the `scrapers/` tools, every run), views `v_news_headlines`, `v_products` |
 
-Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `scrapers.` or `markets.`:
+Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `markets.`, `vehicles.` or `scrapers.`:
 
 ```bash
 uv run python -m warehouse info                    # sizes, tables, row counts
 uv run python -m warehouse examples                # ready-made queries
 uv run python -m warehouse sql "select published_at, source, title from news.news_items order by published_at desc limit 20"
-uv run python -m warehouse sql "select * from scrapers.v_vehicle_price_changes" --csv price_changes.csv
+uv run python -m warehouse sql "select * from vehicles.v_vehicle_price_changes" --csv price_changes.csv
 uv run python -m warehouse sql                     # interactive prompt
 ```
 

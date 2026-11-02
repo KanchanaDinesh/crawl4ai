@@ -236,7 +236,7 @@ def markets_history(con, asset_class: str, symbol: str, days: int = 90) -> dict:
     return {"quote": latest, "points": pts, "spark": _spark(con, asset_class, symbol, days)}
 
 
-# ── vehicles (scrapers.duckdb) ────────────────────────────────────────────
+# ── vehicles (vehicles.duckdb) ────────────────────────────────────────────
 VEHICLE_BASE = """
     with site_last as (select site, max(saved_at) as last_saved from v_vehicle_ads group by site),
          changes as (select url, price_lkr as new_price, previous_price_lkr, saved_at as changed_at

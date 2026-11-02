@@ -15,8 +15,8 @@ Each site in the config describes:
   crawl             extra crawl4ai CrawlerRunConfig options (magic, page_timeout, wait_for, ...)
   enabled           false to skip the site in normal runs
 
-Each site is written to output/vehicles_<site>.json and kept in data/scrapers/scrapers.duckdb
-(history, price changes). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
+Each site is written to output/vehicles_<site>.json and kept in data/vehicles/vehicles.duckdb
+(history, price changes: see store.py). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
 selectors can be fixed with `python -m scrapers.inspect_site <dump file> --base "<selector>"`.
 """
 
@@ -31,7 +31,9 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
-from scrapers.common import now_str, output_path, save_json
+from scrapers.common import now_str, output_path
+
+from . import store
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,13 @@ def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
     if site.get("sort"):
         ads = _sort_ads(ads, site["sort"])
     return [{"rank": i, **ad} for i, ad in enumerate(ads[:limit], 1)]
+
+
+def save_output(report: dict, filename: str) -> Path:
+    """The latest run as a JSON file in output/ (the history is in the vehicles database)."""
+    path = output_path(filename)
+    path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 def _dump_html(site: dict, html: str) -> str:
@@ -227,8 +236,9 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
                     logger.warning("%s: browser closed unexpectedly; restarting it and retrying", site["name"])
             report["seconds"] = round(time.monotonic() - began, 1)
             logger.info("%s: %d ads in %.1fs", site["name"], report["count"], report["seconds"])
-            path = save_json(report, site["output_file"])
-            logger.info("Saved %s", path)
+            path = save_output(report, site["output_file"])
+            saved = store.save_report(report)
+            logger.info("Saved %s (+%d ads in %s)", path, saved, store.db_path().name)
             if not quiet:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             reports.append(report)

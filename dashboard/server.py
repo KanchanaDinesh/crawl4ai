@@ -138,7 +138,7 @@ async def markets_history(request):
 
 async def vehicles_summary(request):
     days = _int(request, "days", 7)
-    return web.json_response(_query("scrapers", lambda c: queries.vehicles_summary(c, days), f"veh_summary:{days}"))
+    return web.json_response(_query("vehicles", lambda c: queries.vehicles_summary(c, days), f"veh_summary:{days}"))
 
 
 async def vehicle_ads(request):
@@ -146,12 +146,12 @@ async def vehicle_ads(request):
     args = dict(site=q.get("site") or None, q=(q.get("q") or "").strip() or None, new=q.get("new") == "1",
                 days=_int(request, "days", 30), limit=_int(request, "limit", 100, hi=1000),
                 offset=_int(request, "offset", 0, lo=0))
-    return web.json_response(_query("scrapers", lambda c: queries.vehicle_ads(c, **args), f"veh_ads:{sorted(args.items())}"))
+    return web.json_response(_query("vehicles", lambda c: queries.vehicle_ads(c, **args), f"veh_ads:{sorted(args.items())}"))
 
 
 async def vehicle_changes(request):
     days = _int(request, "days", 30)
-    return web.json_response(_query("scrapers", lambda c: queries.vehicle_price_changes(c, days), f"veh_changes:{days}"))
+    return web.json_response(_query("vehicles", lambda c: queries.vehicle_price_changes(c, days), f"veh_changes:{days}"))
 
 
 async def automation(request):

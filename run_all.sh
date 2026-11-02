@@ -55,7 +55,7 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 : "${STEP_vehicles:=$UV run --frozen python -m vehicles run ${VEHICLES_ARGS:-}}"
 : "${STEP_lknews:=$UV run --frozen python -m scrapers.news ${LKNEWS_ARGS:-}}"
 : "${TOOL_markets:=markets}" "${TOOL_news:=news}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
-: "${TOOL_vehicles:=scrapers}" "${TOOL_lknews:=scrapers}"
+: "${TOOL_vehicles:=vehicles}" "${TOOL_lknews:=scrapers}"
 
 step_cmd() { local v="STEP_$1"; printf '%s' "${!v:-}"; }
 step_tool() { local v="TOOL_$1"; printf '%s' "${!v:-$1}"; }

@@ -1,12 +1,12 @@
 """python -m warehouse <command>
 
-    init                 create the three databases (safe to run again)
+    init                 create the databases (safe to run again)
     info                 where the databases are, their size, tables and row counts
-    sql "QUERY"          run SQL across all three (read-only); without a query: interactive prompt
+    sql "QUERY"          run SQL across all of them (read-only); without a query: interactive prompt
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
 
-In SQL, prefix tables with the database name:  news.*  tech.*  scrapers.*  markets.*
+In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  scrapers.*
 e.g.  select * from news.news_items order by published_at desc limit 20
 """
 
@@ -24,11 +24,11 @@ EXAMPLES = {
     "Most used tech stack": "select t.value::varchar as tech, count(*) from tech.v_profiles, json_each(tech_stack) t group by 1 order by 2 desc limit 15",
     "Recent site changes": "select detected_at, domain, change_type, field from tech.v_changes order by detected_at desc limit 20",
     "Newest registered domains": "select domain, registered_at from tech.v_registrations where registered_at is not null order by registered_at desc limit 20",
-    "Vehicle ads, cheapest first": "select site, title, price_lkr, url from scrapers.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20",
+    "Vehicle ads, cheapest first": "select site, title, price_lkr, url from vehicles.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20",
     "Market snapshot (key prices)": "select name, price, currency, round(change_pct, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
     "Top CSE gainers today": "select symbol, name, price, round(change_pct, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc limit 10",
     "Crypto top 20": "select rank, symbol, name, price, round(change_pct, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
-    "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from scrapers.v_vehicle_price_changes order by saved_at desc",
+    "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from vehicles.v_vehicle_price_changes order by saved_at desc",
 }
 
 
@@ -43,6 +43,8 @@ def init() -> None:
     con.close()
     from markets.store import MarketStore
     MarketStore(DB_FILES["markets"].parent).close()
+    from vehicles.store import VehicleStore
+    VehicleStore(DB_FILES["vehicles"]).close()
     for name, path in DB_FILES.items():
         print(f"{name:<9} {path}")
 

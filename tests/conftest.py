@@ -1,8 +1,16 @@
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
+
+# Tests never touch the real data/ or output/ folders: by default everything goes to a temporary folder
+# (individual tests point these somewhere else again with monkeypatch).
+_TMP = Path(tempfile.mkdtemp(prefix="crawl4ai-tests-"))
+os.environ["PROJECT_DATA_DIR"] = str(_TMP / "data")
+os.environ["SCRAPERS_OUTPUT_DIR"] = str(_TMP / "output")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))

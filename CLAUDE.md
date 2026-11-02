@@ -34,26 +34,27 @@ the current state of every part, open issues and next steps. Read it before doin
 ## Layout and conventions
 
 ```
-techintel/  worldnews/  markets/  vehicles/   one package per tool: __init__.py (calls
-                                               project_paths.apply_local_env()), __main__.py, cli.py,
-                                               config/, README.md. Run: python -m <tool> <command>
+techintel/  worldnews/  markets/  vehicles/   one package per tool, each with its own DuckDB in data/<tool>/:
+                                               __init__.py (calls project_paths.apply_local_env()), __main__.py,
+                                               cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
 warehouse/       DuckDB helpers: DB_FILES, connect() (waits if another process is writing), python -m warehouse
 dashboard/       local web dashboard (aiohttp + plain JS, no build step): python -m dashboard --open
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
-automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Gotchas")
+automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Open issues")
 doctor.py        browser health check: uv run python doctor.py
 tests/           pytest, offline (local HTTP servers, sample data in tests/sample_data.py)
 data/  output/  logs/  .local/  .venv/       git-ignored
 ```
 
-- **Databases:** DuckDB, one file per tool under `data/` (news, tech, scrapers, markets), because DuckDB
+- **Databases:** DuckDB, one file per tool under `data/` (worldnews, techintel, markets, vehicles, scrapers), because DuckDB
   allows only one writer per file. The dashboard opens them read-only, one query at a time, so it never
   blocks a run.
-- **Vehicle ads** go through `scrapers.common.save_json`, which writes `output/vehicles_<site>.json`
-  and also records the run in `data/scrapers/scrapers.duckdb`. The views `v_vehicle_ads*` are in
-  `warehouse/scrapers_db.py`.
+- **Vehicle ads** are in `data/vehicles/vehicles.duckdb` (`vehicles/store.py`): tables `ads` and `runs`,
+  views `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
+  `data/scrapers/scrapers.duckdb` holds only the `scrapers/` tools' output (generic `scraper_rows`).
+- **Tests never touch the real `data/` or `output/`** (`tests/conftest.py` points them at a temp folder).
 - **New step for automation:** add a default `STEP_<name>` / `TOOL_<name>` in `run_all.sh` (the tool
   name is the lock), and mention it in `automation.conf` and the README.
 - Code style: small functions, docstrings that explain the why, friendly log and error messages that say

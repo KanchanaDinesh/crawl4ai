@@ -43,8 +43,10 @@ def site(name):
 
 @pytest.fixture(autouse=True)
 def fake_browser(monkeypatch, tmp_path):
+    import warehouse
     monkeypatch.setattr(vehicles, "AsyncWebCrawler", FakeCrawler)
     monkeypatch.setattr(common, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setitem(warehouse.DB_FILES, "vehicles", tmp_path / "vehicles.duckdb")
     FakeCrawler.started, FakeCrawler.start_delay = 0, 0.0
 
 
@@ -54,6 +56,11 @@ def test_stuck_site_gives_up_and_next_site_still_runs():
     assert not slow["success"] and "gave up after" in slow["error"] and slow["seconds"] < 5
     assert fast["success"] and fast["count"] == 3
     assert FakeCrawler.started == 2                  # a fresh browser after the stuck page
+    import duckdb
+    con = duckdb.connect(str(common.OUTPUT_DIR / "vehicles.duckdb"), read_only=True)
+    assert con.execute("select site, success, ads from runs order by site").fetchall() == [("fast", True, 3), ("slow", False, 0)]
+    assert con.execute("select count(*) from v_vehicle_ads").fetchone()[0] == 3
+    con.close()
 
 
 def test_browser_that_never_starts_fails_fast(monkeypatch):
@@ -73,7 +80,6 @@ def test_cli_show_changes_and_sites(tmp_path, monkeypatch, capsys):
     import importlib
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
-    monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
     import project_paths, warehouse
     importlib.reload(project_paths); importlib.reload(warehouse)
     from sample_data import build_vehicles

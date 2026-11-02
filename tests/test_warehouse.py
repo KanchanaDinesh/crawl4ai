@@ -4,7 +4,7 @@ import importlib
 import json
 
 
-def test_scrapers_outputs_build_history_and_price_changes(tmp_path, monkeypatch):
+def test_scrapers_outputs_build_history(tmp_path, monkeypatch):
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
     monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
@@ -14,22 +14,53 @@ def test_scrapers_outputs_build_history_and_price_changes(tmp_path, monkeypatch)
     import scrapers.common as common
     for mod in (project_paths, warehouse, sdb, common):
         importlib.reload(mod)
-
-    for price in (5_000_000, 4_750_000):
-        common.save_json({"site": "ikman", "ads": [
-            {"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": price},
-            {"rank": 2, "title": "Honda Fit", "url": "https://ikman.lk/2", "price_lkr": 3_000_000}]}, "vehicles_ikman.json")
+    common.save_json([{"title": "a"}, {"title": "b"}], "news.json")
     common.save_csv([{"a": 1}, {"a": 2}], "cse_trade_summary.csv")
-    assert (tmp_path / "out" / "vehicles_ikman.json").exists()                  # files still written
-
+    assert (tmp_path / "out" / "news.json").exists()                            # files still written
     con = warehouse.connect(warehouse.DB_FILES["scrapers"])
-    assert con.execute("select count(*) from scraper_rows").fetchone()[0] == 6
-    latest = con.execute("select title, price_lkr, times_seen from v_vehicle_ads_latest order by title").fetchall()
-    assert latest == [("Honda Fit", 3_000_000, 2), ("Toyota Axio", 4_750_000, 2)]
-    assert con.execute("select title, previous_price_lkr, price_lkr from v_vehicle_price_changes").fetchall() == \
-        [("Toyota Axio", 5_000_000, 4_750_000)]
-    assert con.execute("select data->>'site' from scraper_rows where scraper='vehicles_ikman' limit 1").fetchone()[0] == "ikman"
+    assert con.execute("select scraper, count(*) from scraper_rows group by 1 order by 1").fetchall() == \
+        [("cse_trade_summary", 2), ("news", 2)]
+    assert con.execute("select count(*) from v_news_headlines").fetchone()[0] == 2
     con.close()
+
+
+def test_vehicles_have_their_own_database_and_old_history_is_copied(tmp_path, monkeypatch):
+    """Vehicle ads saved in scrapers.duckdb before vehicles.duckdb existed are copied over once."""
+    monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
+    monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
+    import project_paths
+    import warehouse
+    import warehouse.scrapers_db as sdb
+    import scrapers.common as common
+    for mod in (project_paths, warehouse, sdb, common):
+        importlib.reload(mod)
+    for price in (5_000_000, 4_750_000):                 # the old way: rows in scraper_rows
+        sdb.record_output("vehicles_ikman", {"site": "ikman", "ads": [
+            {"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": price},
+            {"rank": 2, "title": "Honda Fit", "url": "https://ikman.lk/2", "price_lkr": 3_000_000}]})
+
+    from vehicles.store import VehicleStore
+    store = VehicleStore()
+    assert store.path == tmp_path / "data" / "vehicles" / "vehicles.duckdb"
+    store.save_report({"site": "ikman", "success": True, "seconds": 3.2, "source_url": "https://ikman.lk", "ads": [
+        {"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": 4_600_000, "price": "Rs 4.6M"}]})
+    store.close()
+    store = VehicleStore()                                # opening again does not copy twice
+    con = store.con
+    assert con.execute("select count(*) from ads").fetchone()[0] == 5
+    latest = con.execute("select title, price_lkr, times_seen from v_vehicle_ads_latest order by title").fetchall()
+    assert latest == [("Honda Fit", 3_000_000, 2), ("Toyota Axio", 4_600_000, 3)]
+    assert con.execute("select previous_price_lkr, price_lkr from v_vehicle_price_changes order by saved_at").fetchall() \
+        == [(5_000_000, 4_750_000), (4_750_000, 4_600_000)]
+    assert con.execute("select count(*), sum(ads) from runs").fetchone() == (3, 5)
+    store.close()
+
+
+def test_vehicle_save_never_breaks_a_scrape(monkeypatch):
+    import vehicles.store as vs
+    monkeypatch.setattr(vs, "VehicleStore", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk full")))
+    assert vs.save_report({"site": "ikman", "ads": [{"title": "x"}]}) == 0
 
 
 def test_record_output_never_breaks_a_scrape(monkeypatch):
