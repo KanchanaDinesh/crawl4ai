@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intelligence Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%232f6fde%22/%3E%3Cpath d=%22M4 11V7M8 11V4M12 11V8%22 stroke=%22white%22 stroke-width=%222%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <span class="brand">Intelligence Dashboard</span>
+    <nav class="tabs">
+      <button class="tab" data-view="news">World News</button>
+      <button class="tab" data-view="tech">Tech Intel</button>
+    </nav>
+    <div class="hright">
+      <span id="updated"></span>
+      <label class="tog"><input type="checkbox" id="auto"> Auto-refresh (1 min)</label>
+      <button class="btn" id="refresh">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- ─────────────── NEWS ─────────────── -->
+  <section id="view-news" hidden>
+    <div class="kpis" id="news-kpis"></div>
+    <div class="filters">
+      <select id="news-days" title="Period">
+        <option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option><option value="3650">All time</option>
+      </select>
+      <span id="news-groups"></span>
+      <select id="news-source"><option value="">All sources</option></select>
+      <label class="tog"><input type="checkbox" id="news-tech"> Tech only</label>
+      <label class="tog"><input type="checkbox" id="news-new"> New in last run</label>
+      <input type="search" id="news-q" placeholder="Search headlines, summaries, sources…">
+    </div>
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h3>Headlines <small id="news-count"></small></h3>
+          <div id="news-list"></div>
+          <button class="btn more" id="news-more" hidden>Load more</button>
+        </div>
+      </div>
+      <aside>
+        <div class="panel"><h3>Headlines per day <small>14 days · light = tech</small></h3><div id="news-days-chart"></div></div>
+        <div class="panel"><h3>By country / group <small id="news-period-label"></small></h3><div id="news-by-group" class="bars"></div></div>
+        <div class="panel"><h3>Top sources</h3><div id="news-top-sources" class="bars"></div></div>
+        <div class="panel"><h3>Source health <small>last run</small></h3><div id="news-health" class="scroll"></div></div>
+        <div class="panel"><h3>Recent runs</h3><div id="news-runs" class="scroll"></div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ─────────────── TECH ─────────────── -->
+  <section id="view-tech" hidden>
+    <div class="kpis" id="tech-kpis"></div>
+    <div class="filters">
+      <select id="tech-days" title="Period">
+        <option value="1">Last 24 hours</option><option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option><option value="3650">All time</option>
+      </select>
+      <span id="tech-status"></span>
+      <select id="tech-category"><option value="">All categories</option></select>
+      <select id="tech-source"><option value="">All sources</option></select>
+      <input type="search" id="tech-q" placeholder="Search domain, name, description, reason…">
+    </div>
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h3>Discovered domains <small id="tech-count"></small></h3>
+          <div class="scroll" id="tech-table"></div>
+          <button class="btn more" id="tech-more" hidden>Load more</button>
+        </div>
+      </div>
+      <aside>
+        <div class="panel"><h3>Discovered per day <small>14 days</small></h3><div id="tech-days-chart"></div></div>
+        <div class="panel"><h3>Qualified by category</h3><div id="tech-by-category" class="bars"></div></div>
+        <div class="panel"><h3>Tech stack <small>profiled sites</small></h3><div id="tech-stack" class="bars"></div></div>
+        <div class="panel"><h3>Discovered by source</h3><div id="tech-by-source" class="bars"></div></div>
+        <div class="panel"><h3>Recent changes</h3><div id="tech-changes"></div></div>
+        <div class="panel"><h3>Pipeline <small>last run per stage</small></h3><div id="tech-runs" class="scroll"></div></div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div class="drawer-bg" id="drawer-bg"></div>
+<aside class="drawer" id="drawer"><button class="btn close" id="drawer-close">Close</button><div id="drawer-body"></div></aside>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

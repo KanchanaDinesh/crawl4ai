@@ -1,6 +1,6 @@
 # Web scrapers
 
-Three parts, all built on crawl4ai:
+Four parts, all built on crawl4ai:
 
 - **`scrapers/`**: news, vehicle ads, products, IMDb and Colombo Stock Exchange scrapers (this page).
 - **`techintel/`**: a pipeline that discovers new tech websites, profiles and monitors them, and
@@ -9,6 +9,8 @@ Three parts, all built on crawl4ai:
 - **`worldnews/`**: the latest headlines from major news sites in the US, India, Sri Lanka, Australia,
   Canada, China, plus world and technology news, in one daily report.
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
+- **`dashboard/`**: a local web dashboard for World News and Tech Intel, reading live from the databases.
+  `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
 
 All three use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
@@ -40,6 +42,41 @@ source env.sh
 `env.sh` points uv, the browser and crawl4ai at `.local/`. The Python tools also apply the crawl4ai and
 browser settings on their own, so runs still use the project folder if you forget it. Only uv's own
 small program (`~/.local/bin/uv`) stays on the main drive.
+
+## Dashboard
+
+```bash
+uv run python -m dashboard --open        # http://localhost:8050
+```
+
+- **World News:** headlines newest first with NEW and tech badges; filters for period, country/group, source,
+  tech only, new in the last run, and search. Side panels show headlines per day, per country, top sources,
+  **source health** (which sites failed, and how many runs in a row) and recent runs.
+- **Tech Intel:** discovered domains latest first, with status, category, score, registration date and source;
+  filters for period, status, category, source and search. **Click a row** for the full profile: tech stack,
+  signals, key pages, changes and check history. Side panels show per-day discoveries, categories, tech stack,
+  sources, recent changes and the pipeline's last runs.
+- Website links open in a new tab. Optional auto-refresh every minute.
+- The databases are opened only for each query, so the dashboard never blocks a collection run. While a run
+  is writing, it shows the last loaded data with a notice.
+- It listens on `127.0.0.1` (this computer only). Use `--port` to change the port.
+
+## Testing everything
+
+```bash
+source env.sh                                        # each new Terminal window
+
+uv run pytest                                        # automated tests (no internet needed)
+
+uv run python -m worldnews check                     # 1. test every news source (3 headlines each)
+uv run python -m worldnews run                       # 2. collect the latest 10 per source into the database
+uv run python -m techintel run --limit 30            # 3. discover, qualify, enrich and profile tech sites
+uv run python -m warehouse info                      # 4. check the databases filled up
+uv run python -m dashboard --open                    # 5. look at it all in the browser
+```
+
+Steps 2 and 3 can run in two Terminal windows at the same time: each tool has its own database. Leave the
+dashboard running and press **Refresh** (or turn on auto-refresh) to see new data as runs finish.
 
 ## Database (DuckDB)
 
@@ -95,6 +132,7 @@ pyproject.toml           dependencies (crawl4ai version pinned here)
 env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               DuckDB helpers and the `python -m warehouse` query tool
+dashboard/               local web dashboard (python -m dashboard)
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)
 scrapers/
