@@ -21,7 +21,21 @@ LOCAL_ENV = {
 }
 
 
+def browsers_on_system_drive() -> bool:
+    """BROWSERS_ON_SYSTEM_DRIVE=1 in automation.conf (for drives without symbolic links, e.g. exFAT)."""
+    import re
+    try:
+        text = (REPO_ROOT / "automation.conf").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return bool(re.search(r'^\s*BROWSERS_ON_SYSTEM_DRIVE="?1"?(\s|#|$)', text, re.M))
+
+
 def apply_local_env() -> None:
+    if browsers_on_system_drive() and not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        import platform
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(
+            Path.home() / ("Library/Caches/ms-playwright" if platform.system() == "Darwin" else ".cache/ms-playwright"))
     for name, path in LOCAL_ENV.items():
         if not os.environ.get(name):
             os.environ[name] = str(path)

@@ -13,6 +13,12 @@ export PROJECT_LOCAL_DIR="$PROJECT_DIR/.local"
 export UV_CACHE_DIR="$PROJECT_LOCAL_DIR/uv-cache"                 # downloaded packages
 export UV_PYTHON_INSTALL_DIR="$PROJECT_LOCAL_DIR/python"          # Python, if uv needs to download one
 export PLAYWRIGHT_BROWSERS_PATH="$PROJECT_LOCAL_DIR/ms-playwright" # Chromium for crawl4ai
+# Drives without symbolic links (exFAT/FAT) can't hold Chromium on macOS: BROWSERS_ON_SYSTEM_DRIVE=1 in
+# automation.conf keeps only the browser in the usual place on the system drive.
+if grep -qE '^[[:space:]]*BROWSERS_ON_SYSTEM_DRIVE="?1"?([[:space:]]|#|$)' "$PROJECT_DIR/automation.conf" 2>/dev/null; then
+  if [ "$(uname -s)" = "Darwin" ]; then export PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"
+  else export PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"; fi
+fi
 export CRAWL4_AI_BASE_DIRECTORY="$PROJECT_LOCAL_DIR/crawl4ai"      # crawl4ai cache and settings
 export TLDEXTRACT_CACHE="$PROJECT_LOCAL_DIR/tldextract"
 export CRAWL4AI_NO_CLOUD_NOTICE=1

@@ -158,18 +158,50 @@ async def scrape_site(crawler: AsyncWebCrawler, site: dict, limit: int, save_htm
     return report
 
 
-async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool) -> list[dict]:
+async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool, stealth: bool = True) -> list[dict]:
     reports = []
-    browser = BrowserConfig(headless=True, enable_stealth=True)
-    async with AsyncWebCrawler(config=browser) as crawler:
+    browser = BrowserConfig(headless=True, enable_stealth=stealth)
+    crawler = AsyncWebCrawler(config=browser)
+    await crawler.__aenter__()
+    try:
         for site in sites:
-            report = await scrape_site(crawler, site, limit or site.get("limit", 10), save_html)
+            n = limit or site.get("limit", 10)
+            try:
+                report = await scrape_site(crawler, site, n, save_html)
+                died = not report["success"] and _browser_died(report.get("error"))
+            except Exception as e:  # noqa: BLE001
+                if not _browser_died(str(e)):
+                    raise
+                died = True
+            if died:                                  # Chromium crashed: start a fresh one and retry this site
+                logger.warning("%s: browser closed unexpectedly; restarting it and retrying", site["name"])
+                try:
+                    await crawler.__aexit__(None, None, None)
+                except Exception:  # noqa: BLE001
+                    pass
+                crawler = AsyncWebCrawler(config=browser)
+                await crawler.__aenter__()
+                try:
+                    report = await scrape_site(crawler, site, n, save_html)
+                except Exception as e:  # noqa: BLE001
+                    report = {"site": site["name"], "source_url": site["url"], "success": False, "count": 0,
+                              "ads": [], "error": f"{e} (run: uv run python doctor.py)"[:400]}
             path = save_json(report, site["output_file"])
             logger.info("Saved %s", path)
             if not quiet:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             reports.append(report)
+    finally:
+        try:
+            await crawler.__aexit__(None, None, None)
+        except Exception:  # noqa: BLE001
+            pass
     return reports
+
+
+def _browser_died(error: str | None) -> bool:
+    low = (error or "").lower()
+    return any(s in low for s in ("has been closed", "target closed", "browser closed", "browser has disconnected"))
 
 
 def main() -> None:
@@ -180,6 +212,7 @@ def main() -> None:
     parser.add_argument("--save-html", action="store_true", help="Also save each page to output/html_dumps/.")
     parser.add_argument("--quiet", action="store_true", help="Don't print the JSON, only save it.")
     parser.add_argument("--list", action="store_true", help="List configured sites and exit.")
+    parser.add_argument("--no-stealth", action="store_true", help="Don't use crawl4ai's stealth browser settings.")
     args = parser.parse_args()
 
     sites = load_config("vehicle_sites.json")
@@ -196,7 +229,7 @@ def main() -> None:
     else:
         sites = [s for s in sites if s.get("enabled", True)]
 
-    reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet))
+    reports = asyncio.run(run(sites, args.limit, args.save_html, args.quiet, stealth=not args.no_stealth))
     total = sum(r.get("count", 0) for r in reports)
     logger.info("Done: %d ads from %d site(s): %s", total, len(reports),
                 ", ".join(f"{r['site']} {r.get('count', 0)}" for r in reports))

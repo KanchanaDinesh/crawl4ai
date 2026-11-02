@@ -308,3 +308,25 @@ uv run crawl4ai-setup        # in case the new version needs a newer browser
 ```
 
 Check the [release notes](https://github.com/unclecode/crawl4ai/releases) for breaking changes first.
+
+## Troubleshooting: "browser has been closed"
+
+If a browser-based step (vehicles, tech intel profiling, the news browser fallback) fails with
+`Target page, context or browser has been closed`, run the health check:
+
+```bash
+source env.sh
+uv run python doctor.py
+```
+
+It checks that Chromium starts (with and without stealth mode) and that the drive holding it supports
+symbolic links, then tells you the fix. The usual ones are below.
+
+- **External drive is exFAT/FAT:** Chromium on macOS can't run from it. Set `BROWSERS_ON_SYSTEM_DRIVE=1` in
+  `automation.conf`, then run `source env.sh && uv run crawl4ai-setup`. Only the browser (about 500 MB) moves to
+  the Mac's own drive; data and databases stay where they are.
+- **Broken or mismatched browser:** run
+  `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
+- **Only stealth mode fails:** set `VEHICLES_ARGS="--limit 20 --no-stealth"`.
+
+The scrapers also restart a crashed browser and retry once by themselves.

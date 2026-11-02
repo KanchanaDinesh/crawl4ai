@@ -43,6 +43,8 @@ ERROR_PATTERNS = (
     (("connection reset", "server disconnected", "err_connection_reset", "err_empty_response"), "connection dropped"),
     (("robots",), "robots.txt disallows crawling"),
     (("anti-bot", "captcha", "cloudflare"), "possible bot protection"),
+    (("has been closed", "target closed", "browser closed", "browser has disconnected"),
+     "browser closed unexpectedly (run: uv run python doctor.py)"),
 )
 
 
@@ -60,6 +62,15 @@ def friendly_error(error: str | None) -> str | None:
     return error.strip().splitlines()[0][:160]
 
 
+BROWSER_GONE = ("has been closed", "target closed", "browser closed", "browser has disconnected",
+                "connection closed", "browser.new_context", "context or browser")
+
+
+def browser_died(error: str | None) -> bool:
+    low = (error or "").lower()
+    return any(s in low for s in BROWSER_GONE)
+
+
 class Fetcher:
     """Async context manager: `async with Fetcher(settings.section("crawl"), "http") as f: ...`"""
 
@@ -75,8 +86,15 @@ class Fetcher:
         self._crawler: AsyncWebCrawler | None = None
         self._host_next: dict[str, float] = {}       # politeness: earliest next request time per host
         self._host_lock = asyncio.Lock()
+        self._restart_lock = asyncio.Lock()
+        self._generation = 0                          # bumped each time the browser is restarted
+        self.restarts = 0
 
     async def __aenter__(self) -> "Fetcher":
+        await self._start()
+        return self
+
+    async def _start(self) -> None:
         user_agent = self.config.get("user_agent")
         browser_config = BrowserConfig(headless=True, verbose=False,
                                        **({"user_agent": user_agent} if user_agent else {}))
@@ -87,7 +105,20 @@ class Fetcher:
         else:
             self._crawler = AsyncWebCrawler(config=browser_config)
         await self._crawler.__aenter__()
-        return self
+
+    async def _restart(self, seen_generation: int) -> None:
+        """Replace a browser that died. Several pages may notice at once: only the first restarts it."""
+        async with self._restart_lock:
+            if self._generation != seen_generation:
+                return
+            logger.warning("browser closed unexpectedly; restarting it (restart %d)", self.restarts + 1)
+            try:
+                await self._crawler.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001  it's already gone
+                pass
+            await self._start()
+            self._generation += 1
+            self.restarts += 1
 
     async def __aexit__(self, *exc) -> None:
         if self._crawler:
@@ -117,12 +148,21 @@ class Fetcher:
 
     async def fetch(self, url: str) -> FetchResult:
         await self._wait_for_host(url)
-        async with self._semaphore:
-            try:
-                result = await self._crawler.arun(url=url, config=self._run_config())
-            except Exception as e:  # network errors, timeouts, browser crashes
-                logger.debug("fetch %s failed: %s", url, e)
-                return FetchResult(url=url, mode=self.mode, success=False, error=friendly_error(str(e)))
+        for attempt in (1, 2):                       # one retry if the browser itself died
+            generation = self._generation
+            async with self._semaphore:
+                try:
+                    result = await self._crawler.arun(url=url, config=self._run_config())
+                    error = None if result.success else result.error_message
+                except Exception as e:  # network errors, timeouts, browser crashes
+                    logger.debug("fetch %s failed: %s", url, e)
+                    result, error = None, str(e)
+            if attempt == 1 and self.mode == "browser" and browser_died(error) and self.restarts < 3:
+                await self._restart(generation)
+                continue
+            break
+        if result is None:
+            return FetchResult(url=url, mode=self.mode, success=False, error=friendly_error(error))
 
         markdown = ""
         if result.markdown is not None:
