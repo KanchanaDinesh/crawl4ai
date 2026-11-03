@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 92 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 96 tests pass.
 
 ## Parts and how to run them
 
@@ -183,6 +183,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       photos load (no referrer sent).
     - index.html links app.js/style.css with ?v=<mtime>, so browsers don't mix old and new files after an update.
     - Ideas: an "Overview" tab with the highlights of all four; alerts (price drop on a watched model, big market move).
+29. Telegram channel planning (no code): plan + 7 post mockups on a Design canvas
+    (claude.ai/artifact/S9QJz8ddc5jZtgQeAvGd23), business plan PDF (output/business-plan/), "Insight Engine" plan
+    (claude.ai/artifact/6GRP8v7TvjYLTtGyUxLgLf): publish our own analysis, never sources' raw data; daily/weekly/monthly
+    summaries; wealth-building lessons; quotes only verified and public domain; astrology only as labelled culture content.
+    Ideas agreed but not built: cost-of-living index from CBSL price reports + inflation + fuel/gas.
+30. `briefing` module (2026-11-03): `python -m briefing run` makes the day's summary text, facts JSON and a 30-second
+    vertical video (Pillow + ffmpeg) in output/briefing/, offline, in about 7 seconds. Step `briefing` is last in the
+    default STEPS. Built-in check: a day's change over 10x the typical daily move is held back (USD/LKR +3.1% was 18x,
+    a gap in Yahoo's history; Brent's real -11% was 5.8x). Markets now save 6 months of daily closes.
+    - Next: channel name/link via BRIEFING_ARGS; a Telegram bot to post it (after the legal checks in the business plan).
 
 ## Open issues and things to watch
 

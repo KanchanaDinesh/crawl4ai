@@ -13,6 +13,8 @@ The parts:
   with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
 - **`vehicles/`**: the latest ads from ikman.lk and riyasewana.com, with new-ad and price-change history.
   See [vehicles/README.md](vehicles/README.md). Quick start: `uv run python -m vehicles run`.
+- **`briefing/`**: the day's text summary and a 30-second video made from all the data, offline (no AI, no tokens).
+  See [briefing/README.md](briefing/README.md). Quick start: `uv run python -m briefing run`.
 - **`dashboard/`**: a local web dashboard for World News, Tech Intel, Markets and Vehicles, reading live from the databases.
   `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
 
@@ -59,7 +61,7 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 
 **Steps:** `markets`, `news`, `tech_collect` (find and store new tech sites, fast, no browser), `tech_update`
 (profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
-registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`. **Profiles** group steps that run at
+registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`, `briefing` (summary + video, last). **Profiles** group steps that run at
 the same speed; they're defined in `automation.conf`.
 
 ### Recommended schedule
