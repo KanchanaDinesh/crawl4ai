@@ -205,6 +205,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       count and employees; a filter (has social links / LinkedIn / names its people / gives employees); KPIs and a
       "Social accounts" chart; a Company section in each site's details (people, contacts, GitHub, all accounts).
       Works with older databases that have no companies table yet.
+    - Kanchana saw "rejected 780" but only ~14 rows: the site list is a scroll box showing ~14 of the first 100 loaded.
+      Counts now say "780 · showing 100", and the Tech Intel list loads the next 100 when scrolled to the bottom.
 
 ## Open issues and things to watch
 

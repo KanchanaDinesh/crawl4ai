@@ -6,6 +6,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad = (n) => String(n).padStart(2, "0");
 const PAGE = 100;
+// "780 · showing 100": lists load PAGE rows at a time, so say how many of the total are on the page
+const shown = (total, n, rest) => `${fmtNum(total)}${n < total ? ` · showing ${fmtNum(n)}` : ""} · ${rest}`;
 
 function fmtTime(iso) {
   if (!iso) return "";
@@ -229,7 +231,7 @@ async function loadNewsItems(reset) {
     topic: news.topic, new: news.new ? 1 : "", q: news.q, limit: PAGE, offset: news.offset });
   if (ticket !== newsReq) return;
   const d = res.data || { total: 0, items: [] };
-  $("news-count").textContent = `${fmtNum(d.total)} · newest first`;
+  $("news-count").textContent = shown(d.total, news.offset + d.items.length, "newest first");
   const html = d.items.map((i) => {
     const when = i.published_at || i.first_seen_at;
     return `<div class="news-item">
@@ -349,7 +351,8 @@ async function loadTechRows(reset) {
   if (reset) { tech.offset = 0; tech.rows = []; }
   const d = res.data || { total: 0, items: [] };
   tech.rows = tech.rows.concat(d.items);
-  $("tech-count").textContent = `${fmtNum(d.total)} · click a row for details`;
+  $("tech-count").textContent = shown(d.total, tech.rows.length,
+    tech.rows.length < d.total ? "scroll the list for more · click a row for details" : "click a row for details");
   const maxScore = Math.max(1, ...tech.rows.map((r) => r.score || 0));
   $("tech-table").innerHTML = tech.rows.length ? `<table class="dense"><thead><tr><th>#</th><th>Seen</th><th>Site</th><th>Status</th>
     <th>Category</th><th class="num">Score</th><th>Domain age</th><th>Company</th><th>Source</th></tr></thead><tbody>${tech.rows.map((r, n) => {
@@ -437,6 +440,15 @@ $("tech-source").addEventListener("change", (e) => { tech.source = e.target.valu
 $("tech-company").addEventListener("change", (e) => { tech.company = e.target.value; loadTechRows(true); });
 $("tech-q").addEventListener("input", debounce((e) => { tech.q = e.target.value.trim(); loadTechRows(true); }));
 $("tech-more").addEventListener("click", () => loadTechRows(false));
+// The site list scrolls inside its own box: load the next PAGE by itself near the bottom, so 780 sites
+// don't look like the 14 that fit in the box
+let techLoading = false;
+$("tech-table").addEventListener("scroll", async (e) => {
+  const t = e.target;
+  if (techLoading || $("tech-more").hidden || t.scrollTop + t.clientHeight < t.scrollHeight - 300) return;
+  techLoading = true;
+  try { await loadTechRows(false); } finally { techLoading = false; }
+});
 $("tech-table").addEventListener("click", (e) => {
   if (e.target.closest("a")) return;                     // website links open in a new tab, not the panel
   const tr = e.target.closest("tr[data-domain]"); if (tr) openDomain(tr.dataset.domain);
@@ -763,7 +775,7 @@ async function loadVehicleAds(reset) {
   const res = await api("/api/vehicles/ads", { days: vh.days, site: vh.site, q: vh.q, new: vh.new ? 1 : "", limit: PAGE, offset });
   if (ticket !== vhReq) return;
   const d = res.data || { total: 0, items: [] };
-  $("vh-count").textContent = `${fmtNum(d.total)} · newest first`;
+  $("vh-count").textContent = shown(d.total, offset + d.items.length, "newest first");
   const html = d.items.map((a) => {
     const drop = a.previous_price_lkr && a.price_lkr !== null && a.price_lkr !== a.previous_price_lkr;
     const meta = [a.location, a.year, a.mileage].filter(Boolean).join(" · ");
