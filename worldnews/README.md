@@ -108,7 +108,9 @@ Only headlines, summaries, dates and links are stored, not full article text.
 | `fetch` | Concurrency, timeout, user agent, browser fallback, opening article pages for dates, time limits: `article_meta_max_seconds` (30) for reading article dates, `source_max_seconds` (90) per source, so one slow site can't hold up the run |
 
 The user agent is honest (`worldnews-reader/1.0 …`), never a browser's. Sites whose robots.txt only lets
-named crawlers in (Reuters, news.com.au) are switched off rather than worked around.
+named crawlers in (Reuters, news.com.au) are switched off rather than worked around. A site that refuses
+us (HTTP 401/403/429) is never retried in the browser, and sources that keep refusing are switched off
+(AP News, The Verge, Toronto Star, VentureBeat, Washington Post, CBC News; see `disabled_because`).
 | `homepage` | Rules for picking article links out of homepages |
 | `tech_keywords` | Words that mark a headline as technology |
 | `topic_keywords` | Words that mark a headline as `crypto` or `markets` (shown as badges, filterable in the dashboard) |

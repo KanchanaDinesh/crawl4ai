@@ -5,8 +5,9 @@ For each source, methods are tried in this order until one gives headlines:
   2. selectors   site-specific CSS selectors, if the source has them
   3. discovered  feeds advertised on the homepage (<link rel="alternate" ...>), remembered for next time
   4. homepage    article links picked out of the homepage automatically
-Steps 2-4 read the homepage over plain HTTP; if that's blocked or finds too little,
-a real browser (crawl4ai) is used instead. For homepage headlines, each article page
+Steps 2-4 read the homepage over plain HTTP; if that finds too little (a JavaScript site),
+a real browser (crawl4ai) is used instead. Not when the site refused us (HTTP 401/403/429):
+that's respected, never worked around. For homepage headlines, each article page
 is opened to read its publish date and summary, so the newest can be put first.
 
 Time limits keep one slow site from holding up the whole run: reading article dates stops after
@@ -27,6 +28,14 @@ from .store import NewsStore
 from .tagging import TopicTagger
 
 logger = logging.getLogger(__name__)
+
+
+REFUSED = ("HTTP 401", "HTTP 403", "HTTP 429")
+
+
+def refused(error: str | None) -> bool:
+    """The site said no to us. Then we back off instead of trying again in a browser."""
+    return bool(error) and error.startswith(REFUSED)
 
 
 def utc_now() -> str:
@@ -134,6 +143,9 @@ async def collect_source(ctx: Context, source: dict, limit: int) -> dict:
         for attempt in ("http", "browser"):
             if attempt == "browser":
                 if not ctx.use_browser or not ctx.fetch_cfg.get("browser_fallback", True) or home_err == "robots.txt disallows the homepage":
+                    break
+                if refused(home_err):
+                    home_err += " (the site refuses us; not worked around)"
                     break
                 html, home_err = await ctx.browser_html(home)
             if not html:

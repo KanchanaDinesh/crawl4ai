@@ -258,3 +258,31 @@ def test_the_user_agent_is_honest_and_blocked_sources_are_off():
     assert "Mozilla" not in ua and "Chrome" not in ua and "Safari" not in ua
     off = {s["name"]: s for s in settings.load_sources() if s.get("enabled") is False}
     assert {"Reuters", "news.com.au", "USA Today"} <= set(off) and all(s.get("disabled_because") for s in off.values())
+
+
+def test_a_refusing_site_is_not_opened_in_the_browser(news_env, monkeypatch):
+    """403/429 means "no": back off, never retry in a browser (project rule)."""
+    from worldnews import collect, http
+    settings = load_settings(news_env)
+    opened = []
+
+    async def browser_html(self, url):
+        opened.append(url)
+        return "<html></html>", None
+
+    async def refuse(self, url):
+        return http.Response(url=url, ok=False, status=403, error="HTTP 403")
+
+    async def allowed(self, url):
+        return True
+    monkeypatch.setattr(collect.Context, "browser_html", browser_html)
+    monkeypatch.setattr(http.Http, "get", refuse)
+    monkeypatch.setattr(http.Http, "allowed", allowed)
+    sources = [{"name": "Refuser", "group": "US", "homepage": "https://refuser.example/", "feeds": []}]
+    store = NewsStore(settings.data_dir)
+    try:
+        snap = asyncio.run(run_collection(settings, store, sources, 5))
+    finally:
+        store.close()
+    result = snap["sources"][0]
+    assert opened == [] and result["status"] == "failed" and "refuses us" in result["error"]

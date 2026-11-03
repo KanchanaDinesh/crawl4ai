@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 84 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 85 tests pass.
 
 ## Parts and how to run them
 
@@ -142,14 +142,13 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Switched off (`"enabled": false` + `disabled_because`): Reuters and news.com.au (robots.txt lets only named
       crawlers in), USA Today (feed gone, HTTP 402; homepage gives nothing).
     - Time limits: 30s for article dates, 90s per source. A run went from 157s to 90s (Washington Post alone took 157s).
-    - Result here: 76 of 77 sources OK. CBC News hit the 90s limit.
+    - Kanchana chose to switch off the 6 sources that refuse our honest user agent: AP News, The Verge, Toronto Star
+      (403), VentureBeat (429), Washington Post and CBC (drop the connection). The browser fallback is never used
+      after 401/403/429.
+    - **Result: 71 of 71 sources OK in 25s** (was 72 of 80 in 157s+). World news is done; next: tech intel collect.
 
 ## Open issues and things to watch
 
-- **World news: 6 sources refuse our honest user agent** (2026-11-03): AP News, The Verge, Toronto Star (403),
-  VentureBeat (429), Washington Post and CBC (drop the connection). They still work only because the browser
-  fallback then opens them. That's getting around a refusal, against the project rule. **Waiting for Kanchana's
-  decision:** switch them off (and stop the browser fallback after 401/403/429), or keep them.
 
 - **Browser crashes in tech intel (2026-11-03), cause not known yet.** In Kanchana's `./run_all.sh` at 05:11 the
   browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the
