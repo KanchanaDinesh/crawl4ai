@@ -1,4 +1,7 @@
-"""Plain HTTP fetching (aiohttp) with browser-like headers and robots.txt checks.
+"""Plain HTTP fetching (aiohttp) with an honest user agent and robots.txt checks.
+
+The user agent says what we are (settings.json → fetch.user_agent), never a browser's: sites
+that only let named crawlers in are left out instead (see "enabled": false in sources.json).
 
 Feeds are meant to be consumed by programs, so they're fetched directly.
 Homepages and article pages are only fetched if the site's robots.txt allows it.
@@ -13,6 +16,7 @@ from urllib.parse import urlsplit
 import aiohttp
 
 logger = logging.getLogger(__name__)
+DEFAULT_USER_AGENT = "worldnews-reader/1.0 (personal news reader; https://github.com/KanchanaDinesh/crawl4ai)"
 
 
 @dataclass
@@ -30,7 +34,7 @@ class Http:
 
     def __init__(self, config: dict):
         self.config = config
-        self.user_agent = config.get("user_agent") or "Mozilla/5.0"
+        self.user_agent = config.get("user_agent") or DEFAULT_USER_AGENT
         self._timeout = aiohttp.ClientTimeout(total=float(config.get("timeout_seconds", 25)))
         self._semaphore = asyncio.Semaphore(int(config.get("concurrency", 8)))
         self._robots: dict[str, robotparser.RobotFileParser | None] = {}

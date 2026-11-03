@@ -8,6 +8,10 @@ For each source, methods are tried in this order until one gives headlines:
 Steps 2-4 read the homepage over plain HTTP; if that's blocked or finds too little,
 a real browser (crawl4ai) is used instead. For homepage headlines, each article page
 is opened to read its publish date and summary, so the newest can be put first.
+
+Time limits keep one slow site from holding up the whole run: reading article dates stops after
+fetch.article_meta_max_seconds (the headlines are kept, some without a date), and a source gets at
+most fetch.source_max_seconds in total.
 """
 
 import asyncio
@@ -92,7 +96,12 @@ async def _add_article_meta(ctx: Context, items: list[dict]) -> None:
                 item["published_at"] = item.get("published_at") or meta["published_at"]
                 item["summary"] = item.get("summary") or meta["summary"]
                 item["image"] = item.get("image") or meta["image"]
-    await asyncio.gather(*(one(i) for i in items))
+    try:   # items are filled in place, so whatever finished in time is kept
+        await asyncio.wait_for(asyncio.gather(*(one(i) for i in items)),
+                               float(ctx.fetch_cfg.get("article_meta_max_seconds", 30)))
+    except asyncio.TimeoutError:
+        logger.debug("article dates: stopped after the time limit; %d of %d have a date",
+                     sum(bool(i.get("published_at")) for i in items), len(items))
 
 
 async def collect_source(ctx: Context, source: dict, limit: int) -> dict:
@@ -184,9 +193,15 @@ async def run_collection(settings, store: NewsStore, sources: list[dict], limit:
                       fetch_cfg=settings.section("fetch"), home_cfg=settings.section("homepage"),
                       feed_cache=cache, stack=stack, article_meta=article_meta, use_browser=use_browser)
 
+        max_seconds = float(ctx.fetch_cfg.get("source_max_seconds", 90))
+
         async def safe(source):
             try:
-                return await collect_source(ctx, source, int(source.get("limit") or limit))
+                return await asyncio.wait_for(collect_source(ctx, source, int(source.get("limit") or limit)), max_seconds)
+            except asyncio.TimeoutError:
+                return {"name": source["name"], "group": source.get("group"), "homepage": source["homepage"],
+                        "status": "failed", "via": None, "error": f"gave up after {max_seconds:.0f}s (too slow)",
+                        "items": []}
             except Exception as e:   # one broken source must not stop the others
                 logger.exception("source %s crashed", source["name"])
                 return {"name": source["name"], "group": source.get("group"), "homepage": source["homepage"],

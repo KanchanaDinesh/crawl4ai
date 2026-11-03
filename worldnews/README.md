@@ -54,7 +54,7 @@ Or edit `worldnews/config/sources.json` directly. Each entry looks like this:
 | `feeds` | Optional RSS/Atom feed URLs. The most reliable way to get headlines with dates |
 | `selectors` | Optional CSS selectors `{"base", "title", "link"}` for sites without feeds where automatic detection picks the wrong links |
 | `limit` | Optional: a different number of headlines for this source |
-| `enabled` | Set `false` to switch a source off without deleting it |
+| `enabled` | Set `false` to switch a source off without deleting it (add `disabled_because` to say why) |
 
 ## How each site is read
 
@@ -105,7 +105,10 @@ Only headlines, summaries, dates and links are stored, not full article text.
 |---|---|
 | `limit_per_source` | Headlines per source (default 10; `--limit` overrides it) |
 | `groups` | Group codes, names and **priority order** in the report |
-| `fetch` | Concurrency, timeout, user agent, browser fallback, opening article pages for dates |
+| `fetch` | Concurrency, timeout, user agent, browser fallback, opening article pages for dates, time limits: `article_meta_max_seconds` (30) for reading article dates, `source_max_seconds` (90) per source, so one slow site can't hold up the run |
+
+The user agent is honest (`worldnews-reader/1.0 …`), never a browser's. Sites whose robots.txt only lets
+named crawlers in (Reuters, news.com.au) are switched off rather than worked around.
 | `homepage` | Rules for picking article links out of homepages |
 | `tech_keywords` | Words that mark a headline as technology |
 | `topic_keywords` | Words that mark a headline as `crypto` or `markets` (shown as badges, filterable in the dashboard) |

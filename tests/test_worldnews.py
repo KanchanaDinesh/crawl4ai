@@ -223,3 +223,38 @@ def test_topic_tagging_crypto_and_markets():
     plain = {"title": "Rain expected in Colombo", "summary": "Heavy showers"}
     tagger.tag(plain, "LK")
     assert plain["topics"] == []
+
+
+def test_a_slow_source_is_given_up_and_the_rest_still_collected(news_env, monkeypatch):
+    """One slow site (the Washington Post once took 157s) must not hold up the whole run."""
+    from worldnews import collect
+    settings = load_settings(news_env)
+    settings.section("fetch")["source_max_seconds"] = 0.3
+    real = collect.collect_source
+
+    async def maybe_slow(ctx, source, limit):
+        if source["name"] == "Slow":
+            await asyncio.sleep(30)
+        return await real(ctx, source, limit)
+    monkeypatch.setattr(collect, "collect_source", maybe_slow)
+    fast = Site({"/": "<html>home</html>"})
+    fast.pages["/rss.xml"] = rss([("Feed story about the budget today", f"http://{fast.domain}/a", NOW)])
+    sources = [{"name": "Slow", "group": "US", "homepage": "http://127.0.0.1:9/", "feeds": []},
+               {"name": "Fast", "group": "US", "homepage": f"http://{fast.domain}/", "feeds": [f"http://{fast.domain}/rss.xml"]}]
+    store = NewsStore(settings.data_dir)
+    try:
+        snap = asyncio.run(asyncio.wait_for(run_collection(settings, store, sources, 5, use_browser=False), 20))
+    finally:
+        store.close()
+        fast.server.shutdown()
+    by_name = {s["name"]: s for s in snap["sources"]}
+    assert by_name["Slow"]["status"] == "failed" and "gave up after" in by_name["Slow"]["error"]
+    assert by_name["Fast"]["status"] == "ok"
+
+
+def test_the_user_agent_is_honest_and_blocked_sources_are_off():
+    settings = load_settings()
+    ua = settings.section("fetch")["user_agent"]
+    assert "Mozilla" not in ua and "Chrome" not in ua and "Safari" not in ua
+    off = {s["name"]: s for s in settings.load_sources() if s.get("enabled") is False}
+    assert {"Reuters", "news.com.au", "USA Today"} <= set(off) and all(s.get("disabled_because") for s in off.values())

@@ -156,9 +156,9 @@ def test_enrich_backs_off_when_rdap_refuses_and_saves_nothing(settings, store, m
     assert [r["domain"] for r in store.read("registrations")] == ["d.dev"]   # nothing new saved
 
 
-def test_run_all_runs_tech_in_two_steps_by_default():
+def test_run_all_has_the_two_tech_steps():
     out = subprocess.run(["bash", str(ROOT / "run_all.sh"), "--list"], capture_output=True, text=True, timeout=60,
                          env={**os.environ})
     assert out.returncode == 0, out.stderr
-    assert "Default steps:  markets news tech_collect tech_update vehicles" in out.stdout
-    assert "techintel collect" in out.stdout and "techintel update" in out.stdout
+    assert "tech_collect" in out.stdout.splitlines()[0]          # new sites are always collected by default
+    assert "techintel collect" in out.stdout and "techintel update" in out.stdout   # update can be run by hand

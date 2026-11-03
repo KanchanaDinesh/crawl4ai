@@ -17,10 +17,12 @@
   "fetch": {
     "concurrency": 8,
     "timeout_seconds": 25,
-    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "user_agent": "worldnews-reader/1.0 (personal news reader; https://github.com/KanchanaDinesh/crawl4ai)",
     "browser_fallback": true,
     "fetch_article_meta": true,
-    "article_meta_concurrency": 6
+    "article_meta_concurrency": 6,
+    "article_meta_max_seconds": 30,
+    "source_max_seconds": 90
   },
 
   "homepage": {
