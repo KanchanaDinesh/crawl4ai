@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 78 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 79 tests pass.
 
 ## Parts and how to run them
 
@@ -135,7 +135,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
   browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the
   run then hung. The same fetcher worked fine from Claude's shell on vercel.com, ietf.org and astral.sh.
   - Now (item 21): crashes aren't saved, the stage stops after 3 restarts, and the log line
-    `Chromium said: ...` shows the real reason. Next: Kanchana runs `./run_all.sh tech_update` and sends that line.
+    `Chromium said: ...` shows the real reason. First report (2026-11-03) only had crawl4ai's wrapper line, so the
+    first crash now also logs "full browser error (first crash only)". Next: Kanchana sends that block.
   - Also seen: rdap.org answered 403 to every registration lookup. Enrich now backs off; if it keeps refusing,
     consider querying the registries' own RDAP servers (IANA bootstrap file) instead of rdap.org.
 

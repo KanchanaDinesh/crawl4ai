@@ -63,6 +63,14 @@ def test_a_browser_that_keeps_crashing_is_given_up_with_chromiums_reason(monkeyp
     assert crawler.calls == 5                          # first browser + 2 restarts crashed, then nothing is tried
     assert results[-1].error.startswith("not tried: the browser crashed")
     assert "Chromium said: [1103/033823.392296:FATAL" in caplog.text
+    assert caplog.text.count("full browser error (first crash only)") == 1
+
+
+def test_the_reason_names_what_failed_not_just_crawl4ais_wrapper():
+    from techintel.fetch import chromium_reason
+    error = ("Unexpected error in _crawl_web at line 636 in wrap_api_call (.venv/.../_connection.py):\n"
+             "Error: Page.goto: Target page, context or browser has been closed\nCode context:\n 631  )")
+    assert chromium_reason(error) == "Error: Page.goto: Target page, context or browser has been closed"
 
 
 def test_a_hanging_page_hits_the_hard_time_limit(monkeypatch):

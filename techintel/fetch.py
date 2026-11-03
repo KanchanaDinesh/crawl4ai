@@ -82,8 +82,17 @@ def chromium_reason(error: str | None) -> str:
     """The lines of crawl4ai's long error that say why Chromium died (its own log is inside the error)."""
     lines = [ln.strip() for ln in (error or "").splitlines() if ln.strip()]
     why = [ln for ln in lines if any(w in ln.lower() for w in CHROMIUM_WHY) and "<launching>" not in ln]
-    picked = why[-3:] or lines[:1]
+    # crawl4ai's first line is only "Unexpected error in _crawl_web at line ...": the "Error:" line says what failed
+    errors = [ln for ln in lines if ln.startswith("Error:")]
+    picked = errors[:1] + why[-3:] or lines[:1]
     return " | ".join(ln[:200] for ln in picked) or "no message"
+
+
+def error_excerpt(error: str | None, max_lines: int = 30) -> str:
+    """The useful part of crawl4ai's long error (without the code listing), indented for the log."""
+    lines = [ln.rstrip() for ln in (error or "").splitlines() if ln.strip()]
+    code_at = next((i for i, ln in enumerate(lines) if ln.strip().startswith("Code context:")), len(lines))
+    return "\n".join("    " + ln[:240] for ln in lines[:code_at][:max_lines])
 
 
 class Fetcher:
@@ -140,7 +149,8 @@ class Fetcher:
                 return
             logger.warning("browser closed unexpectedly; restarting it (restart %d). Chromium said: %s",
                            self.restarts + 1, why)
-            logger.debug("full browser error: %s", error)
+            if self.restarts == 0:             # the whole message once per run: enough to find the cause
+                logger.warning("full browser error (first crash only):\n%s", error_excerpt(error))
             try:
                 await self._crawler.__aexit__(None, None, None)
             except Exception:  # noqa: BLE001  it's already gone
