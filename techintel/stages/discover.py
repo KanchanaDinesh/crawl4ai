@@ -33,8 +33,9 @@ async def run(settings, store, sources: list[str] | None = None, **options) -> d
         try:
             found = await available[name](ctx)
         except Exception as e:
-            logger.error("source %s failed: %s", name, e)
-            errors[name] = str(e)
+            why = str(e) or ("timed out" if isinstance(e, TimeoutError) else type(e).__name__)
+            logger.error("source %s failed: %s (the others still run; it's tried again next run)", name, why)
+            errors[name] = why
             continue
         kept = 0
         for cand in found:

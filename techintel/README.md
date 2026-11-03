@@ -56,8 +56,14 @@ site that's left, and `update` skips monitor. A page can take at most `crawl.fet
 (default: twice the page timeout + 30s), so a run can't hang. Results saved as "unreachable" by older
 versions during a crash are removed automatically.
 
-**When rdap.org refuses us** (401/403/429), enrich stops asking for the rest of that run and saves nothing
-for those domains, so they're looked up next time. It sends an honest user agent (`enrich.user_agent`).
+**Registration dates** come from each domain's own registry (IANA's public list says which). rdap.org, a
+redirect service, refused us after about a dozen lookups. A registry that refuses (401/403/429) isn't asked
+again that run, and its domains are looked up next time. TLDs without RDAP (.io, .co, .sh, .lk, ...) are
+recorded without a date and no request is made. An honest user agent is sent (`enrich.user_agent`).
+
+**Honest user agent:** the quick homepage check (qualify) says what it is (`crawl4ai-techintel/1.0 …`);
+left unset, crawl4ai would send a made-up Windows browser one. A site that refuses us (401/403/429/503)
+stays on "watch" and is never retried in the browser; the browser is only for pages that load empty.
 
 ## Running it often: `quick` and `watch`
 
@@ -137,7 +143,7 @@ suddenly finds nothing.
 |---|---|---|
 | `seeds` | Your own list in `config/seeds.txt` | nothing |
 | `hackernews` | "Show HN" launch posts from the last `lookback_hours` (free Algolia HN API) | internet |
-| `crtsh` | Certificate Transparency logs via crt.sh: certificates for names matching your `queries` (default `%.lk`) logged in the last `lookback_days` | internet; crt.sh is slow, keep queries narrow |
+| `crtsh` | Certificate Transparency logs via crt.sh: certificates for names matching your `queries` (default `%.lk`) logged in the last `lookback_days`. A `%.lk` query takes about 2 minutes, so it runs at most every `min_hours_between_runs` (6) and waits `retry_after_minutes` (60) after a failure; `discover --force` asks anyway | internet; crt.sh is slow and often overloaded (502), keep queries narrow |
 | `certstream` | **Real-time** stream of every new certificate worldwide, filtered by `domain_filter.match_tlds` / `match_keywords`. Off by default; run it with `--source certstream --minutes N` | a CertStream server (the public one is unreliable; self-host `certstream-server-go` for real use) |
 | `outlinks` | Unknown domains linked from sites you've already profiled ("snowball" discovery) | profiles |
 
@@ -152,7 +158,7 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 | `settings.json` → `domain_filter` | TLDs and name keywords that look interesting; platforms to ignore |
 | `settings.json` → `categories` | **The classifier:** keywords per category. Add categories or terms freely |
 | `settings.json` → `qualify` | `concurrency` and `timeout_ms` for the homepage check, `min_score`, `min_words`, parked and placeholder phrases, re-check intervals |
-| `settings.json` → `enrich` | Turn RDAP lookups on or off; timeout and politeness |
+| `settings.json` → `enrich` | Turn RDAP lookups on or off; timeout and politeness. Dates come straight from each registry, found in IANA's list (`rdap_bootstrap_url`, cached a week); a registry that refuses us is skipped for the rest of the run |
 | `settings.json` → `report` | Period, and how many sites and domains to list (`max_sites_listed`, `max_domains_listed`) |
 | `settings.json` → `profile` | Which key pages to look for, max pages per site, job-board hosts |
 | `settings.json` → `crawl` | Politeness: concurrency, delay between requests to the same site, robots.txt, user agent, `max_stage_minutes` (time limit per stage) |

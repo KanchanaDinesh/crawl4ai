@@ -261,5 +261,6 @@ def test_friendly_errors_and_content_beats_bot_flag(settings):
 
     dead = FetchResult(url="http://d.lk/", mode="http", success=False, error="domain does not resolve (no website yet)")
     assert not needs_browser(dead, 80)                                          # no pointless browser retry
-    assert needs_browser(FetchResult(url="u", mode="http", success=False, status=403), 80)
+    assert not needs_browser(FetchResult(url="u", mode="http", success=False, status=403), 80)   # a refusal: back off
+    assert not needs_browser(FetchResult(url="u", mode="http", success=False, status=429), 80)
     assert needs_browser(FetchResult(url="u", mode="http", success=True, status=200, html="<div id=app></div>"), 80)

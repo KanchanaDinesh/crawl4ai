@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 85 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 88 tests pass.
 
 ## Parts and how to run them
 
@@ -146,6 +146,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       (403), VentureBeat (429), Washington Post and CBC (drop the connection). The browser fallback is never used
       after 401/403/429.
     - **Result: 71 of 71 sources OK in 25s** (was 72 of 80 in 157s+). World news is done; next: tech intel collect.
+25. Tech intel collect reviewed stage by stage (run in a test folder, not the real database):
+    - qualify sent crawl4ai's made-up Windows browser user agent, and retried in the browser after 403/429/503.
+      Now an honest user agent, and the browser only for pages that load empty (JavaScript sites).
+    - crt.sh: a `%.lk` query takes ~110s (the 60s limit made it fail every run) and crt.sh often answers 502.
+      Now 150s, at most every 6h, and 60 min wait after a failure (state in data/techintel/crtsh_state.json).
+      Discover went from 1m02s to 1s when crt.sh isn't due.
+    - Registration dates: rdap.org refused after ~12 lookups (429). Now straight from each registry via IANA's
+      list: 50 of 55 got a date in 19s, none refused. A refusing registry is skipped for that run only.
+    - Hacker News showed an empty error on a timeout; errors now always say what happened.
+    - Next: markets, then vehicles.
 
 ## Open issues and things to watch
 
@@ -162,8 +172,6 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
   - **Fix tried (item 22):** every browser starts with `--in-process-gpu`, and doctor.py has a "graphics page"
     check, with and without the flag. **Not confirmed on the Mac yet:** Kanchana runs `uv run python doctor.py`
     and then `./run_all.sh tech_update`. If the graphics check still fails: CHROMIUM_ARGS in automation.conf.
-  - Also seen: rdap.org answered 403 to every registration lookup. Enrich now backs off; if it keeps refusing,
-    consider querying the registries' own RDAP servers (IANA bootstrap file) instead of rdap.org.
 
 - **Scheduling is on hold (Kanchana's choice, 2026-11-03); runs are by hand with `./run_all.sh`.** If it's
   wanted again: `./schedule.sh recommended` from Terminal, then

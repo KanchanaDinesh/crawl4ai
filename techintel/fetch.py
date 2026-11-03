@@ -22,6 +22,10 @@ from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
 
 import project_paths
 
+# Plain HTTP requests say what they are. Left unset, crawl4ai would send a made-up Windows browser
+# user agent, and the project never pretends to be a browser (sites that refuse us are left alone).
+HONEST_USER_AGENT = "crawl4ai-techintel/1.0 (personal research; https://github.com/KanchanaDinesh/crawl4ai)"
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,7 +131,7 @@ class Fetcher:
         browser_config = BrowserConfig(headless=True, verbose=False, extra_args=project_paths.chromium_args(),
                                        **({"user_agent": user_agent} if user_agent else {}))
         if self.mode == "http":
-            http_config = HTTPCrawlerConfig(headers={"User-Agent": user_agent} if user_agent else None)
+            http_config = HTTPCrawlerConfig(headers={"User-Agent": user_agent or HONEST_USER_AGENT})
             strategy = AsyncHTTPCrawlerStrategy(browser_config=http_config)
             self._crawler = AsyncWebCrawler(crawler_strategy=strategy, config=browser_config)
         else:

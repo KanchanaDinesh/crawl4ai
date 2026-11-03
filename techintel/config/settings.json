@@ -17,7 +17,9 @@
       "queries": ["%.lk"],
       "lookback_days": 3,
       "max_results_per_query": 500,
-      "timeout_seconds": 60
+      "timeout_seconds": 150,
+      "min_hours_between_runs": 6,
+      "retry_after_minutes": 60
     },
     "certstream": {
       "enabled": false,
@@ -113,6 +115,7 @@
 
   "enrich": {
     "rdap_enabled": true,
+    "rdap_bootstrap_url": "https://data.iana.org/rdap/dns.json",
     "rdap_url": "https://rdap.org/domain/{domain}",
     "timeout_seconds": 20,
     "concurrency": 3,

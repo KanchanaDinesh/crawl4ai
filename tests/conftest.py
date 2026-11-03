@@ -28,6 +28,7 @@ def settings(tmp_path, monkeypatch):
     raw["crawl"].update(delay_seconds=0, concurrency=4, page_timeout_ms=15000)
     raw["profile"]["fetch_mode"] = "http"           # no browser needed in tests
     raw["qualify"]["browser_fallback"] = False
+    raw["enrich"]["rdap_bootstrap_url"] = ""          # no internet in tests: use rdap_url (faked per test)
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
     (cfg_dir / "settings.json").write_text(json.dumps(raw))

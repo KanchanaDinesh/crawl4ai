@@ -77,17 +77,15 @@ def evaluate(cand: dict, result: FetchResult, classifier: RuleClassifier, domain
 
 
 def needs_browser(result: FetchResult, min_words: int) -> bool:
-    """Retry in a real browser only when it can help.
+    """Retry in a real browser only when the page loaded but is nearly empty (likely a JavaScript site).
 
-    Yes: the page loaded but is nearly empty (likely a JavaScript site), or the site
-    answered "forbidden / too many requests" (often a bot check a browser passes).
-    No: DNS failures, refused connections, timeouts, robots.txt: a browser won't fix those,
+    Never after "forbidden / too many requests / unavailable" (401/403/429/503): the site said no,
+    and the project backs off instead of getting past a bot check. Such sites stay on "watch".
+    Nor for DNS failures, refused connections, timeouts or robots.txt: a browser won't fix those,
     and new domains from certificate logs very often aren't live yet.
     """
-    if result.success:
+    if result.success and (result.status or 200) < 400:
         return parse_page(result.html, result.markdown).word_count < min_words
-    if result.status in (403, 429, 503):
-        return True
     return False
 
 

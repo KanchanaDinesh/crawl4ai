@@ -1,6 +1,6 @@
 """Command line: python -m techintel <stage> [options]
 
-    discover  [--source NAME ...] [--minutes N] [--seeds-file FILE]
+    discover  [--source NAME ...] [--minutes N] [--seeds-file FILE] [--force]
     qualify   [--limit N] [--recheck] [--domain D ...]
     enrich    [--limit N] [--domain D ...]      registration dates (RDAP)
     profile   [--limit N] [--domain D ...]
@@ -105,6 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="seeds | hackernews | crtsh | certstream | outlinks (repeatable; default: enabled ones)")
     d.add_argument("--minutes", type=float, help="How long to listen (certstream)")
     d.add_argument("--seeds-file", help="Seeds file instead of the configured one")
+    d.add_argument("--force", action="store_true", help="Ask crt.sh even if it was checked in the last few hours")
 
     for name, help_text in (("qualify", "Cheap homepage check"),
                             ("enrich", "Look up domain registration dates (RDAP)"),

@@ -4,12 +4,14 @@ Runs between qualify and profile. Only looks up domains with no registration
 row yet (or whose last lookup failed more than retry_failed_after_days ago),
 so registries aren't hammered. Results go to registrations.jsonl.
 
-If the RDAP service refuses us (401/403/429), the stage stops for this run instead of
-asking again and again, and those domains stay due (a refusal isn't the domain's answer).
+Lookups go straight to each domain's registry (see rdap.py). If a registry refuses us
+(401/403/429), it isn't asked again this run, and its domains stay due: a refusal isn't the
+domain's answer. Other registries carry on.
 """
 
 import asyncio
 import logging
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -48,21 +50,35 @@ async def run(settings, store, limit: int | None = None, domains: list[str] | No
 
     url_template = config.get("rdap_url", "https://rdap.org/domain/{domain}")
     timeout = float(config.get("timeout_seconds", 20))
-    found, refused = 0, []
+    found = 0
+    refused: dict[str, str] = {}          # registry host -> why it's not asked again this run
     # say who we are: an honest user agent, never a browser's
     headers = {"User-Agent": config.get("user_agent") or DEFAULT_USER_AGENT}
 
     async with aiohttp.ClientSession(trust_env=True, headers=headers) as session:
+        servers = None
+        if config.get("rdap_bootstrap_url", rdap.IANA_BOOTSTRAP):
+            try:
+                servers = await rdap.load_servers(session, settings.data_dir / "rdap_servers.json",
+                                                  config.get("rdap_bootstrap_url", rdap.IANA_BOOTSTRAP))
+            except (aiohttp.ClientError, TimeoutError, ValueError) as e:
+                logger.warning("enrich: IANA's list of registries couldn't be loaded (%s); asking %s instead",
+                               str(e) or type(e).__name__, urlsplit(url_template).netloc)
+
         async def one(domain: str) -> dict:
             row = {"domain": domain, "checked_at": utc_now()}
-            if refused:
-                return {**row, "refused": refused[0]}
+            template = rdap.url_template_for(domain, servers, url_template)
+            if template is None:
+                return {**row, "error": f"no RDAP service for .{domain.rsplit('.', 1)[-1]} (the registry has none)"}
+            host = urlsplit(template).netloc
+            if host in refused:
+                return {**row, "refused": refused[host]}
             try:
-                row.update(await rdap.lookup(session, domain, url_template, timeout))
+                row.update(await rdap.lookup(session, domain, template, timeout))
             except rdap.Refused as e:
-                if not refused:
-                    logger.warning("enrich: %s. Stopping lookups for this run; those domains are tried next run.", e)
-                refused.append(str(e))
+                if host not in refused:
+                    logger.warning("enrich: %s. Not asking it again this run; its domains are tried next run.", e)
+                refused[host] = str(e)
                 return {**row, "refused": str(e)}
             except (aiohttp.ClientError, asyncio.TimeoutError, LookupError, ValueError) as e:
                 row["error"] = str(e)[:200] or type(e).__name__
@@ -81,12 +97,11 @@ async def run(settings, store, limit: int | None = None, domains: list[str] | No
             describe=lambda r: f"{r['domain']:<28} " + ("not saved, tried next run" if r.get("refused")
                                                         else r.get("registered_at") or r.get("error", "")[:70]),
             concurrency=int(config.get("concurrency", 3)),
-            max_minutes=max_minutes or settings.section("crawl").get("max_stage_minutes"),
-            stop=lambda: refused[0] if refused else None)
+            max_minutes=max_minutes or settings.section("crawl").get("max_stage_minutes"))
     n_refused = sum(1 for r in out["results"] if r.get("refused"))
     looked_up = len(out["results"]) - n_refused
     summary = {"looked_up": looked_up, "with_date": found, "failed": looked_up - found,
                "left_for_next_run": out["skipped"] + n_refused, "seconds": out["seconds"]}
     if refused:
-        summary["refused"] = refused[0]
+        summary["refused"] = "; ".join(refused.values())
     return summary

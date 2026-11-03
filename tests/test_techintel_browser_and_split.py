@@ -162,3 +162,49 @@ def test_run_all_has_the_two_tech_steps():
     assert out.returncode == 0, out.stderr
     assert "tech_collect" in out.stdout.splitlines()[0]          # new sites are always collected by default
     assert "techintel collect" in out.stdout and "techintel update" in out.stdout   # update can be run by hand
+
+
+def test_registration_dates_come_from_each_registry():
+    servers = rdap.servers_from_bootstrap({"services": [[["com", "net"], ["https://rdap.verisign.com/com/v1/"]],
+                                                        [["dev"], ["https://pubapi.registry.google/rdap/"]]]})
+    assert rdap.url_template_for("vercel.com", servers, "x") == "https://rdap.verisign.com/com/v1/domain/{domain}"
+    assert rdap.url_template_for("web.dev", servers, "x") == "https://pubapi.registry.google/rdap/domain/{domain}"
+    assert rdap.url_template_for("openai.io", servers, "x") is None          # .io has no RDAP: don't ask anyone
+    assert rdap.url_template_for("openai.io", None, "https://rdap.org/domain/{domain}").startswith("https://rdap.org")
+
+
+def test_one_refusing_registry_doesnt_stop_the_others(settings, store, monkeypatch):
+    _qualified(store, "a.com", "b.com", "c.dev", "d.io")
+    servers = {"com": "https://rdap.verisign.com/com/v1/", "dev": "https://pubapi.registry.google/rdap/"}
+
+    async def fake_servers(*a, **k):
+        return servers
+    asked = []
+
+    async def lookup(session, domain, url_template, timeout):
+        asked.append(domain)
+        if "verisign" in url_template:
+            raise rdap.Refused(429, "rdap.verisign.com")
+        return {"registered_at": "2026-10-20T08:15:00Z", "expires_at": None, "updated_at": None, "registrar": "X"}
+    monkeypatch.setattr(rdap, "load_servers", fake_servers)
+    monkeypatch.setattr(rdap, "lookup", lookup)
+    settings.section("enrich").update(concurrency=1, rdap_bootstrap_url="https://iana.example/dns.json", delay_seconds=0)
+
+    summary = asyncio.run(enrich.run(settings, store))
+    assert sorted(asked) == ["a.com", "c.dev"]                 # b.com: verisign already refused; d.io: no RDAP
+    saved = {r["domain"]: r for r in store.read("registrations")}
+    assert saved["c.dev"]["registered_at"] and "no RDAP service for .io" in saved["d.io"]["error"]
+    assert "a.com" not in saved and "b.com" not in saved      # refusals aren't answers: tried next run
+    assert "rdap.verisign.com" in summary["refused"]
+
+
+def test_crtsh_runs_every_few_hours_and_waits_after_a_failure():
+    from datetime import datetime, timedelta, timezone
+    from techintel.sources.crtsh import wait_reason
+    ago = lambda **kw: (datetime.now(timezone.utc) - timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%S")
+    cfg = {"min_hours_between_runs": 6, "retry_after_minutes": 60, "lookback_days": 3}
+    assert wait_reason({}, cfg) is None                                            # never asked: due
+    assert "last checked" in wait_reason({"last_ok_at": ago(hours=2)}, cfg)
+    assert wait_reason({"last_ok_at": ago(hours=7)}, cfg) is None
+    assert "failed" in wait_reason({"last_ok_at": ago(hours=9), "last_failed_at": ago(minutes=10)}, cfg)
+    assert wait_reason({"last_ok_at": ago(hours=9), "last_failed_at": ago(minutes=90)}, cfg) is None
