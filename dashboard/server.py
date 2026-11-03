@@ -1,4 +1,4 @@
-"""Local web dashboard for worldnews and techintel, reading live from the DuckDB files.
+"""Local web dashboard for world news, tech intel, markets and vehicles, reading live from the DuckDB files.
 
     python -m dashboard                 http://127.0.0.1:8050
     python -m dashboard --port 9000 --open
@@ -102,7 +102,8 @@ async def tech_domains(request):
     q = request.query
     args = dict(status=q.get("status") or None, category=q.get("category") or None, source=q.get("source") or None,
                 q=(q.get("q") or "").strip() or None, days=_int(request, "days", 30),
-                limit=_int(request, "limit", 100, hi=1000), offset=_int(request, "offset", 0, lo=0))
+                limit=_int(request, "limit", 100, hi=1000), offset=_int(request, "offset", 0, lo=0),
+                sort=q.get("sort") if q.get("sort") in queries.TECH_SORT else "seen")
     return web.json_response(_query("tech", lambda c: queries.tech_domains(c, **args), f"tech_domains:{sorted(args.items())}"))
 
 
@@ -136,6 +137,22 @@ async def markets_history(request):
     return web.json_response(_query("markets", lambda c: queries.markets_history(c, cls, sym, days), f"mh:{cls}:{sym}:{days}"))
 
 
+async def markets_compare(request):
+    """?items=index:^GSPC,commodity:GC=F,crypto:BTC&days=30"""
+    items = []
+    for part in (request.query.get("items") or "").split(","):
+        cls, _, sym = part.partition(":")
+        if cls and sym:
+            items.append((cls, sym))
+    days = _int(request, "days", 30, hi=3650)
+    key = f"mcmp:{items}:{days}"
+    return web.json_response(_query("markets", lambda c: queries.markets_compare(c, items, days), key))
+
+
+async def markets_performance(request):
+    return web.json_response(_query("markets", queries.markets_performance, "markets_performance"))
+
+
 async def vehicles_summary(request):
     days = _int(request, "days", 7)
     return web.json_response(_query("vehicles", lambda c: queries.vehicles_summary(c, days), f"veh_summary:{days}"))
@@ -166,7 +183,12 @@ async def automation(request):
 
 
 async def index(request):
-    return web.FileResponse(STATIC / "index.html")
+    """The page, with each script/stylesheet link carrying the file's change time, so the browser never
+    mixes an old cached app.js with a new page after an update."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for name in ("app.js", "style.css"):
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={int((STATIC / name).stat().st_mtime)}")
+    return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 def build_app() -> web.Application:
@@ -189,6 +211,8 @@ def build_app() -> web.Application:
         web.get("/api/markets/summary", markets_summary),
         web.get("/api/markets/quotes", markets_quotes),
         web.get("/api/markets/history", markets_history),
+        web.get("/api/markets/compare", markets_compare),
+        web.get("/api/markets/performance", markets_performance),
         web.static("/static", STATIC),
     ])
     return app

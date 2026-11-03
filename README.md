@@ -129,20 +129,32 @@ kept running by a cron check every 5 minutes and restarted at boot.
 uv run python -m dashboard --open        # http://localhost:8050
 ```
 
+- **Full screen:** the page uses the whole width of the window; the **⛶** button (or the **F** key) switches the
+  browser to real full-screen mode. Charts are plain SVG drawn by the page (no library, works offline); hover
+  a line chart to see the values.
 - **World News:** headlines newest first with NEW and tech badges; filters for period, country/group, source,
-  tech only, new in the last run, and search. Side panels show headlines per day, per country, top sources,
-  **source health** (which sites failed, and how many runs in a row) and recent runs.
-- **Markets:** cards for S&P 500, Nasdaq, Dow, VIX, ASPI, S&P SL20, gold, silver, Bitcoin, Ethereum, USD/LKR and
-  gold per pawn in LKR, with sparklines; sortable tables for indices, US stocks, all CSE companies, crypto top 100,
-  gold/silver/oil (incl. LKR) and exchange rates; top gainers/losers; market and crypto news; click any row for its
-  price history chart.
+  tech only, new in the last run, and search. Side panels show headlines per day, **topics per day** (tech,
+  crypto, markets), **when news is published** (by hour, your time), per country, top sources, **source health**
+  (which sites failed, and how many runs in a row) and recent runs.
+- **Markets:** cards with sparklines; **Compare**: any instruments on one chart as % change over 1 week, 1 month
+  or 3 months, with quick picks (world indices, Sri Lanka, gold/silver/oil, safe havens vs risk, crypto);
+  **Performance**: 1 day, 1 week, 1 month and 3 months for every index, commodity, exchange rate and the top 5
+  coins, coloured green/red, with a 3-month line; sortable tables or a **map** (tiles coloured by the day's change,
+  sized by market value) for indices, US stocks, all CSE companies, crypto top 100, gold/silver/oil and exchange
+  rates; top gainers/losers; market and crypto news. Click any row for its chart (1D, 1W, 1M, 3M).
+  History = Yahoo's daily closes (6 months, saved with each price) + every run's saved prices; CSE and crypto
+  history builds up from our own runs.
 - **Vehicles:** ikman.lk and riyasewana ads, newest first with photos and NEW badges; price drops ("was Rs …");
-  filters for site, period, new in the last run and search; new ads per day and when each site was last collected.
-- **Tech Intel:** discovered domains latest first, with status, category, score, registration date and source;
-  filters for period, status, category, source and search. **Click a row** for the full profile: tech stack,
-  signals, key pages, changes and check history. Side panels show per-day discoveries, categories, tech stack,
-  sources, recent changes and the pipeline's last runs.
-- Website links open in a new tab. Optional auto-refresh every minute.
+  filters for site, period, new in the last run and search; new ads per day, **price ranges**, **makes with their
+  median price**, and when each site was last collected.
+- **Tech Intel:** a compact list, one line per site (name, domain, description, status, category, score bar,
+  **domain age** with a NEW badge for domains under 30 days old, source), sortable by latest seen, highest score,
+  **newest domain** or name; it scrolls inside its panel with the headings kept in view. Charts on top: found and
+  qualified per day, **how new the qualified sites' domains are**, categories, and the status split. Filters for
+  period, status, category, source and search. **Click a row** for the full profile: tech stack, signals, key
+  pages, changes and check history. Side panels show tech stack, sources, recent changes and the pipeline's runs.
+- Website links open in a new tab. Optional auto-refresh every minute. After an update the page always loads the
+  new script (no stale browser cache), but the server itself must be restarted.
 - The databases are opened only for each query, so the dashboard never blocks a collection run. While a run
   is writing, it shows the last loaded data with a notice.
 - It listens on `127.0.0.1` (this computer only). Use `--port` to change the port.

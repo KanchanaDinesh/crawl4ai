@@ -171,6 +171,18 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - riyasewana "Negotiable" prices have no number: correct, not a bug.
     - **All four modules reviewed.** Still open: tech_update (paused, browser GPU fix not confirmed on the Mac)
       and no backup for US market prices if Yahoo blocks.
+28. Dashboard made full screen and "more intelligent" (Kanchana's request, 2026-11-03):
+    - Full width (no 1400px limit), ⛶ button / F key for browser full screen, side column 400-460px.
+    - Tech Intel: compact one-line-per-site list, sort (latest seen, score, newest domain, name), domain age with a
+      NEW badge (< 30 days), score bars, sticky headings; charts: found/qualified per day, domain age, categories, status.
+    - Markets: Compare chart (% change, 1W/1M/3M, quick picks, choices remembered), Performance table (1d/1w/1m/3m),
+      map view, bigger price chart with ranges. API: /api/markets/compare, /api/markets/performance.
+    - History: Yahoo now returns 6 months of daily closes per symbol (extra["daily"], same one request), merged with
+      saved runs in queries.history_points(). CSE and crypto history only builds up from our own runs.
+    - News: topics per day, publishing hour (local time). Vehicles: price ranges, makes with median price,
+      photos load (no referrer sent).
+    - index.html links app.js/style.css with ?v=<mtime>, so browsers don't mix old and new files after an update.
+    - Ideas: an "Overview" tab with the highlights of all four; alerts (price drop on a watched model, big market move).
 
 ## Open issues and things to watch
 

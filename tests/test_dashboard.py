@@ -56,6 +56,8 @@ def test_news_endpoints(dash):
     reuters = next(r for r in sources["data"] if r["source"] == "Reuters")
     assert reuters["status"] == "failed" and reuters["failed_streak"] == 2
     assert len(runs["data"]) == 2 and "Intelligence Dashboard" in page
+    assert {"topics_by_day", "by_hour"} <= set(s) and all(0 <= r["hour"] < 24 for r in s["by_hour"])
+    assert "/static/app.js?v=" in page and "/static/style.css?v=" in page      # no stale cached script after updates
 
 
 def test_tech_endpoints(dash):
@@ -73,6 +75,14 @@ def test_tech_endpoints(dash):
     assert d["profile"]["tech_stack"] == ["Next.js", "Vercel", "PostHog"] and d["registration"]["registered_at"]
     assert d["changes"][0]["after"] == "Stripe"                               # no JSON quotes
     assert changes["data"][0]["domain"] == "agentforge.dev" and len(runs["data"]) == 6
+    s = summary["data"]
+    assert sum(r["n"] for r in s["domain_age"]) == c["qualified"] and "new_domains_30d" in c
+    assert all("qualified" in r for r in s["by_day"])
+    by_reg, by_score = call(server, "/api/tech/domains?sort=registered", "/api/tech/domains?sort=score")
+    regs = [d["registered_at"] for d in by_reg["data"]["items"] if d["registered_at"]]
+    assert regs == sorted(regs, reverse=True)                                  # newest domain first
+    scores = [d["score"] for d in by_score["data"]["items"] if d["score"] is not None]
+    assert scores == sorted(scores, reverse=True)
 
 
 def test_busy_database_serves_last_data(dash):
@@ -119,6 +129,16 @@ def test_markets_endpoints(dash):
     assert len(hist["data"]["points"]) == 6 and hist["data"]["quote"]["symbol"] == "ASPI"
     assert [x["source"] for x in s["sources"] if not x["ok"]] == ["yahoo BRK-B"]
     assert "loadMarkets" in page_js
+    # History: Yahoo's daily closes before the first saved run, then every run's price
+    long = call(server, "/api/markets/history?class=index&symbol=%5EGSPC&days=100")[0]["data"]["points"]
+    assert len(long) > 80 and long[0]["t"] < long[-1]["t"] and long[0]["t"].endswith("T12:00:00Z")
+    perf, cmp = call(server, "/api/markets/performance",
+                     "/api/markets/compare?items=index:%5EGSPC,index:ASPI,crypto:NOPE&days=30")
+    rows = {r["symbol"]: r for r in perf["data"]}
+    assert rows["^GSPC"]["1m"] is not None and rows["^GSPC"]["3m"] is not None   # from the daily closes
+    assert rows["ASPI"]["1m"] is None and rows["ASPI"]["1d"] is not None          # CSE: only today's runs
+    assert {"BTC", "GC=F", "LKR=X"} <= set(rows) and "AAPL" not in rows
+    assert [s["symbol"] for s in cmp["data"]] == ["^GSPC", "ASPI"]                # unknown ones are skipped
 
 
 def test_news_topic_and_multi_group_filters(dash):
@@ -162,3 +182,6 @@ def test_vehicles_endpoints(dash, tmp_path, monkeypatch):
     vezel = search["data"]["items"][0]
     assert (vezel["price_lkr"], vezel["previous_price_lkr"], vezel["times_seen"]) == (9_100_000, 9_350_000, 3)
     assert changes["data"][0]["title"] == "Honda Vezel 2016"
+    s = summary["data"]
+    assert sum(r["n"] for r in s["price_ranges"]) == 7 and s["makes"][0]["n"] >= 1
+    assert all(r["make"][0].isupper() for r in s["makes"])

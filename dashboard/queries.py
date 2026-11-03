@@ -40,7 +40,18 @@ def news_summary(con, days: int) -> dict:
         from news_items where coalesce(published_at, first_seen_at) >= now() - interval 14 day group by 1 order by 1""")
     top_sources = rows(con, f"""select source, group_code, count(*) as n from news_items
         where first_seen_at >= now() - interval {int(days)} day group by 1, 2 order by 3 desc limit 12""")
-    return {"last_run": last, "totals": totals, "by_group": by_group, "by_day": by_day, "top_sources": top_sources}
+    topics_by_day = rows(con, f"""select strftime(date_trunc('day', coalesce(published_at, first_seen_at)), '%Y-%m-%d') as day,
+            count(*) filter (where list_contains(topics, 'tech')) as tech,
+            count(*) filter (where list_contains(topics, 'crypto')) as crypto,
+            count(*) filter (where list_contains(topics, 'markets')) as markets
+        from news_items where coalesce(published_at, first_seen_at) >= now() - interval 14 day group by 1 order by 1""")
+    # UTC hour of publishing (the browser shifts it to local time); feeds that give only a date
+    # show up as exactly midnight, so those are left out
+    by_hour = rows(con, f"""select hour(published_at) as hour, count(*) as n from news_items
+        where published_at >= now() - interval {max(int(days), 7)} day
+          and strftime(published_at, '%H:%M:%S') <> '00:00:00' group by 1 order by 1""")
+    return {"last_run": last, "totals": totals, "by_group": by_group, "by_day": by_day, "top_sources": top_sources,
+            "topics_by_day": topics_by_day, "by_hour": by_hour}
 
 
 def news_items(con, *, group=None, source=None, tech=False, topic=None, new=False, q=None, days=7,
@@ -121,15 +132,39 @@ def tech_summary(con, days: int) -> dict:
         where c.discovered_at >= now() - interval {d} day group by 1 order by 2 desc""")
     tech_stack = rows(con, """select t.value::varchar as tech, count(*) as n
         from v_profiles, json_each(tech_stack) t group by 1 order by 2 desc limit 15""")
-    by_day = rows(con, """select strftime(date_trunc('day', discovered_at), '%Y-%m-%d') as day, count(*) as n
-        from v_candidates where discovered_at >= now() - interval 14 day group by 1 order by 1""")
+    by_day = rows(con, """select strftime(date_trunc('day', c.discovered_at), '%Y-%m-%d') as day, count(*) as n,
+            count(*) filter (where q.status = 'qualified') as qualified
+        from v_candidates c left join v_qualifications q using (domain)
+        where c.discovered_at >= now() - interval 14 day group by 1 order by 1""")
+    # How old the qualified sites' domains are: a site registered last week is a real launch signal
+    domain_age = rows(con, """select case
+                when r.registered_at is null then 'unknown'
+                when r.registered_at >= now() - interval 7 day then 'under 1 week'
+                when r.registered_at >= now() - interval 30 day then 'under 1 month'
+                when r.registered_at >= now() - interval 365 day then 'under 1 year'
+                when r.registered_at >= now() - interval 1825 day then '1-5 years'
+                else 'over 5 years' end as age, count(*) as n
+        from v_qualifications q left join v_registrations r using (domain)
+        where q.status = 'qualified' group by 1""")
+    order = ["under 1 week", "under 1 month", "under 1 year", "1-5 years", "over 5 years", "unknown"]
+    domain_age.sort(key=lambda r: order.index(r["age"]))
+    new_domains = one(con, f"""select count(*) as n from v_qualifications q join v_registrations r using (domain)
+        where q.status = 'qualified' and r.registered_at >= now() - interval 30 day""")
+    counts["new_domains_30d"] = new_domains.get("n", 0)
     for r in tech_stack:
         r["tech"] = r["tech"].strip('"')
     return {"counts": counts, "by_category": by_category, "by_source": by_source, "by_status": by_status,
-            "tech_stack": tech_stack, "by_day": by_day}
+            "tech_stack": tech_stack, "by_day": by_day, "domain_age": domain_age}
 
 
-def tech_domains(con, *, status=None, category=None, source=None, q=None, days=30, limit=100, offset=0) -> dict:
+TECH_SORT = {"seen": "seen_ts desc nulls last, score desc nulls last",
+             "score": "score desc nulls last, seen_ts desc nulls last",
+             "registered": "registered_ts desc nulls last, seen_ts desc nulls last",
+             "name": "lower(coalesce(name, title, domain))"}
+
+
+def tech_domains(con, *, status=None, category=None, source=None, q=None, days=30, limit=100, offset=0,
+                 sort="seen") -> dict:
     where, params = [f"seen_ts >= now() - interval {int(days)} day or found_ts >= now() - interval {int(days)} day"], []
     if status:
         where.append("status = ?"); params.append(status)
@@ -147,7 +182,7 @@ def tech_domains(con, *, status=None, category=None, source=None, q=None, days=3
     items = rows(con, f"""select domain, source, status, reason, category, score, coalesce(name, title) as name,
             description, coalesce(final_url, candidate_url) as url, detail->>'title' as source_title,
             {_ts('seen_ts')} as seen_at, {_ts('found_ts')} as found_at, {_ts('registered_ts')} as registered_at
-        from ({base}) order by seen_ts desc nulls last, score desc nulls last
+        from ({base}) order by {TECH_SORT.get(sort, TECH_SORT["seen"])}
         limit {int(limit)} offset {int(offset)}""", params)
     return {"total": total, "items": items}
 
@@ -228,12 +263,79 @@ def markets_quotes(con, asset_class: str, q: str | None = None, limit: int = 500
     return rows(con, f"select {QUOTE_COLS} from v_latest where {' and '.join(where)} order by {order} limit {int(limit)}", params)
 
 
+def history_points(con, asset_class: str, symbol: str, days: int = 90) -> list[dict]:
+    """Price history, oldest first: [{"t": ISO time, "price": p}, ...].
+
+    Two sources, merged: the daily closes Yahoo sends with each price (about 3 months, so there's
+    history from the first run on), and the price saved by every run. Days that have saved runs use
+    those; earlier days use the daily close."""
+    saved = rows(con, f"""select {_ts('run_at')} as t, price from quotes
+        where asset_class = ? and symbol = ? and price is not null and run_at >= now() - interval {int(days)} day
+        order by run_at""", [asset_class, symbol])
+    first_saved_day = saved[0]["t"][:10] if saved else "9999"
+    daily = con.execute("select extra->'daily' from v_latest where asset_class = ? and symbol = ?",
+                        [asset_class, symbol]).fetchone()
+    cutoff = con.execute(f"select strftime(now() - interval {int(days)} day, '%Y-%m-%d')").fetchone()[0]
+    early = []
+    if daily and daily[0]:
+        for day, close in json.loads(daily[0]):
+            if close is not None and cutoff <= day < first_saved_day:
+                early.append({"t": f"{day}T12:00:00Z", "price": close})   # midday UTC: the same date everywhere
+    return early + saved
+
+
 def markets_history(con, asset_class: str, symbol: str, days: int = 90) -> dict:
-    pts = rows(con, f"""select {_ts('run_at')} as t, price, change_pct from quotes
-        where asset_class = ? and symbol = ? and run_at >= now() - interval {int(days)} day order by run_at""",
-               [asset_class, symbol])
+    pts = history_points(con, asset_class, symbol, days)
     latest = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol])
     return {"quote": latest, "points": pts, "spark": _spark(con, asset_class, symbol, days)}
+
+
+def markets_compare(con, items: list[tuple[str, str]], days: int = 30) -> list[dict]:
+    """Several instruments' history, for one chart (the browser shows each as % change from the start)."""
+    out = []
+    for cls, sym in items[:8]:
+        q = one(con, "select asset_class, symbol, name, currency from v_latest where asset_class = ? and symbol = ?", [cls, sym])
+        if q:
+            out.append({**q, "points": history_points(con, cls, sym, days)})
+    return out
+
+
+PERF_HORIZONS = (("1d", 1), ("1w", 7), ("1m", 30), ("3m", 90))
+
+
+def _change_since(points: list[dict], price: float, days: int, now_iso: str) -> float | None:
+    """% change from the last price at or before `days` ago (None if the history doesn't go back that far)."""
+    from datetime import datetime, timedelta
+    now = datetime.strptime(now_iso, UTC)
+    target = (now - timedelta(days=days)).strftime(UTC)
+    before = [p["price"] for p in points if p["t"] <= target]
+    if not before or not before[-1]:
+        return None
+    return (price - before[-1]) / before[-1] * 100
+
+
+def markets_performance(con) -> list[dict]:
+    """How the main instruments did over 1 day, 1 week, 1 month and 3 months."""
+    now_iso = con.execute(f"select strftime(now(), '{UTC}')").fetchone()[0]
+    picks = rows(con, f"""select {QUOTE_COLS} from v_latest
+        where asset_class in ('index', 'commodity', 'fx', 'commodity_lkr') or (asset_class = 'crypto' and rank <= 5)
+        order by case asset_class when 'index' then 1 when 'commodity' then 2 when 'commodity_lkr' then 3
+                 when 'fx' then 4 else 5 end, rank nulls last, symbol""")
+    out = []
+    for q in picks:
+        if q["price"] is None:
+            continue
+        pts = history_points(con, q["asset_class"], q["symbol"], 100)
+        row = {k: q[k] for k in ("asset_class", "symbol", "name", "price", "currency", "change_pct")}
+        for label, d in PERF_HORIZONS:
+            row[label] = _change_since(pts, q["price"], d, now_iso)
+        if q["change_pct"] is not None:
+            row["1d"] = q["change_pct"]               # the source's own day change, the same as on the cards
+        if row["1w"] is None and q.get("pct_7d") is not None:
+            row["1w"] = q["pct_7d"]
+        row["spark"] = [p["price"] for p in pts][-60:]
+        out.append(row)
+    return out
 
 
 # ── vehicles (vehicles.duckdb) ────────────────────────────────────────────
@@ -259,7 +361,20 @@ def vehicles_summary(con, days: int = 7) -> dict:
             {_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) group by site order by site""")
     per_day = rows(con, """select strftime(date_trunc('day', first_seen), '%Y-%m-%d') as day, count(*) as n
         from v_vehicle_ads_latest where first_seen >= now() - interval 14 day group by 1 order by 1""")
-    return {"counts": counts, "sites": sites, "by_day": per_day}
+    price_ranges = rows(con, """select case
+                when price_lkr < 1000000 then 'under 1M' when price_lkr < 3000000 then '1M - 3M'
+                when price_lkr < 6000000 then '3M - 6M' when price_lkr < 10000000 then '6M - 10M'
+                when price_lkr < 20000000 then '10M - 20M' else '20M and more' end as range,
+            min(price_lkr) as lo, count(*) as n
+        from v_vehicle_ads_latest where price_lkr >= 50000 group by 1 order by lo""")
+    # The make is the first word of the title ("Toyota Axio 2016" -> Toyota); prices above 50,000 only
+    # (smaller numbers are rents or monthly payments)
+    makes = rows(con, """select lower(split_part(trim(title), ' ', 1)) as make, count(*) as n,
+            round(median(price_lkr) filter (where price_lkr >= 50000)) as median_price
+        from v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 12""")
+    for r in makes:
+        r["make"] = r["make"].capitalize() if r["make"] and r["make"].isalpha() and len(r["make"]) > 3 else (r["make"] or "").upper()
+    return {"counts": counts, "sites": sites, "by_day": per_day, "price_ranges": price_ranges, "makes": makes}
 
 
 def vehicle_ads(con, *, site=None, q=None, new=False, days=30, limit=100, offset=0) -> dict:

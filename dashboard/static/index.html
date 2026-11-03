@@ -22,6 +22,7 @@
       <span id="updated"></span>
       <label class="tog"><input type="checkbox" id="auto"> Auto-refresh (1 min)</label>
       <button class="btn" id="refresh">Refresh</button>
+      <button class="btn" id="fs" title="Full screen (F)">⛶</button>
     </div>
   </div>
 </header>
@@ -56,6 +57,8 @@
       </div>
       <aside>
         <div class="panel"><h3>Headlines per day <small>14 days · light = tech</small></h3><div id="news-days-chart"></div></div>
+        <div class="panel"><h3>Topics per day <small>14 days</small></h3><div id="news-topics-chart" class="chart-box"></div></div>
+        <div class="panel"><h3>When news is published <small>your time, by hour</small></h3><div id="news-hours-chart"></div></div>
         <div class="panel"><h3>By country / group <small id="news-period-label"></small></h3><div id="news-by-group" class="bars"></div></div>
         <div class="panel"><h3>Top sources</h3><div id="news-top-sources" class="bars"></div></div>
         <div class="panel"><h3>Source health <small>last run</small></h3><div id="news-health" class="scroll"></div></div>
@@ -77,17 +80,24 @@
       <select id="tech-source"><option value="">All sources</option></select>
       <input type="search" id="tech-q" placeholder="Search domain, name, description, reason…">
     </div>
+    <div class="chartgrid">
+      <div class="panel"><h3>Found per day <small>14 days · light = qualified</small></h3><div id="tech-days-chart"></div></div>
+      <div class="panel"><h3>How new are the qualified sites? <small>domain registered</small></h3><div id="tech-age" class="bars"></div></div>
+      <div class="panel"><h3>Qualified by category</h3><div id="tech-by-category" class="bars"></div></div>
+      <div class="panel"><h3>Status <small id="tech-status-label"></small></h3><div id="tech-status-chart"></div></div>
+    </div>
     <div class="layout">
       <div>
         <div class="panel">
-          <h3>Discovered domains <small id="tech-count"></small></h3>
-          <div class="scroll" id="tech-table"></div>
+          <h3><span>Discovered sites <small id="tech-count"></small></span>
+            <span class="tools"><span class="muted small">Sort</span><select id="tech-sort">
+              <option value="seen">Latest seen</option><option value="score">Highest score</option>
+              <option value="registered">Newest domain</option><option value="name">Name</option></select></span></h3>
+          <div class="tablewrap" id="tech-table"></div>
           <button class="btn more" id="tech-more" hidden>Load more</button>
         </div>
       </div>
       <aside>
-        <div class="panel"><h3>Discovered per day <small>14 days</small></h3><div id="tech-days-chart"></div></div>
-        <div class="panel"><h3>Qualified by category</h3><div id="tech-by-category" class="bars"></div></div>
         <div class="panel"><h3>Tech stack <small>profiled sites</small></h3><div id="tech-stack" class="bars"></div></div>
         <div class="panel"><h3>Discovered by source</h3><div id="tech-by-source" class="bars"></div></div>
         <div class="panel"><h3>Recent changes</h3><div id="tech-changes"></div></div>
@@ -98,15 +108,28 @@
   <!-- ─────────────── MARKETS ─────────────── -->
   <section id="view-markets" hidden>
     <div class="cards" id="mk-cards"></div>
-    <div class="filters">
-      <span id="mk-classes"></span>
-      <input type="search" id="mk-q" placeholder="Search symbol or name…">
-      <span class="muted small" id="mk-asof"></span>
-    </div>
     <div class="layout">
       <div>
         <div class="panel">
-          <h3><span id="mk-title">Prices</span> <small id="mk-count"></small></h3>
+          <h3><span>Compare <small>% change from the start of the period</small></span>
+            <span class="tools"><span class="seg" id="cmp-range"><button data-d="7">1W</button><button data-d="30" class="active">1M</button><button data-d="90">3M</button></span></span></h3>
+          <div class="pickers" id="cmp-presets"></div>
+          <div class="pickers" id="cmp-pick"></div>
+          <div id="cmp-chart" class="chart-box"></div>
+        </div>
+        <div class="panel">
+          <h3><span>Performance <small>click a row for its chart</small></span><small id="perf-note"></small></h3>
+          <div class="scroll" id="perf-table"></div>
+        </div>
+        <div class="filters">
+          <span id="mk-classes"></span>
+          <input type="search" id="mk-q" placeholder="Search symbol or name…">
+          <span class="muted small" id="mk-asof"></span>
+        </div>
+        <div class="panel">
+          <h3><span><span id="mk-title">Prices</span> <small id="mk-count"></small></span>
+            <span class="tools"><span class="seg" id="mk-mode"><button data-m="table" class="active">Table</button><button data-m="map">Map</button></span></span></h3>
+          <div id="mk-map" class="heat" hidden></div>
           <div class="scroll" id="mk-table"></div>
           <div class="muted small" id="mk-note"></div>
         </div>
@@ -142,6 +165,8 @@
       </div>
       <aside>
         <div class="panel"><h3>New ads per day <small>14 days</small></h3><div id="vh-days-chart"></div></div>
+        <div class="panel"><h3>Price ranges <small>LKR, ads tracked</small></h3><div id="vh-prices" class="bars"></div></div>
+        <div class="panel"><h3>Makes <small>ads · median price</small></h3><div id="vh-makes" class="bars"></div></div>
         <div class="panel"><h3>Sites</h3><div id="vh-site-table" class="scroll"></div></div>
         <div class="panel"><h3>Price changes</h3><div id="vh-changes"></div></div>
       </aside>

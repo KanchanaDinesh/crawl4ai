@@ -141,6 +141,9 @@ def build_markets(root, now: datetime | None = None, runs: int = 6) -> None:
             p0 = prev[(cls, sym, name, cur)]
             p1 = p0 * (1 + rnd.uniform(-0.015, 0.015))
             extra = {"metal": "gold" if sym == "GC=F" else "silver"} if sym in ("GC=F", "SI=F") else ({"lkr_rate": True} if sym == "LKR=X" else {})
+            if sym == "^GSPC":                        # Yahoo's daily closes: 120 days, rising 0.1% a day
+                extra["daily"] = [[(now - timedelta(days=120 - d)).strftime("%Y-%m-%d"), round(5000 * 1.001 ** d, 2)]
+                                  for d in range(120)]
             quotes.append(quote(cls, sym, name, p1, prev_close=p0, currency=cur, volume=rnd.randint(1000, 9_000_000),
                                 market_cap=p1 * 1e9 if cls.startswith("stock") else None, as_of=iso(run_at), source="sample", extra=extra))
             prev[(cls, sym, name, cur)] = p1

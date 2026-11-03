@@ -1,4 +1,5 @@
-// Intelligence Dashboard: World News + Tech Intel, reading from the local DuckDB-backed API.
+// Intelligence Dashboard: World News, Tech Intel, Markets and Vehicles, reading from the local DuckDB-backed API.
+// Charts are plain SVG drawn here (no library, works offline).
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -39,20 +40,107 @@ function bars(el, rows, label, value, labelFn) {
     <i style="width:${Math.max(2, (100 * r[value]) / max)}%"></i><span class="n">${fmtNum(r[value])}</span></div>`).join("");
 }
 
-function dayColumns(el, rows, total, part) {
-  const days = [];
-  const today = new Date();
+function last14Days() {
+  const days = [], today = new Date();
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today); d.setDate(today.getDate() - i);
     days.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
   }
+  return days;
+}
+
+function dayColumns(el, rows, total, part, partLabel = "tech") {
+  const days = last14Days();
   const byDay = Object.fromEntries((rows || []).map((r) => [r.day, r]));
   const max = Math.max(1, ...days.map((d) => byDay[d]?.[total] || 0));
   el.innerHTML = `<div class="cols">${days.map((d) => {
     const r = byDay[d] || {}; const t = r[total] || 0; const p = part ? r[part] || 0 : 0;
-    return `<div class="c" title="${d}: ${t}${part ? ` (${p} tech)` : ""}">
+    return `<div class="c" title="${d}: ${t}${part ? ` (${p} ${partLabel})` : ""}">
       ${part ? `<i class="t" style="height:${(100 * p) / max}%"></i>` : ""}<i style="height:${(100 * (t - p)) / max}%"></i><em>${d.slice(8)}</em></div>`;
   }).join("")}</div>`;
+}
+
+// ───────────────────────────── charts ─────────────────────────────
+const PALETTE = ["--c1", "--c2", "--c3", "--c4", "--c5", "--c6", "--c7", "--c8"];
+const color = (i) => `var(${PALETTE[i % PALETTE.length]})`;
+const charts = new Set();                                  // redrawn when the window size changes
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtAxis(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return fmtBig(v);
+  if (a >= 1000) return Math.round(v).toLocaleString();
+  if (a >= 1) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return Number(v.toPrecision(3)).toString();
+}
+
+// series: [{name, color, points: [{t: ms, v: number}]}]; opts: {height, pct, fmt, min0, empty}
+function lineChart(el, series, opts = {}) {
+  el._chart = [series, opts]; charts.add(el);
+  series = series.filter((s) => s.points.length);
+  if (!series.some((s) => s.points.length >= 2)) {
+    el.innerHTML = `<div class="muted small">${opts.empty || "Not enough history yet: each run adds a point."}</div>`; return;
+  }
+  const W = Math.max(300, el.clientWidth || 600), H = opts.height || 260, L = 58, R = 14, T = 10, B = 24;
+  const all = series.flatMap((s) => s.points);
+  const t0 = Math.min(...all.map((p) => p.t)), t1 = Math.max(...all.map((p) => p.t));
+  let lo = Math.min(...all.map((p) => p.v)), hi = Math.max(...all.map((p) => p.v));
+  if (opts.pct || opts.min0) { lo = Math.min(lo, 0); }
+  if (opts.pct) hi = Math.max(hi, 0);
+  const span = hi - lo || Math.abs(hi) * 0.02 || 1;
+  if (!opts.min0) lo -= span * 0.06;
+  hi += span * 0.06;
+  const X = (t) => L + ((t - t0) / (t1 - t0 || 1)) * (W - L - R);
+  const Y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const fmtV = opts.fmt || ((v) => opts.pct ? `${v > 0 ? "+" : ""}${v.toFixed(hi - lo < 6 ? 2 : 1)}%` : fmtAxis(v));
+  const days = (t1 - t0) / 864e5;
+  const fmtT = (t) => { const d = new Date(t); return days < 2 ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+  let g = "";
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + ((hi - lo) * i) / 4, y = Y(v);
+    g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="axis" x="${L - 6}" y="${y + 4}" text-anchor="end">${esc(fmtV(v))}</text>`;
+  }
+  for (let i = 0; i <= 4; i++) {
+    const t = t0 + ((t1 - t0) * i) / 4;
+    g += `<text class="axis" x="${X(t)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 4 ? "end" : "middle"}">${esc(fmtT(t))}</text>`;
+  }
+  if (opts.pct && lo < 0 && hi > 0) g += `<line class="zero" x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  const lines = series.map((s) => `<polyline class="series" style="stroke:${s.color}" points="${s.points.map((p) => `${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ")}"/>`).join("");
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}${lines}<line class="cursor" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+    <rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/></svg><div class="tip" hidden></div>`
+    + (series.length > 1 ? `<div class="legend">${series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>` : "");
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), cur = el.querySelector(".cursor");
+  const nearest = (pts, t) => pts.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+  el.querySelector(".hit").addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) * W) / r.width;
+    const t = t0 + ((px - L) / (W - L - R)) * (t1 - t0);
+    const near = Math.max(2 * 864e5, (t1 - t0) * 0.04);          // further away: that line has no data here
+    const hits = series.map((s) => { const p = nearest(s.points, t); return [s, Math.abs(p.t - t) <= near ? p : null]; });
+    const at = (hits.find(([, p]) => p) || [null, nearest(series[0].points, t)])[1].t;
+    cur.setAttribute("x1", X(at)); cur.setAttribute("x2", X(at)); cur.setAttribute("visibility", "visible");
+    const when = new Date(at).toISOString();
+    tip.innerHTML = `<b>${esc(days < 2 ? fmtTime(when) : fmtDate(when))}</b>` + hits.map(([s, p]) =>
+      `<div><span style="color:${s.color}">●</span> ${esc(s.name)}: <b style="display:inline">${p ? esc(fmtV(p.v)) : "–"}</b></div>`).join("");
+    tip.hidden = false;
+    const left = (X(at) / W) * r.width;
+    tip.style.left = `${left > r.width - 200 ? left - tip.offsetWidth - 12 : left + 12}px`; tip.style.top = "8px";
+  });
+  el.querySelector(".hit").addEventListener("mouseleave", () => { tip.hidden = true; cur.setAttribute("visibility", "hidden"); });
+}
+
+// One bar split into parts: [{label, n, color}]
+function stackBar(el, parts) {
+  const total = parts.reduce((a, p) => a + p.n, 0);
+  if (!total) { el.innerHTML = `<div class="muted small">No data yet.</div>`; return; }
+  el.innerHTML = `<div class="stack">${parts.map((p) => `<i style="width:${(100 * p.n) / total}%;background:${p.color}" title="${esc(p.label)}: ${p.n}"></i>`).join("")}</div>
+    <div class="legend">${parts.map((p) => `<span><i style="background:${p.color}"></i>${esc(p.label)} <b>${fmtNum(p.n)}</b> <span class="muted">${Math.round((100 * p.n) / total)}%</span></span>`).join("")}</div>`;
+}
+
+// Simple columns with labels under them: values[i] for labels[i]
+function columns(el, labels, values, titleFn) {
+  const max = Math.max(1, ...values);
+  el.innerHTML = `<div class="cols">${values.map((v, i) => `<div class="c" title="${esc(titleFn ? titleFn(i, v) : `${labels[i]}: ${v}`)}">
+    <i style="height:${(100 * v) / max}%"></i><em>${esc(labels[i])}</em></div>`).join("")}</div>`;
 }
 
 function setBanner(results) {
@@ -64,6 +152,9 @@ function setBanner(results) {
 }
 
 const debounce = (fn, ms = 300) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+window.addEventListener("resize", debounce(() => charts.forEach((el) => {
+  if (el.isConnected && el.offsetParent) lineChart(el, ...el._chart);
+}), 150));
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
@@ -106,6 +197,15 @@ async function loadNews() {
   sel.innerHTML = `<option value="">All sources</option>` + srcList.map((n) => `<option ${n === news.source ? "selected" : ""}>${esc(n)}</option>`).join("");
 
   dayColumns($("news-days-chart"), s.by_day, "n", "tech");
+  const tday = Object.fromEntries((s.topics_by_day || []).map((r) => [r.day, r]));
+  lineChart($("news-topics-chart"), ["tech", "crypto", "markets"].map((k, i) => ({
+    name: k, color: color(i), points: last14Days().map((d) => ({ t: +new Date(`${d}T12:00:00`), v: (tday[d] || {})[k] || 0 })),
+  })), { height: 170, min0: true, fmt: (v) => String(Math.round(v)) });
+  const off = -new Date().getTimezoneOffset();                    // minutes ahead of UTC (Sri Lanka: +330)
+  const hours = Array(24).fill(0);
+  (s.by_hour || []).forEach((r) => { hours[Math.floor((((r.hour * 60 + off) % 1440) + 1440) % 1440 / 60)] += r.n; });
+  columns($("news-hours-chart"), hours.map((_, h) => (h % 3 === 0 ? String(h) : "")), hours,
+    (h, v) => `${pad(h)}:00-${pad(h)}:59: ${v} headlines`);
   bars($("news-by-group"), s.by_group, "group_code", "n", (r) => groupName(r.group_code));
   bars($("news-top-sources"), s.top_sources, "source", "n");
 
@@ -157,7 +257,17 @@ $("news-q").addEventListener("input", debounce((e) => { news.q = e.target.value.
 $("news-more").addEventListener("click", () => loadNewsItems(false));
 
 // ───────────────────────────── TECH ─────────────────────────────
-const tech = { days: 30, status: "", category: "", source: "", q: "", offset: 0, rows: [] };
+const tech = { days: 30, status: "", category: "", source: "", q: "", sort: "seen", offset: 0, rows: [] };
+const STATUS_COLOR = { qualified: "var(--ok)", watch: "var(--warn)", rejected: "var(--bad)", "not checked": "var(--muted)" };
+
+// "3 days", "5 weeks", "2 years" since a domain was registered, and whether it's brand new (under 30 days)
+function domainAge(iso) {
+  if (!iso) return null;
+  const d = (Date.now() - new Date(iso)) / 864e5;
+  const text = d < 1 ? "today" : d < 14 ? `${Math.round(d)} days` : d < 60 ? `${Math.round(d / 7)} weeks`
+    : d < 730 ? `${Math.round(d / 30)} months` : `${Math.round(d / 365)} years`;
+  return { text, young: d < 30 };
+}
 
 async function loadTech() {
   const [summary, changes, runs] = await Promise.all([
@@ -173,6 +283,7 @@ async function loadTech() {
   $("tech-kpis").innerHTML = [
     [fmtNum(c.new_candidates), `New domains, ${periodLabel}`], [fmtNum(c.qualified), "Qualified tech sites"],
     [fmtNum(c.watch), "On watch"], [fmtNum(c.rejected), "Rejected"], [fmtNum(c.profiled), "Profiled"],
+    [fmtNum(c.new_domains_30d), "Qualified on domains under 30 days old"],
     [fmtNum(c.changes), `Changes, ${periodLabel}`], [fmtNum(c.candidates), "Domains (all time)"],
   ].map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
 
@@ -186,8 +297,11 @@ async function loadTech() {
   $("tech-source").innerHTML = `<option value="">All sources</option>` + (s.by_source || [])
     .map((r) => `<option value="${esc(r.source)}" ${r.source === tech.source ? "selected" : ""}>${esc(r.source)} (${r.n})</option>`).join("");
 
-  dayColumns($("tech-days-chart"), s.by_day, "n");
-  bars($("tech-by-category"), s.by_category, "category", "n");
+  dayColumns($("tech-days-chart"), s.by_day, "n", "qualified", "qualified");
+  bars($("tech-age"), s.domain_age, "age", "n");
+  bars($("tech-by-category"), (s.by_category || []).slice(0, 10), "category", "n");
+  $("tech-status-label").textContent = periodLabel;
+  stackBar($("tech-status-chart"), order.filter((k) => st[k]).map((k) => ({ label: k, n: st[k], color: STATUS_COLOR[k] })));
   bars($("tech-stack"), s.tech_stack, "tech", "n");
   bars($("tech-by-source"), s.by_source, "source", "n");
   $("tech-changes").innerHTML = (changes.data || []).length ? changes.data.slice(0, 25).map((x) => `
@@ -217,21 +331,26 @@ async function loadTechRows(reset) {
   const ticket = ++techReq;                                // ignore answers to older requests
   const offset = reset ? 0 : tech.offset;
   const res = await api("/api/tech/domains", { days: tech.days, status: tech.status, category: tech.category,
-    source: tech.source, q: tech.q, limit: PAGE, offset });
+    source: tech.source, q: tech.q, sort: tech.sort, limit: PAGE, offset });
   if (ticket !== techReq) return;
   if (reset) { tech.offset = 0; tech.rows = []; }
   const d = res.data || { total: 0, items: [] };
   tech.rows = tech.rows.concat(d.items);
-  $("tech-count").textContent = `${fmtNum(d.total)} · latest seen first · click a row for details`;
-  $("tech-table").innerHTML = tech.rows.length ? `<table><tr><th>#</th><th>Seen</th><th>Website</th><th>Name</th><th>Status</th>
-    <th>Category</th><th class="num">Score</th><th>Registered</th><th>Source</th></tr>${tech.rows.map((r, n) => `
-    <tr class="click" data-domain="${esc(r.domain)}"><td class="num muted">${n + 1}</td>
-    <td class="nowrap">${fmtTime(r.seen_at)}<div class="muted small">${ago(r.seen_at)}</div></td>
-    <td>${link(r.url || "https://" + r.domain + "/")}</td>
-    <td>${esc(r.name || "")}<div class="muted small">${esc((r.description || r.reason || "").slice(0, 110))}</div></td>
-    <td>${pill(r.status)}</td><td>${esc(r.category || "")}</td><td class="num">${r.score ?? ""}</td>
-    <td class="nowrap">${r.registered_at ? fmtDate(r.registered_at) : "–"}</td>
-    <td class="small">${esc(r.source || "")}${r.source_title ? `<div class="muted">${esc(r.source_title.slice(0, 50))}</div>` : ""}</td></tr>`).join("")}</table>`
+  $("tech-count").textContent = `${fmtNum(d.total)} · click a row for details`;
+  const maxScore = Math.max(1, ...tech.rows.map((r) => r.score || 0));
+  $("tech-table").innerHTML = tech.rows.length ? `<table class="dense"><thead><tr><th>#</th><th>Seen</th><th>Site</th><th>Status</th>
+    <th>Category</th><th class="num">Score</th><th>Domain age</th><th>Source</th></tr></thead><tbody>${tech.rows.map((r, n) => {
+      const age = domainAge(r.registered_at);
+      return `<tr class="click" data-domain="${esc(r.domain)}"><td class="num muted">${n + 1}</td>
+    <td class="nowrap" title="${esc(fmtTime(r.seen_at))}">${ago(r.seen_at)}</td>
+    <td class="site"><div class="nm">${esc(r.name || r.domain)} ${link(r.url || "https://" + r.domain + "/", r.domain)}</div>
+      <div class="ds" title="${esc(r.description || r.reason || "")}">${esc(r.description || r.reason || "")}</div></td>
+    <td>${pill(r.status)}</td><td class="nowrap">${esc(r.category || "")}</td>
+    <td class="num">${r.score == null ? "" : `<span class="scorebar">${Math.round(r.score)}<i style="width:${Math.round((40 * r.score) / maxScore)}px"></i></span>`}</td>
+    <td class="nowrap" title="${r.registered_at ? "registered " + esc(fmtDate(r.registered_at)) : "registration date unknown"}">${age
+      ? `${age.young ? `<span class="badge b-young">NEW</span>` : ""}${esc(age.text)}` : `<span class="muted">–</span>`}</td>
+    <td class="small nowrap" title="${esc(r.source_title || "")}">${esc(r.source || "")}</td></tr>`;
+    }).join("")}</tbody></table>`
     : `<div class="empty">No domains match these filters.</div>`;
   tech.offset += d.items.length;
   $("tech-more").hidden = tech.offset >= d.total;
@@ -276,6 +395,7 @@ $("tech-status").addEventListener("click", (e) => {
 });
 $("tech-days").addEventListener("change", (e) => { tech.days = +e.target.value; loadTech(); });
 $("tech-category").addEventListener("change", (e) => { tech.category = e.target.value; loadTechRows(true); });
+$("tech-sort").addEventListener("change", (e) => { tech.sort = e.target.value; $("tech-table").scrollTop = 0; loadTechRows(true); });
 $("tech-source").addEventListener("change", (e) => { tech.source = e.target.value; loadTechRows(true); });
 $("tech-q").addEventListener("input", debounce((e) => { tech.q = e.target.value.trim(); loadTechRows(true); }));
 $("tech-more").addEventListener("click", () => loadTechRows(false));
@@ -292,7 +412,86 @@ const MK_CLASSES = [
   { key: "index", label: "Indices" }, { key: "stock_us", label: "US stocks" }, { key: "stock_lk", label: "Sri Lanka (CSE)" },
   { key: "crypto", label: "Crypto top 100" }, { key: "metals", label: "Gold, silver & oil" }, { key: "fx", label: "Exchange rates" },
 ];
-const mk = { cls: "index", q: "", rows: [], sort: null, summary: null };
+const mk = { cls: "index", q: "", rows: [], sort: null, summary: null, mode: "table", perf: [],
+  cmp: store.get("cmpItems", ["index:^GSPC", "commodity:GC=F", "crypto:BTC", "index:ASPI"]), cmpDays: 30 };
+const CMP_PRESETS = [
+  ["World indices", ["index:^GSPC", "index:^IXIC", "index:^DJI", "index:ASPI"]],
+  ["Sri Lanka", ["index:ASPI", "index:S&P SL20", "fx:LKR=X", "commodity_lkr:GOLD24K_LKR_PAWN"]],
+  ["Gold, silver & oil", ["commodity:GC=F", "commodity:SI=F", "commodity:CL=F", "commodity:BZ=F"]],
+  ["Safe havens vs risk", ["commodity:GC=F", "index:^GSPC", "crypto:BTC", "index:^VIX"]],
+  ["Crypto", ["crypto:BTC", "crypto:ETH", "crypto:SOL", "crypto:XRP", "crypto:BNB"]],
+];
+const key = (r) => `${r.asset_class}:${r.symbol}`;
+const shortName = (r) => ({ "^GSPC": "S&P 500", "^IXIC": "Nasdaq", "^DJI": "Dow", "^NDX": "Nasdaq 100", "^RUT": "Russell 2000",
+  "^VIX": "VIX", "GC=F": "Gold", "SI=F": "Silver", "CL=F": "WTI oil", "BZ=F": "Brent oil", "PL=F": "Platinum",
+  "LKR=X": "USD/LKR", "GOLD24K_LKR_PAWN": "Gold pawn (LKR)", "ASPI": "ASPI", "S&P SL20": "S&P SL20",
+  "DX-Y.NYB": "Dollar index" })[r.symbol] || (r.asset_class === "crypto" ? r.symbol : (r.name || r.symbol));
+
+// A % cell tinted green or red by its size
+function pctCell(v) {
+  if (v === null || v === undefined) return `<td class="pc muted">–</td>`;
+  const a = Math.min(45, Math.abs(v) * 7);
+  return `<td class="pc" style="background:color-mix(in srgb, ${v >= 0 ? "var(--ok)" : "var(--bad)"} ${a}%, transparent)">${v > 0 ? "+" : ""}${v.toFixed(2)}%</td>`;
+}
+
+async function loadPerformance() {
+  const res = await api("/api/markets/performance");
+  mk.perf = res.data || [];
+  const CLASS = { index: "Index", commodity: "Commodity", commodity_lkr: "In LKR", fx: "Exchange rate", crypto: "Crypto" };
+  $("perf-table").innerHTML = mk.perf.length ? `<table class="dense"><thead><tr><th>Name</th><th>Type</th><th class="num">Price</th>
+    <th class="num">1 day</th><th class="num">1 week</th><th class="num">1 month</th><th class="num">3 months</th><th style="width:150px">3 months</th></tr></thead>
+    <tbody>${mk.perf.map((r) => `<tr class="click" data-cls="${esc(r.asset_class)}" data-sym="${esc(r.symbol)}">
+      <td><b>${esc(shortName(r))}</b> <span class="muted small">${esc(r.symbol)}</span></td><td class="muted small">${esc(CLASS[r.asset_class] || r.asset_class)}</td>
+      <td class="num nowrap">${fmtPrice(r.price, r.asset_class)} <span class="muted small">${esc(r.currency === "USD" ? "" : r.currency || "")}</span></td>
+      ${pctCell(r["1d"])}${pctCell(r["1w"])}${pctCell(r["1m"])}${pctCell(r["3m"])}<td>${sparkSvg(r.spark)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty">No market data yet.</div>`;
+  $("perf-note").textContent = "history: saved runs + Yahoo daily closes";
+  renderPickers();
+  await loadCompare();
+}
+
+function renderPickers() {
+  const known = new Set(mk.perf.map(key));
+  $("cmp-presets").innerHTML = `<span class="muted small" style="align-self:center">Quick picks:</span>` + CMP_PRESETS.map(([name, items], i) =>
+    `<button class="chip" data-preset="${i}">${esc(name)}</button>`).join("");
+  $("cmp-pick").innerHTML = mk.perf.map((r) => {
+    const i = mk.cmp.indexOf(key(r));
+    return `<button class="chip ${i >= 0 ? "active" : ""}" data-key="${esc(key(r))}" title="${esc(r.name || r.symbol)}">${i >= 0 ? `<i style="background:${color(i)}"></i>` : ""}${esc(shortName(r))}</button>`;
+  }).join("");
+  mk.cmp = mk.cmp.filter((k) => known.has(k) || !mk.perf.length);
+}
+
+let cmpReq = 0;
+async function loadCompare() {
+  const ticket = ++cmpReq;
+  if (!mk.cmp.length) { $("cmp-chart").innerHTML = `<div class="muted small">Pick one or more instruments above.</div>`; return; }
+  const res = await api("/api/markets/compare", { items: mk.cmp.join(","), days: mk.cmpDays });
+  if (ticket !== cmpReq) return;
+  const byKey = Object.fromEntries((res.data || []).map((s) => [key(s), s]));
+  const series = mk.cmp.map((k, i) => {
+    const s = byKey[k]; if (!s) return { name: k, color: color(i), points: [] };
+    const pts = s.points.filter((p) => p.price > 0);
+    const base = pts.length ? pts[0].price : 1;
+    return { name: shortName(s), color: color(i), points: pts.map((p) => ({ t: Date.parse(p.t), v: (p.price / base - 1) * 100 })) };
+  });
+  // A line whose history starts later (CSE and crypto prices only build up from our own runs) says so
+  const start = Math.min(...series.filter((s) => s.points.length).map((s) => s.points[0].t));
+  series.forEach((s) => { if (s.points.length && s.points[0].t - start > 2 * 864e5) s.name += ` (since ${fmtDate(new Date(s.points[0].t).toISOString())})`; });
+  lineChart($("cmp-chart"), series, { pct: true, height: 300, empty: "Not enough history for this period yet." });
+}
+
+function renderMap() {
+  const rows = mk.rows.filter((r) => r.change_pct !== null && r.change_pct !== undefined);
+  if (!rows.length) { $("mk-map").innerHTML = `<div class="muted small">No day changes to show for this market.</div>`; return; }
+  const caps = rows.map((r) => r.market_cap || 0), maxCap = Math.max(...caps);
+  $("mk-map").innerHTML = rows.slice().sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0)).map((r) => {
+    const grow = maxCap ? 1 + 9 * Math.sqrt((r.market_cap || 0) / maxCap) : 1;
+    const a = Math.min(1, Math.abs(r.change_pct) / 4) * 0.75 + 0.2;
+    const bg = r.change_pct > 0 ? `rgba(19,140,72,${a})` : r.change_pct < 0 ? `rgba(196,40,36,${a})` : "rgba(120,128,140,.5)";
+    return `<div class="tile" style="flex:${grow.toFixed(2)} 1 ${Math.round(70 * grow ** 0.5)}px;background:${bg}" data-cls="${esc(r.asset_class)}" data-sym="${esc(r.symbol)}"
+      title="${esc(qname(r) || r.symbol)}: ${r.change_pct > 0 ? "+" : ""}${r.change_pct.toFixed(2)}%"><b>${esc(r.asset_class === "stock_lk" ? r.symbol.split(".")[0] : r.symbol)}</b>${r.change_pct > 0 ? "+" : ""}${r.change_pct.toFixed(2)}%</div>`;
+  }).join("");
+}
 
 function fmtPrice(v, cls) {
   if (v === null || v === undefined) return "–";
@@ -349,7 +548,7 @@ async function loadMarkets() {
     || `<div class="muted small">No ${r === cn ? "crypto" : "market"} news yet. Run <code>uv run python -m worldnews run --group MARKETS --group CRYPTO</code>.</div>`;
   $("mk-news").innerHTML = newsList(mn);
   $("mk-crypto-news").innerHTML = newsList(cn);
-  await loadMarketRows();
+  await Promise.all([loadMarketRows(), loadPerformance()]);
 }
 
 let mkReq = 0;
@@ -360,6 +559,8 @@ async function loadMarketRows() {
   if (ticket !== mkReq) return;
   mk.rows = results.flatMap((r) => r.data || []);
   renderMarketTable();
+  $("mk-map").hidden = mk.mode !== "map"; $("mk-table").hidden = mk.mode === "map";
+  if (mk.mode === "map") renderMap();
   const movers = mk.rows.filter((r) => r.change_pct !== null && (r.asset_class !== "stock_lk" || (r.volume || 0) > 0));
   const label = (MK_CLASSES.find((c) => c.key === mk.cls) || {}).label || "";
   $("mk-movers-label").textContent = label;
@@ -410,17 +611,12 @@ function renderMarketTable() {
 async function openSymbol(cls, sym) {
   $("drawer-body").innerHTML = `<div class="muted">Loading ${esc(sym)}…</div>`;
   $("drawer").classList.add("open"); $("drawer-bg").classList.add("open");
-  const res = await api("/api/markets/history", { class: cls, symbol: sym, days: 90 });
+  const res = await api("/api/markets/history", { class: cls, symbol: sym, days: 100 });
   const d = res.data || {}, q = d.quote || {};
-  const pts = (d.points || []).filter((p) => p.price !== null);
-  const series = pts.length >= 2 ? pts.map((p) => p.price) : (d.spark || []);
-  const chart = series.length >= 2 ? (() => {
-    const min = Math.min(...series), max = Math.max(...series), span = max - min || 1;
-    const P = series.map((x, i) => `${80 + (i / (series.length - 1)) * 410},${12 + (1 - (x - min) / span) * 176}`).join(" ");
-    return `<svg class="chart" viewBox="0 0 500 210"><line x1="80" y1="12" x2="490" y2="12"/><line x1="80" y1="188" x2="490" y2="188"/>
-      <text x="0" y="16">${esc(fmtPrice(max, cls))}</text><text x="0" y="192">${esc(fmtPrice(min, cls))}</text><polyline points="${P}"/></svg>
-      <div class="muted small">${pts.length >= 2 ? `${pts.length} saved prices since ${fmtTime(pts[0].t)}` : "Last 5 trading days (more history builds up with each run)"}</div>`;
-  })() : `<div class="muted">Not enough history yet: each <code>python -m markets run</code> adds a point.</div>`;
+  const pts = (d.points || []).filter((p) => p.price !== null).map((p) => ({ t: Date.parse(p.t), v: p.price }));
+  const chart = `<div class="seg" id="sym-range" style="margin:6px 0">${[[1, "1D"], [7, "1W"], [30, "1M"], [100, "3M"]].map(([n, l]) =>
+    `<button data-d="${n}" class="${n === 30 ? "active" : ""}">${l}</button>`).join("")}</div>
+    <div id="sym-chart" class="chart-box"></div><div class="muted small" id="sym-stats"></div>`;
   $("drawer-body").innerHTML = `
     <h2>${esc(qname(q) || sym)}</h2><div class="muted">${esc(sym)} · ${esc(q.asset_class || cls)} · ${esc(q.source || "")}</div>
     <p style="font-size:24px;font-weight:700;margin:8px 0">${fmtPrice(q.price, cls)} <small class="muted">${esc(q.currency || "")}</small> ${fmtPct(q.change_pct)}</p>
@@ -432,6 +628,21 @@ async function openSymbol(cls, sym) {
       ${q.rank ? `<div>Rank</div><div>#${q.rank}</div>` : ""}${q.pct_7d !== null && q.pct_7d !== undefined ? `<div>7 days</div><div>${fmtPct(q.pct_7d)}</div>` : ""}
       <div>Price time</div><div>${esc(fmtTime(q.as_of))}</div><div>Collected</div><div>${esc(fmtTime(q.run_at))}</div>
       ${q.note ? `<div>Note</div><div>${esc(q.note)}</div>` : ""}</div>`;
+  const draw = (days) => {
+    const since = Date.now() - days * 864e5, p = pts.filter((x) => x.t >= since);
+    lineChart($("sym-chart"), [{ name: sym, color: "var(--c1)", points: p }],
+      { height: 240, fmt: (v) => fmtPrice(v, cls), empty: "Not enough history for this period yet: each run adds a point." });
+    if (p.length >= 2) {
+      const vals = p.map((x) => x.v), ch = (vals[vals.length - 1] / vals[0] - 1) * 100;
+      $("sym-stats").innerHTML = `${p.length} points · high ${fmtPrice(Math.max(...vals), cls)} · low ${fmtPrice(Math.min(...vals), cls)} · change ${fmtPct(ch)}`;
+    } else $("sym-stats").textContent = "";
+  };
+  draw(30);
+  $("sym-range").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-d]"); if (!b) return;
+    document.querySelectorAll("#sym-range button").forEach((x) => x.classList.toggle("active", x === b));
+    draw(+b.dataset.d);
+  });
 }
 
 $("mk-classes").addEventListener("click", (e) => {
@@ -446,13 +657,39 @@ $("mk-table").addEventListener("click", (e) => {
   if (th) { const k = th.dataset.key; mk.sort = mk.sort && mk.sort.key === k ? { key: k, dir: -mk.sort.dir } : { key: k, dir: ["name", "symbol", "currency"].includes(k) ? 1 : -1 }; renderMarketTable(); return; }
   const tr = e.target.closest("tr[data-sym]"); if (tr) openSymbol(tr.dataset.cls, tr.dataset.sym);
 });
-for (const id of ["mk-cards", "mk-gainers", "mk-losers"]) {
+$("mk-mode").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-m]"); if (!b) return;
+  mk.mode = b.dataset.m;
+  document.querySelectorAll("#mk-mode button").forEach((x) => x.classList.toggle("active", x === b));
+  $("mk-map").hidden = mk.mode !== "map"; $("mk-table").hidden = mk.mode === "map";
+  if (mk.mode === "map") renderMap();
+});
+$("cmp-range").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-d]"); if (!b) return;
+  mk.cmpDays = +b.dataset.d;
+  document.querySelectorAll("#cmp-range button").forEach((x) => x.classList.toggle("active", x === b));
+  loadCompare();
+});
+$("cmp-pick").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-key]"); if (!b) return;
+  const k = b.dataset.key, i = mk.cmp.indexOf(k);
+  if (i >= 0) mk.cmp.splice(i, 1); else if (mk.cmp.length < 8) mk.cmp.push(k);
+  store.set("cmpItems", mk.cmp); renderPickers(); loadCompare();
+});
+$("cmp-presets").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-preset]"); if (!b) return;
+  const known = new Set(mk.perf.map(key));
+  mk.cmp = CMP_PRESETS[+b.dataset.preset][1].filter((k) => known.has(k));
+  store.set("cmpItems", mk.cmp); renderPickers(); loadCompare();
+});
+for (const id of ["mk-cards", "mk-gainers", "mk-losers", "perf-table", "mk-map"]) {
   $(id).addEventListener("click", (e) => { const c = e.target.closest("[data-sym]"); if (c) openSymbol(c.dataset.cls, c.dataset.sym); });
 }
 
 // ───────────────────────────── VEHICLES ─────────────────────────────
 const vh = { days: 30, site: "", q: "", new: false, offset: 0 };
 const lkr = (v) => (v === null || v === undefined) ? "–" : `Rs ${Math.round(v).toLocaleString()}`;
+const lkrShort = (v) => v >= 1e6 ? `Rs ${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `Rs ${Math.round(v / 1e3)}K` : `Rs ${v}`;
 
 async function loadVehicles() {
   const [summary, changes] = await Promise.all([api("/api/vehicles/summary"), api("/api/vehicles/changes")]);
@@ -472,6 +709,8 @@ async function loadVehicles() {
   $("vh-site-table").innerHTML = `<table><tr><th>Site</th><th class="num">Ads</th><th class="num">New</th><th>Last collected</th></tr>${(s.sites || []).map((x) => `
     <tr><td>${esc(x.site)}</td><td class="num">${x.ads}</td><td class="num">${x.new_last_run}</td><td class="nowrap">${esc(fmtTime(x.last_saved))}<div class="muted small">${esc(ago(x.last_saved))}</div></td></tr>`).join("")}</table>`;
   dayColumns($("vh-days-chart"), s.by_day, "n");
+  bars($("vh-prices"), s.price_ranges, "range", "n");
+  bars($("vh-makes"), s.makes, "make", "n", (r) => `${r.make}${r.median_price ? ` · ${lkrShort(r.median_price)}` : ""}`);
   $("vh-changes").innerHTML = (changes.data || []).length ? changes.data.slice(0, 15).map((x) => {
     const down = x.price_lkr < x.previous_price_lkr;
     return `<div class="news-item"><div>${link(x.url, x.title)}</div><div class="meta"><span class="${down ? "up" : "down"}">${down ? "▼" : "▲"} ${lkr(x.previous_price_lkr)} → ${lkr(x.price_lkr)}</span> · ${esc(x.site)} · ${esc(ago(x.changed_at))}</div></div>`;
@@ -490,7 +729,7 @@ async function loadVehicleAds(reset) {
   const html = d.items.map((a) => {
     const drop = a.previous_price_lkr && a.price_lkr !== null && a.price_lkr !== a.previous_price_lkr;
     const meta = [a.location, a.year, a.mileage].filter(Boolean).join(" · ");
-    return `<div class="ad">${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy">` : `<div class="noimg"></div>`}
+    return `<div class="ad">${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="noimg"></div>`}
       <div><div class="t">${a.is_new ? `<span class="badge b-new">NEW</span>` : ""}${link(a.url, a.title)}</div>
         <div class="m">${esc(meta || a.posted || "")}</div>
         <div class="m">${esc(a.site)} · first seen ${esc(fmtTime(a.first_seen))} (${esc(ago(a.first_seen))})${a.times_seen > 1 ? ` · seen in ${a.times_seen} runs` : ""}</div></div>
@@ -550,6 +789,15 @@ function show(v) {
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => show(t.dataset.view)));
 window.addEventListener("hashchange", () => show(location.hash.slice(1)));
 $("refresh").addEventListener("click", refresh);
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => { /* not allowed here: the page is full width anyway */ });
+}
+$("fs").addEventListener("click", toggleFullscreen);
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "f" || e.key === "F") && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) toggleFullscreen();
+});
+document.addEventListener("fullscreenchange", () => { $("fs").textContent = document.fullscreenElement ? "✕" : "⛶"; });
 
 let timer = null;
 function setAuto(on) {

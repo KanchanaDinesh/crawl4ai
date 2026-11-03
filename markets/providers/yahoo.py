@@ -1,13 +1,16 @@
 """Yahoo Finance chart data (no API key): US indices and stocks, commodities, exchange rates.
 
-GET https://query1.finance.yahoo.com/v8/finance/chart/<symbol>?range=5d&interval=1d
-The last 5 daily closes give the previous close (for the day's change) and a small sparkline.
+GET https://query1.finance.yahoo.com/v8/finance/chart/<symbol>?range=6mo&interval=1d
+The daily closes give the previous close (for the day's change), a 5-day sparkline, and
+extra["daily"]: about 6 months of [date, close], so the dashboard has history (and a full
+3-month change) from the first run. Still one request per symbol.
 
 Yahoo often blocks or rate-limits automated requests. We don't try to get around that: on the
 first "blocked" (401/403) or "too many requests" (429) answer, Yahoo is skipped for the rest of
 the run (YahooBackoff), and collect.py uses Stooq / open.er-api.com instead.
 """
 
+import time
 from urllib.parse import quote as urlquote
 
 import aiohttp
@@ -45,6 +48,18 @@ def previous_close(stamps: list, closes: list, meta: dict) -> float | None:
     return earlier[-1] if earlier else None
 
 
+def daily_closes(stamps: list, closes: list, meta: dict) -> list[list]:
+    """[["2026-10-31", 5728.8], ...]: one close per market day, oldest first (for history charts)."""
+    if not stamps or len(stamps) != len(closes):
+        return []
+    out = {}
+    for t, c in zip(stamps, closes):
+        if c is not None:
+            day = _day(t, meta) * 86400
+            out[time.strftime("%Y-%m-%d", time.gmtime(day))] = round(c, 6)
+    return [[d, c] for d, c in sorted(out.items())]
+
+
 def has_today(stamps: list, closes: list, meta: dict) -> bool:
     """Is the latest price's day among the daily closes?"""
     dated = [t for t, c in zip(stamps, closes) if c is not None]
@@ -69,11 +84,13 @@ def parse_chart(data: dict, asset_class: str, name: str | None = None, extra: di
         prev = closes[-2] if len(closes) >= 2 else meta.get("previousClose") or meta.get("chartPreviousClose")
     elif price is not None and not has_today(stamps, raw, meta):
         closes = [*closes, price]                 # today isn't in the list yet: show it in the sparkline
+    daily = daily_closes(stamps, raw, meta)
     return quote(asset_class, meta.get("symbol") or "", name or meta.get("longName") or meta.get("shortName") or meta.get("symbol"),
                  price, prev_close=prev, currency=meta.get("currency"), volume=meta.get("regularMarketVolume"),
                  high=meta.get("regularMarketDayHigh"), low=meta.get("regularMarketDayLow"),
                  as_of=iso_from_epoch(meta.get("regularMarketTime")), source="yahoo",
-                 extra={**(extra or {}), "exchange": meta.get("exchangeName"), "spark": [round(c, 6) for c in closes]})
+                 extra={**(extra or {}), "exchange": meta.get("exchangeName"), "spark": [round(c, 6) for c in closes[-5:]],
+                        **({"daily": daily} if daily else {})})
 
 
 async def fetch(session: aiohttp.ClientSession, symbol: str, asset_class: str, name: str | None = None,
@@ -82,7 +99,7 @@ async def fetch(session: aiohttp.ClientSession, symbol: str, asset_class: str, n
         raise YahooBlocked(f"skipped: {backoff.reason}")
     last_error = None
     for host in HOSTS:
-        url = f"{host}/v8/finance/chart/{urlquote(symbol, safe='')}?range=5d&interval=1d"
+        url = f"{host}/v8/finance/chart/{urlquote(symbol, safe='')}?range=6mo&interval=1d"
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
                 if resp.status in (401, 403, 429):
