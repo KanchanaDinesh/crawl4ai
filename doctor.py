@@ -8,7 +8,7 @@ fallback) and prints a clear verdict with the fix for anything wrong:
   - where the project, browser and caches live, and the file system of that drive
   - whether that drive supports symbolic links (Chromium on macOS needs them; exFAT/FAT don't have them)
   - whether Chromium starts and opens a page: directly with Playwright, then through crawl4ai
-    (plain and with the stealth settings the vehicles scraper uses). No internet needed.
+    (plain and with the page settings the vehicles scraper uses). No internet needed.
   - whether it survives a page that needs graphics (WebGL + a screenshot). Simple pages don't start
     Chromium's separate GPU process; real websites do, and on one Mac that process crashed and took
     the browser with it. Tried with the tools' Chromium flags (CHROMIUM_ARGS) and without them.
@@ -84,17 +84,17 @@ async def try_playwright() -> str | None:
         return str(e).strip().splitlines()[0][:300]
 
 
-async def try_crawl4ai(stealth: bool, vehicles_settings: bool = False) -> str | None:
+async def try_crawl4ai(vehicles_settings: bool = False) -> str | None:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
     extra = {}
-    if vehicles_settings:                       # the same page settings the vehicles scraper uses (magic mode etc.)
+    if vehicles_settings:                       # the same page settings the vehicles scraper uses
         try:
             from vehicles.scrape import load_sites
             extra = dict(load_sites()[0].get("crawl", {}))
         except Exception:  # noqa: BLE001
-            extra = {"magic": True, "delay_before_return_html": 2.0}
+            extra = {"delay_before_return_html": 2.0}
     try:
-        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False, enable_stealth=stealth,
+        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False,
                                                         extra_args=project_paths.chromium_args())) as c:
             r = await c.arun(url="raw://<html><body><h1>ok</h1><p>" + "word " * 50 + "</p></body></html>",
                              config=CrawlerRunConfig(verbose=False, **extra))
@@ -167,13 +167,12 @@ def main() -> None:
     line(OK if not err else BAD, "Playwright opens a page", err or "")
     if err:
         problems.append("playwright")
-    for stealth, veh in ((False, False), (True, False), (True, True)):
-        err = asyncio.run(try_crawl4ai(stealth, veh))
-        label = ("crawl4ai opens a page" + (" (stealth)" if stealth and not veh else "")
-                 + (" (stealth + the vehicles page settings)" if veh else ""))
+    for veh in (False, True):
+        err = asyncio.run(try_crawl4ai(veh))
+        label = "crawl4ai opens a page" + (" (the vehicles page settings)" if veh else "")
         line(OK if not err else BAD, label, err or "")
         if err:
-            problems.append("crawl4ai-vehicles" if veh else "crawl4ai-stealth" if stealth else "crawl4ai")
+            problems.append("crawl4ai-vehicles" if veh else "crawl4ai")
 
     args = project_paths.chromium_args()
     shown = " ".join(args) or "none"
@@ -203,9 +202,7 @@ def main() -> None:
         print("  - Chromium doesn't start. Reinstall it:  source env.sh && rm -rf \"$PLAYWRIGHT_BROWSERS_PATH\"/chromium* "
               "&& uv run crawl4ai-setup")
     if problems == ["crawl4ai-vehicles"]:
-        print("  - Only the vehicles page settings fail: in vehicles/config/sites.json try \"magic\": false for each site.")
-    if set(problems) <= {"crawl4ai-stealth", "crawl4ai-vehicles"} and "crawl4ai-stealth" in problems:
-        print("  - Only stealth mode fails: in automation.conf set  VEHICLES_ARGS=\"--limit 20 --no-stealth\"")
+        print("  - Only the vehicles page settings fail: check the \"crawl\" options in vehicles/config/sites.json.")
     if "graphics" in problems:
         if args:
             print("  - Chromium crashes on pages that need graphics even with CHROMIUM_ARGS. In automation.conf try\n"

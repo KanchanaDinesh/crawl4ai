@@ -7,6 +7,7 @@
     "enabled": true,
     "item_selector": "li.gtm-normal-ad, li[class*='normal--']",
     "exclude_selector": "li.gtm-top-ad, li[class*='top-ad']",
+    "image_by_slug": "https://i.ikman-st.com/",
     "fields": {
       "title":    {"selector": ["h2[class*='heading--']", "[class*='title--']"], "type": "text"},
       "url":      {"selector": ["a.gtm-ad-item", "a[href*='/ad/']"], "type": "attribute", "attribute": "href"},
@@ -15,7 +16,7 @@
       "posted":   {"selector": ["[class*='updated-time--']"], "type": "text"},
       "image":    {"selector": ["img"], "type": "attribute", "attribute": ["data-src", "src"]}
     },
-    "crawl": {"magic": true, "delay_before_return_html": 2.0, "page_timeout": 60000}
+    "crawl": {"delay_before_return_html": 2.0, "page_timeout": 60000}
   },
   {
     "name": "riyasewana",
@@ -36,6 +37,6 @@
       "posted":   {"selector": ["div.v-card-date"], "type": "text"},
       "image":    {"selector": ["div.v-card-img img", "img"], "type": "attribute", "attribute": ["data-src", "data-lazy", "src"]}
     },
-    "crawl": {"magic": true, "delay_before_return_html": 2.0, "page_timeout": 60000}
+    "crawl": {"delay_before_return_html": 2.0, "page_timeout": 60000}
   }
 ]

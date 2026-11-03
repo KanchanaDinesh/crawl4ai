@@ -1,6 +1,6 @@
 """python -m vehicles <command>
 
-    run      [--site ikman] [--limit 20] [--max-seconds 120] [--no-stealth] [--save-html] [--print]
+    run      [--site ikman] [--limit 20] [--max-seconds 120] [--save-html] [--print]
              scrape the latest ads from every enabled site and save them
     show     [--site ikman] [--new] [--search vezel] [--limit 20]
              latest saved ads, newest first (--new: only ads first seen in the last run)
@@ -39,7 +39,7 @@ def cmd_run(args) -> None:
     sites = _pick_sites(args.site, args.config)
     try:
         reports = asyncio.run(run(sites, args.limit, args.save_html, quiet=not args.print,
-                                  stealth=not args.no_stealth, max_seconds=args.max_seconds))
+                                  max_seconds=args.max_seconds))
     except RuntimeError as e:
         logger.error("%s", e)
         raise SystemExit(1) from None
@@ -126,7 +126,7 @@ def main(argv=None) -> None:
     r.add_argument("--site", action="append", help="Only this site (repeatable). Default: every enabled site.")
     r.add_argument("--limit", type=int, help="Ads per site (overrides the config's 'limit').")
     r.add_argument("--max-seconds", type=float, help=f"Give up on a site after this long (default {SITE_SECONDS}).")
-    r.add_argument("--no-stealth", action="store_true", help="Don't use crawl4ai's stealth browser settings.")
+    r.add_argument("--no-stealth", action="store_true", help=argparse.SUPPRESS)   # old flag; stealth is never used now
     r.add_argument("--save-html", action="store_true", help="Also save each page to output/html_dumps/.")
     r.add_argument("--print", action="store_true", help="Also print each site's JSON.")
     r.add_argument("--quiet", action="store_true", help=argparse.SUPPRESS)   # old flag; quiet is now the default

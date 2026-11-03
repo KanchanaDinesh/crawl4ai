@@ -21,7 +21,6 @@ uv run python -m vehicles sites                    # the configured sites
 | `--site NAME` | Only this site (repeatable). Default: every enabled site |
 | `--limit N` | Ads per site (default: the site's `limit` in the config, 10) |
 | `--max-seconds N` | Give up on a site after this long (default 120). The browser gets 60s to start |
-| `--no-stealth` | Don't use crawl4ai's stealth browser settings |
 | `--save-html` | Also save each page to `output/html_dumps/` |
 | `--print` | Also print each site's JSON |
 

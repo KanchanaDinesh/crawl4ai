@@ -115,3 +115,24 @@ def test_no_ads_says_why_per_site(monkeypatch, caplog):
         cli.main(["run"])
     assert ("No ads from any site. ikman: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://ikman.lk; "
             "riyasewana: 0 ads matched (see output/html_dumps/)") in caplog.text
+
+
+def test_ikman_photos_come_from_the_page_by_the_ads_slug():
+    """ikman's <img> is a placeholder until scrolled, but the photo URLs are in the page with each ad's slug."""
+    site = next(s for s in vehicles.load_sites() if s["name"] == "ikman")
+    ad = ("<li class='normal--x gtm-normal-ad'><a class='gtm-ad-item' href='/en/ad/bajaj-re-2000-for-sale-kalutara-129'>"
+          "<h2 class='heading--x'>Bajaj RE 2000</h2></a><div class='price--x'>Rs 635,000</div>"
+          "<img src='data:image/png;base64,AAAA' loading='lazy'></li>")
+    page = (f"<html><body><ul>{ad}</ul><script>window.state={{\"img\":\"https://i.ikman-st.com/"
+            "bajaj-re-2000-for-sale-kalutara-129/17b1/142/107/cropped.jpg\"}}</script></body></html>")
+    ads = vehicles.parse_ads(page, site, 5)
+    assert ads[0]["image"] == "https://i.ikman-st.com/bajaj-re-2000-for-sale-kalutara-129/17b1/142/107/cropped.jpg"
+
+
+def test_the_vehicles_browser_is_plain():
+    """No stealth settings or "magic" mode: they're made to hide automation from bot detection."""
+    import json
+    from pathlib import Path
+    text = (Path(vehicles.__file__).parent / "config" / "sites.json").read_text()
+    assert all(not s.get("crawl", {}).get("magic") for s in json.loads(text))
+    assert "enable_stealth" not in Path(vehicles.__file__).read_text()

@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 91 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 92 tests pass.
 
 ## Parts and how to run them
 
@@ -162,7 +162,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Stooq now answers with a "verify your browser" JavaScript puzzle: recognised, not solved, and not asked
       again that run. **No backup for US stocks/indices/metals if Yahoo blocks us** (FX still has open.er-api.com).
     - CSE requests no longer pretend to come from cse.lk's website (Origin/Referer); the API answers anyway.
-    - Next: vehicles.
+27. Vehicles reviewed (2026-11-03): ikman and riyasewana, 20 ads each in ~7s; robots.txt allows both pages.
+    - It used crawl4ai's stealth settings and "magic" mode (made to hide automation from bot detection),
+      against the project rule. Both sites work the same without them, so they're gone (`--no-stealth` is
+      accepted but does nothing). doctor.py no longer tests stealth.
+    - ikman photos: the <img> is a placeholder until scrolled, so only 1 of 20 ads had one. The photo URLs are in
+      the page with the ad's slug: new site option `image_by_slug`. Now 20 of 20.
+    - riyasewana "Negotiable" prices have no number: correct, not a bug.
+    - **All four modules reviewed.** Still open: tech_update (paused, browser GPU fix not confirmed on the Mac)
+      and no backup for US market prices if Yahoo blocks.
 
 ## Open issues and things to watch
 
@@ -188,9 +196,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 - **Browser on the external drive:** `doctor.py` passed on the Mac (2026-11-02): Chromium starts and the drive
   supports symlinks, so `BROWSERS_ON_SYSTEM_DRIVE` isn't needed. If "browser has been closed" errors come
   back, run `uv run python doctor.py` again.
-- **ikman speed:** each run now logs `ikman: N ads in Xs`. If it often logs `gave up after 120s`, try
-  `--no-stealth`. If that doesn't help, ikman may be blocking the browser. Then don't work around it:
-  lower the frequency, or accept fewer runs.
+- **ikman speed:** each run logs `ikman: N ads in Xs` (about 4s now). If it often logs `gave up after 120s`,
+  ikman may be blocking the browser. Then don't work around it: lower the frequency, or accept fewer runs.
 - **`automation.conf` is tracked by git, but Kanchana edits it**, so `git pull` can fail with "Your local
   changes would be overwritten". For now: `git stash && git pull origin main && git stash pop`.
   - Offered, not built yet: an untracked `automation.local.conf` that overrides automation.conf.

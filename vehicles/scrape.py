@@ -12,8 +12,15 @@ Each site in the config describes:
   max_seconds       give up on this site after this long (default 120)
   sort              optional {"by": "url", "pattern": "-(\\d+)$", "order": "desc"}: sort by a
                     number taken from a field (e.g. the ad id in the URL) before applying limit
-  crawl             extra crawl4ai CrawlerRunConfig options (magic, page_timeout, wait_for, ...)
+  image_by_slug     optional URL prefix of the site's image server (ikman: "https://i.ikman-st.com/").
+                    Photos load only when scrolled into view, but their URLs are already in the page and
+                    contain the ad's slug (the last part of its URL), so each ad gets its photo from there.
+  crawl             extra crawl4ai CrawlerRunConfig options (page_timeout, wait_for, delay_before_return_html, ...)
   enabled           false to skip the site in normal runs
+
+The browser is a plain headless Chromium: no stealth settings and no "magic" mode (both are made to
+hide automation from bot detection, which this project doesn't do). Both sites' robots.txt allow
+these pages.
 
 Each site is written to output/vehicles_<site>.json and kept in data/vehicles/vehicles.duckdb
 (history, price changes: see store.py). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
@@ -100,8 +107,18 @@ def _sort_ads(ads: list[dict], sort: dict) -> list[dict]:
     return sorted(ads, key=key, reverse=sort.get("order", "desc") == "desc")
 
 
+def images_by_slug(html: str, prefix: str) -> dict[str, str]:
+    """{ad slug: image URL} for image URLs like <prefix><slug>/<id>/142/107/cropped.jpg in the page."""
+    out: dict[str, str] = {}
+    for url in re.findall(re.escape(prefix) + r"""[^"'\s\\<>]+""", html):
+        slug = url[len(prefix):].split("/", 1)[0]
+        out.setdefault(slug, url)
+    return out
+
+
 def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
+    photos = images_by_slug(html, site["image_by_slug"]) if site.get("image_by_slug") else {}
     excluded = set(map(id, soup.select(site["exclude_selector"]))) if site.get("exclude_selector") else set()
 
     ads: list[dict] = []
@@ -118,6 +135,8 @@ def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
         seen.add(ad["url"])
         if "price" in ad:
             ad["price_lkr"] = parse_price(ad["price"])
+        if photos and not ad.get("image"):
+            ad["image"] = photos.get(ad["url"].rstrip("/").rsplit("/", 1)[-1])
         ads.append(ad)
 
     if site.get("sort"):
@@ -203,12 +222,12 @@ async def _close(crawler: AsyncWebCrawler | None) -> None:
         pass
 
 
-async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool, stealth: bool = True,
+async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool,
               max_seconds: float | None = None) -> list[dict]:
     """Scrape each site. A site gets at most `max_seconds` (default SITE_SECONDS, or its config's
     "max_seconds"); a slow or stuck page is abandoned and the next site gets a fresh browser."""
     reports = []
-    browser = BrowserConfig(headless=True, enable_stealth=stealth, extra_args=project_paths.chromium_args())
+    browser = BrowserConfig(headless=True, extra_args=project_paths.chromium_args())   # plain: no stealth
     crawler = None
     try:
         for site in sites:

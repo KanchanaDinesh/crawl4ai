@@ -301,7 +301,7 @@ source env.sh
 uv run python doctor.py
 ```
 
-It checks that Chromium starts (with and without stealth mode, and with the vehicles page settings) and that the
+It checks that Chromium starts (plain, with the vehicles page settings, and on a page that needs graphics) and that the
 drive holding it supports symbolic links, then tells you the fix. `--verbose` also shows Chromium's own messages.
 
 **Works by hand but fails in scheduled runs?** Scheduled runs start from launchd, which has a different
@@ -319,7 +319,6 @@ It prints the verdict and any Chromium crash messages, and saves everything to `
   the Mac's own drive; data and databases stay where they are.
 - **Broken or mismatched browser:** run
   `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
-- **Only stealth mode fails:** set `VEHICLES_ARGS="--limit 20 --no-stealth"`.
 - **"GPU process isn't usable. Goodbye."** (the doctor's "graphics page" check fails): Chromium's separate
   graphics process crashes and takes the browser with it. Simple pages don't start that process; real
   websites do. Every tool starts Chromium with `--in-process-gpu` (graphics inside the browser process) to
@@ -331,4 +330,5 @@ The scrapers also restart a crashed browser and retry once by themselves.
 **Vehicles seems stuck:** a site gets at most 120 seconds (the log says `gave up after 120s`), and the
 browser gets 60 seconds to start, so a run can't hang forever. Each site logs how long it took
 (`ikman: 20 ads in 14.2s`). A normal run takes about 10 to 30 seconds per site. If ikman keeps
-giving up, try `uv run python -m vehicles run --no-stealth`, or a shorter limit: `--max-seconds 60`.
+giving up, try a shorter limit (`--max-seconds 60`). The browser is plain (no stealth or "magic" mode):
+if a site starts blocking it, run less often rather than working around it.
