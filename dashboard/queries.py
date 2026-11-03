@@ -106,12 +106,27 @@ TECH_DOMAINS = """
     select c.domain, c.source, c.url as candidate_url, c.detail,
            coalesce(c.signal_at, c.discovered_at) as seen_ts, c.discovered_at as found_ts,
            coalesce(q.status, 'not checked') as status, q.reason, q.category, q.score, q.title, q.final_url,
-           r.registered_at as registered_ts, p.name, p.description
+           r.registered_at as registered_ts, coalesce(p.name, co.name) as name, p.description,
+           co.social, co.employees, json_array_length(co.people) as people, co.github_repos
     from v_candidates c
     left join v_qualifications q using (domain)
     left join v_registrations r using (domain)
     left join v_profiles p using (domain)
+    left join {companies} co using (domain)
 """
+# A database from before `techintel company` existed has no v_companies view until techintel opens it again
+NO_COMPANIES = """(select null::varchar as domain, null::varchar as name, null::json as social, null::varchar as employees,
+                  null::json as people, null::integer as github_repos where false)"""
+TECH_COMPANY = {"linkedin": "social->>'linkedin' is not null", "people": "people > 0", "employees": "employees is not null",
+                "any": "social is not null and social::varchar <> '{}'"}
+
+
+def has_view(con, name: str) -> bool:
+    return con.execute("select count(*) from duckdb_views() where view_name = ?", [name]).fetchone()[0] > 0
+
+
+def _companies(con) -> str:
+    return "v_companies" if has_view(con, "v_companies") else NO_COMPANIES
 
 
 def tech_summary(con, days: int) -> dict:
@@ -148,13 +163,19 @@ def tech_summary(con, days: int) -> dict:
         where q.status = 'qualified' group by 1""")
     order = ["under 1 week", "under 1 month", "under 1 year", "1-5 years", "over 5 years", "unknown"]
     domain_age.sort(key=lambda r: order.index(r["age"]))
+    companies = []
+    if has_view(con, "v_companies"):
+        counts.update(one(con, """select count(*) as companies, count(linkedin) as with_linkedin,
+            count(*) filter (where json_array_length(people) > 0) as with_people from v_companies"""))
+        companies = rows(con, """select s.key as platform, count(*) as n from v_companies, json_each(social) s
+            group by 1 order by 2 desc limit 12""")
     new_domains = one(con, f"""select count(*) as n from v_qualifications q join v_registrations r using (domain)
         where q.status = 'qualified' and r.registered_at >= now() - interval 30 day""")
     counts["new_domains_30d"] = new_domains.get("n", 0)
     for r in tech_stack:
         r["tech"] = r["tech"].strip('"')
     return {"counts": counts, "by_category": by_category, "by_source": by_source, "by_status": by_status,
-            "tech_stack": tech_stack, "by_day": by_day, "domain_age": domain_age}
+            "tech_stack": tech_stack, "by_day": by_day, "domain_age": domain_age, "social_platforms": companies}
 
 
 TECH_SORT = {"seen": "seen_ts desc nulls last, score desc nulls last",
@@ -164,7 +185,7 @@ TECH_SORT = {"seen": "seen_ts desc nulls last, score desc nulls last",
 
 
 def tech_domains(con, *, status=None, category=None, source=None, q=None, days=30, limit=100, offset=0,
-                 sort="seen") -> dict:
+                 sort="seen", company=None) -> dict:
     where, params = [f"seen_ts >= now() - interval {int(days)} day or found_ts >= now() - interval {int(days)} day"], []
     if status:
         where.append("status = ?"); params.append(status)
@@ -172,16 +193,19 @@ def tech_domains(con, *, status=None, category=None, source=None, q=None, days=3
         where.append("category = ?"); params.append(category)
     if source:
         where.append("source = ?"); params.append(source)
+    if company in TECH_COMPANY:
+        where.append(TECH_COMPANY[company])
     if q:
         where.append("(domain ilike ? or coalesce(title, '') ilike ? or coalesce(name, '') ilike ? "
                      "or coalesce(description, '') ilike ? or coalesce(reason, '') ilike ?)")
         params += [f"%{q}%"] * 5
     cond = " and ".join(f"({w})" for w in where)
-    base = f"select * from ({TECH_DOMAINS}) where {cond}"
+    base = f"select * from ({TECH_DOMAINS.format(companies=_companies(con))}) where {cond}"
     total = con.execute(f"select count(*) from ({base})", params).fetchone()[0]
     items = rows(con, f"""select domain, source, status, reason, category, score, coalesce(name, title) as name,
             description, coalesce(final_url, candidate_url) as url, detail->>'title' as source_title,
-            {_ts('seen_ts')} as seen_at, {_ts('found_ts')} as found_at, {_ts('registered_ts')} as registered_at
+            {_ts('seen_ts')} as seen_at, {_ts('found_ts')} as found_at, {_ts('registered_ts')} as registered_at,
+            social, employees, people, github_repos
         from ({base}) order by {TECH_SORT.get(sort, TECH_SORT["seen"])}
         limit {int(limit)} offset {int(offset)}""", params)
     return {"total": total, "items": items}
@@ -201,8 +225,9 @@ def tech_domain(con, domain: str) -> dict:
         profile.pop("external_domains", None)
         for page in profile.get("pages", []):
             page.pop("raw_file", None)
+    company = latest_json("companies", "and data->>'status' = 'ok'") if has_view(con, "v_companies") else None
     return {"domain": domain, "candidate": latest_json("candidates"), "qualifications": history,
-            "registration": latest_json("registrations"), "profile": profile, "changes": changes}
+            "registration": latest_json("registrations"), "profile": profile, "changes": changes, "company": company}
 
 
 def tech_changes(con, days=30, limit=100) -> list[dict]:

@@ -103,7 +103,8 @@ async def tech_domains(request):
     args = dict(status=q.get("status") or None, category=q.get("category") or None, source=q.get("source") or None,
                 q=(q.get("q") or "").strip() or None, days=_int(request, "days", 30),
                 limit=_int(request, "limit", 100, hi=1000), offset=_int(request, "offset", 0, lo=0),
-                sort=q.get("sort") if q.get("sort") in queries.TECH_SORT else "seen")
+                sort=q.get("sort") if q.get("sort") in queries.TECH_SORT else "seen",
+                company=q.get("company") if q.get("company") in queries.TECH_COMPANY else None)
     return web.json_response(_query("tech", lambda c: queries.tech_domains(c, **args), f"tech_domains:{sorted(args.items())}"))
 
 

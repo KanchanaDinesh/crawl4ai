@@ -257,7 +257,15 @@ $("news-q").addEventListener("input", debounce((e) => { news.q = e.target.value.
 $("news-more").addEventListener("click", () => loadNewsItems(false));
 
 // ───────────────────────────── TECH ─────────────────────────────
-const tech = { days: 30, status: "", category: "", source: "", q: "", sort: "seen", offset: 0, rows: [] };
+const tech = { days: 30, status: "", category: "", source: "", company: "", q: "", sort: "seen", offset: 0, rows: [] };
+// Company facts (techintel company): short labels for the social accounts shown in the list
+const SOCIAL = { linkedin: ["in", "LinkedIn"], facebook: ["f", "Facebook"], x: ["X", "X (Twitter)"], instagram: ["ig", "Instagram"],
+  youtube: ["yt", "YouTube"], github: ["gh", "GitHub"], tiktok: ["tt", "TikTok"] };
+function socialLinks(social) {
+  const s = typeof social === "string" ? JSON.parse(social || "{}") : social || {};
+  return Object.keys(SOCIAL).filter((k) => s[k])
+    .map((k) => `<a class="soc" href="${esc(s[k])}" target="_blank" rel="noopener noreferrer" title="${SOCIAL[k][1]}">${SOCIAL[k][0]}</a>`).join("");
+}
 const STATUS_COLOR = { qualified: "var(--ok)", watch: "var(--warn)", rejected: "var(--bad)", "not checked": "var(--muted)" };
 
 // "3 days", "5 weeks", "2 years" since a domain was registered, and whether it's brand new (under 30 days)
@@ -285,6 +293,8 @@ async function loadTech() {
     [fmtNum(c.watch), "On watch"], [fmtNum(c.rejected), "Rejected"], [fmtNum(c.profiled), "Profiled"],
     [fmtNum(c.new_domains_30d), "Qualified on domains under 30 days old"],
     [fmtNum(c.changes), `Changes, ${periodLabel}`], [fmtNum(c.candidates), "Domains (all time)"],
+    ...(c.companies != null ? [[fmtNum(c.with_linkedin), `With LinkedIn, of ${fmtNum(c.companies)} companies read`],
+      [fmtNum(c.with_people), "Name their leadership"]] : []),
   ].map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
 
   const total = (s.by_status || []).reduce((a, r) => a + r.n, 0);
@@ -303,6 +313,9 @@ async function loadTech() {
   $("tech-status-label").textContent = periodLabel;
   stackBar($("tech-status-chart"), order.filter((k) => st[k]).map((k) => ({ label: k, n: st[k], color: STATUS_COLOR[k] })));
   bars($("tech-stack"), s.tech_stack, "tech", "n");
+  $("tech-social-label").textContent = c.companies != null ? `${fmtNum(c.companies)} companies read` : "company facts";
+  if ((s.social_platforms || []).length) bars($("tech-social"), s.social_platforms, "platform", "n");
+  else $("tech-social").innerHTML = `<div class="muted small">Not collected yet. Run <code>uv run python -m techintel company</code>.</div>`;
   bars($("tech-by-source"), s.by_source, "source", "n");
   $("tech-changes").innerHTML = (changes.data || []).length ? changes.data.slice(0, 25).map((x) => `
     <div class="news-item"><div><b>${esc(x.domain)}</b> ${esc(changeText(x))}</div><div class="meta">${fmtTime(x.detected_at)} · ${ago(x.detected_at)}</div></div>`).join("")
@@ -331,7 +344,7 @@ async function loadTechRows(reset) {
   const ticket = ++techReq;                                // ignore answers to older requests
   const offset = reset ? 0 : tech.offset;
   const res = await api("/api/tech/domains", { days: tech.days, status: tech.status, category: tech.category,
-    source: tech.source, q: tech.q, sort: tech.sort, limit: PAGE, offset });
+    source: tech.source, company: tech.company, q: tech.q, sort: tech.sort, limit: PAGE, offset });
   if (ticket !== techReq) return;
   if (reset) { tech.offset = 0; tech.rows = []; }
   const d = res.data || { total: 0, items: [] };
@@ -339,7 +352,7 @@ async function loadTechRows(reset) {
   $("tech-count").textContent = `${fmtNum(d.total)} · click a row for details`;
   const maxScore = Math.max(1, ...tech.rows.map((r) => r.score || 0));
   $("tech-table").innerHTML = tech.rows.length ? `<table class="dense"><thead><tr><th>#</th><th>Seen</th><th>Site</th><th>Status</th>
-    <th>Category</th><th class="num">Score</th><th>Domain age</th><th>Source</th></tr></thead><tbody>${tech.rows.map((r, n) => {
+    <th>Category</th><th class="num">Score</th><th>Domain age</th><th>Company</th><th>Source</th></tr></thead><tbody>${tech.rows.map((r, n) => {
       const age = domainAge(r.registered_at);
       return `<tr class="click" data-domain="${esc(r.domain)}"><td class="num muted">${n + 1}</td>
     <td class="nowrap" title="${esc(fmtTime(r.seen_at))}">${ago(r.seen_at)}</td>
@@ -349,6 +362,8 @@ async function loadTechRows(reset) {
     <td class="num">${r.score == null ? "" : `<span class="scorebar">${Math.round(r.score)}<i style="width:${Math.round((40 * r.score) / maxScore)}px"></i></span>`}</td>
     <td class="nowrap" title="${r.registered_at ? "registered " + esc(fmtDate(r.registered_at)) : "registration date unknown"}">${age
       ? `${age.young ? `<span class="badge b-young">NEW</span>` : ""}${esc(age.text)}` : `<span class="muted">–</span>`}</td>
+    <td class="nowrap small">${socialLinks(r.social)}${r.people ? ` <span title="people named on its site">👤${r.people}</span>` : ""}${r.employees
+      ? ` <span class="muted" title="employees, as the site says">${esc(String(r.employees).slice(0, 18))}</span>` : ""}</td>
     <td class="small nowrap" title="${esc(r.source_title || "")}">${esc(r.source || "")}</td></tr>`;
     }).join("")}</tbody></table>`
     : `<div class="empty">No domains match these filters.</div>`;
@@ -380,10 +395,32 @@ async function openDomain(domain) {
       <h4>Signals</h4><div>${sig.map((t) => `<span class="tag">${esc(t)}</span>`).join("") || '<span class="muted">none</span>'}</div>
       <h4>Key pages</h4><div>${Object.entries(p.key_pages || {}).map(([k, u]) => `<div>${esc(k)}: ${link(u)}</div>`).join("") || '<span class="muted">none found</span>'}</div>
       ${(p.keywords || []).length ? `<h4>Keywords</h4><div>${p.keywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</div>` : ""}
-      ${Object.keys(p.social || {}).length ? `<h4>Social</h4><div>${Object.entries(p.social).map(([k, u]) => link(u, k)).join(" · ")}</div>` : ""}`
+      ${Object.keys(p.social || {}).length && !d.company ? `<h4>Social</h4><div>${Object.entries(p.social).map(([k, u]) => link(u, k)).join(" · ")}</div>` : ""}`
       : `<h4>Profile</h4><div class="muted">Not profiled yet${q.status === "qualified" ? " (run the profile stage)" : " (only qualified sites are profiled)"}.</div>`}
+    ${companyHtml(d.company)}
     <h4>Changes</h4>${(d.changes || []).length ? d.changes.map((x) => `<div>${fmtTime(x.detected_at)} · ${esc(changeText(x))}</div>`).join("") : '<div class="muted">None detected.</div>'}
     <h4>Check history</h4><table>${(d.qualifications || []).slice().reverse().map((h) => `<tr><td class="nowrap">${fmtTime(h.checked_at)}</td><td>${pill(h.status)}</td><td class="small">${esc(h.reason)}</td></tr>`).join("")}</table>`;
+}
+// What the company publishes about itself (techintel company). LinkedIn/Facebook are links only: never fetched.
+function companyHtml(co) {
+  if (!co) return `<h4>Company</h4><div class="muted">Not read yet. Run <code>uv run python -m techintel company</code>.</div>`;
+  const gh = co.github && !co.github.error ? co.github : null;
+  const rows = [
+    ["Legal name", esc(co.legal_name || "")], ["Founded", esc(co.founded || "")],
+    ["Employees", co.employees ? `${esc(co.employees)} <span class="muted small">(schema.org)</span>`
+      : co.employees_hint ? `"${esc(co.employees_hint)}" <span class="muted small">(as the site says)</span>` : ""],
+    ["Address", esc(co.address || "")],
+    ["Email", (co.emails || []).map((e) => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(", ")],
+    ["Phone", (co.phones || []).map((t) => `<a href="tel:${esc(t)}">${esc(t)}</a>`).join(", ")],
+    ["GitHub", gh ? `${link(gh.html_url || co.social.github, gh.login)} · ${fmtNum(gh.public_repos || 0)} repos · ${fmtNum(gh.followers || 0)} followers${gh.created_at ? ` · since ${esc(gh.created_at.slice(0, 4))}` : ""}` : ""],
+  ].filter(([, v]) => v);
+  const social = Object.entries(co.social || {});
+  return `<h4>Company <small class="muted">from its own site, ${fmtDate(co.checked_at)}</small></h4>
+    ${rows.length ? `<div class="kv">${rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("")}</div>` : ""}
+    <h4>People</h4>${(co.people || []).length ? `<div class="people-list">${co.people.map((x) => `<div><b>${esc(x.name)}</b> · ${esc(x.role)}</div>`).join("")}</div>`
+      : '<div class="muted">None named on its about/team pages.</div>'}
+    ${(co.linkedin_people || []).length ? `<div class="small">LinkedIn pages linked from its team page: ${co.linkedin_people.map((u, i) => link(u, String(i + 1))).join(" · ")}</div>` : ""}
+    <h4>Social accounts</h4><div>${social.length ? social.map(([k, u]) => link(u, (SOCIAL[k] || [k, k])[1])).join(" · ") : '<span class="muted">none found</span>'}</div>`;
 }
 function closeDrawer() { $("drawer").classList.remove("open"); $("drawer-bg").classList.remove("open"); }
 
@@ -397,6 +434,7 @@ $("tech-days").addEventListener("change", (e) => { tech.days = +e.target.value; 
 $("tech-category").addEventListener("change", (e) => { tech.category = e.target.value; loadTechRows(true); });
 $("tech-sort").addEventListener("change", (e) => { tech.sort = e.target.value; $("tech-table").scrollTop = 0; loadTechRows(true); });
 $("tech-source").addEventListener("change", (e) => { tech.source = e.target.value; loadTechRows(true); });
+$("tech-company").addEventListener("change", (e) => { tech.company = e.target.value; loadTechRows(true); });
 $("tech-q").addEventListener("input", debounce((e) => { tech.q = e.target.value.trim(); loadTechRows(true); }));
 $("tech-more").addEventListener("click", () => loadTechRows(false));
 $("tech-table").addEventListener("click", (e) => {

@@ -78,6 +78,9 @@
       <span id="tech-status"></span>
       <select id="tech-category"><option value="">All categories</option></select>
       <select id="tech-source"><option value="">All sources</option></select>
+      <select id="tech-company" title="Company facts (techintel company)"><option value="">Any company info</option>
+        <option value="any">Has social links</option><option value="linkedin">Has LinkedIn</option>
+        <option value="people">Names its people</option><option value="employees">Gives employees</option></select>
       <input type="search" id="tech-q" placeholder="Search domain, name, description, reason…">
     </div>
     <div class="chartgrid">
@@ -98,6 +101,7 @@
         </div>
       </div>
       <aside>
+        <div class="panel"><h3>Social accounts <small id="tech-social-label">company facts</small></h3><div id="tech-social" class="bars"></div></div>
         <div class="panel"><h3>Tech stack <small>profiled sites</small></h3><div id="tech-stack" class="bars"></div></div>
         <div class="panel"><h3>Discovered by source</h3><div id="tech-by-source" class="bars"></div></div>
         <div class="panel"><h3>Recent changes</h3><div id="tech-changes"></div></div>

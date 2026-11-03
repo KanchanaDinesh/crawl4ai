@@ -107,3 +107,9 @@ td.pc{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   color:#fff;font-size:12px;line-height:1.25}.heat .tile b{font-size:13px}.heat .tile:hover{outline:2px solid var(--fg)}
 .pickers{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.pickers .chip i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
 .stack{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0}.stack i{display:block;height:100%}
+
+/* company facts: small social-account links in the Tech Intel list */
+.soc{display:inline-block;min-width:18px;text-align:center;border-radius:4px;padding:0 3px;margin-right:3px;font-size:11px;font-weight:700;
+  background:var(--bg);border:1px solid var(--line);color:var(--muted);text-decoration:none}
+.soc:hover{color:var(--accent);border-color:var(--accent)}
+.people-list div{margin:2px 0}

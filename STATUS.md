@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 100 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 101 tests pass.
 
 ## Parts and how to run them
 
@@ -201,7 +201,10 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - LinkedIn and Facebook are **not** scraped (their terms forbid it, and it needs a login): links only. Agreed rule.
     - 60 real sites in 35s: 55 with social links, 31 LinkedIn, 8 with named leadership, 34 GitHub numbers.
     - GitHub allows 60 lookups/hour without a token; refused lookups are filled in on later runs. `GITHUB_TOKEN` raises it.
-    - Next: show it in the dashboard's Tech Intel tab (not built yet).
+    - Dashboard (Tech Intel tab): "Company" column with social-account links (in, f, X, ig, yt, gh, tt), people
+      count and employees; a filter (has social links / LinkedIn / names its people / gives employees); KPIs and a
+      "Social accounts" chart; a Company section in each site's details (people, contacts, GitHub, all accounts).
+      Works with older databases that have no companies table yet.
 
 ## Open issues and things to watch
 

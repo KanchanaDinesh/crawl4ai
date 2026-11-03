@@ -108,6 +108,15 @@ def build_tech(root, now: datetime | None = None) -> None:
     store.append("changes", [
         {"domain": "agentforge.dev", "change_type": "tech_added", "field": "tech_stack", "after": "Stripe", "detected_at": iso(now - timedelta(hours=1))},
         {"domain": "payflow.io", "change_type": "signal_on", "field": "hiring", "before": False, "after": True, "detected_at": iso(now - timedelta(hours=2))}])
+    store.append("companies", [{"domain": "agentforge.dev", "status": "ok", "checked_at": iso(now), "name": "AgentForge",
+                                "social": {"linkedin": "https://www.linkedin.com/company/agentforge/", "x": "https://x.com/agentforge",
+                                           "github": "https://github.com/agentforge"},
+                                "people": [{"name": "Nimal Perera", "role": "Co-founder & CEO"}], "employees": "11-50",
+                                "emails": ["hello@agentforge.dev"], "phones": [], "linkedin_people": [],
+                                "github": {"login": "agentforge", "public_repos": 12, "followers": 40}},
+                               {"domain": "payflow.io", "status": "ok", "checked_at": iso(now), "name": "Payflow",
+                                "social": {"facebook": "https://facebook.com/payflow"}, "people": [], "emails": [],
+                                "phones": [], "linkedin_people": []}])
     store.append("runs", [{"stage": s, "status": "ok", "finished_at": iso(now - timedelta(hours=1)), "summary": {"ok": True}}
                           for s in ("discover", "qualify", "enrich", "profile", "monitor", "report")])
     store.close()

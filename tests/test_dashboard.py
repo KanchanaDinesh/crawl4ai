@@ -85,6 +85,28 @@ def test_tech_endpoints(dash):
     assert scores == sorted(scores, reverse=True)
 
 
+def test_tech_company_facts(dash):
+    server, db_files = dash
+    summary, linkedin, social, detail = call(server, "/api/tech/summary", "/api/tech/domains?company=linkedin",
+                                             "/api/tech/domains?company=any", "/api/tech/domain/agentforge.dev")
+    c = summary["data"]["counts"]
+    assert (c["companies"], c["with_linkedin"], c["with_people"]) == (2, 1, 1)
+    assert {r["platform"] for r in summary["data"]["social_platforms"]} == {"linkedin", "x", "github", "facebook"}
+    row, = linkedin["data"]["items"]
+    assert row["domain"] == "agentforge.dev" and row["people"] == 1 and row["employees"] == "11-50"
+    assert social["data"]["total"] == 2
+    assert detail["data"]["company"]["github"]["public_repos"] == 12
+
+    con = duckdb.connect(str(db_files["tech"]))         # a database from before `techintel company`
+    con.execute("drop view v_companies")
+    con.close()
+    server._cache.clear()
+    summary, domains, detail = call(server, "/api/tech/summary", "/api/tech/domains?company=linkedin",
+                                    "/api/tech/domain/agentforge.dev")
+    assert "companies" not in summary["data"]["counts"] and summary["data"]["social_platforms"] == []
+    assert domains["data"]["total"] == 0 and detail["data"]["company"] is None
+
+
 def test_busy_database_serves_last_data(dash):
     server, db_files = dash
     first, = call(server, "/api/news/runs")
