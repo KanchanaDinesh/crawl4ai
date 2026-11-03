@@ -82,6 +82,33 @@ If plain HTTP is blocked or the page needs JavaScript, a real browser (crawl4ai)
 
 The same data is saved as `.md`, `.csv` (for Excel or Numbers) and `.json` next to the HTML.
 
+## Analysis: `analyze`
+
+```bash
+uv run python -m worldnews analyze              # the last 24 hours (analysis.default_days)
+uv run python -m worldnews analyze --days 7     # the last week
+uv run python -m worldnews analyze --group LK   # Sri Lankan sources only
+```
+
+Our own numbers about the saved headlines, offline, in about 2 seconds. It prints a summary and writes
+`output/worldnews/analysis/analysis-<date>_<time>.{html,md,json}` (and `analysis-latest.html`):
+
+- **Biggest stories:** the same story from several sources. Headlines are grouped when their titles share at
+  least 3 meaningful words (and 30% of them); words that are in too many headlines ("police") don't count.
+- **Topics:** politics, economy, business, technology, crypto, conflict, crime & justice, accidents & disasters,
+  health, climate & environment, sports, entertainment, science & space, education, transport. Word lists in
+  `settings.json` → `analysis.topics` (edit them freely). Also: what each country's news is mostly about.
+- **Names and places:** capitalised words in normal sentences, counted once per headline. Title Case headlines
+  aren't used to find names; job titles ("President"), countries and the sources' own names are left out.
+- **Countries mentioned:** by name, people and capital ("Colombo" counts for Sri Lanka), and how many of those
+  headlines came from other countries' sources.
+- **Rising words:** in many more headlines than in the period before (needs a day of earlier data).
+- **Tone:** a rough word count ("killed", "crisis" vs "wins", "record"), per country group. Rough on purpose:
+  it shows a direction, not a verdict.
+- **Sri Lanka:** the same for Sri Lankan sources and anything mentioning Sri Lanka.
+
+`./run_all.sh` runs it after `news` (step `news_analyze`; options in `NEWS_ANALYZE_ARGS`, e.g. `--days 7`).
+
 ## Data
 
 Stored in the DuckDB database `data/worldnews/worldnews.duckdb` (see the main README):

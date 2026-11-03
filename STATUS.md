@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 101 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 106 tests pass.
 
 ## Parts and how to run them
 
@@ -21,7 +21,7 @@ Run every command from the project folder, after `source env.sh`.
 | Part | Command | Status |
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
-| World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
+| World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
@@ -207,6 +207,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       Works with older databases that have no companies table yet.
     - Kanchana saw "rejected 780" but only ~14 rows: the site list is a scroll box showing ~14 of the first 100 loaded.
       Counts now say "780 · showing 100", and the Tech Intel list loads the next 100 when scrolled to the bottom.
+32. `worldnews analyze` (Kanchana's request, 2026-11-03, ~1,800 headlines saved): our own analysis of the saved
+    headlines, offline, ~2s. Biggest stories (same story from several sources: titles sharing ≥3 meaningful words),
+    topics (15, word lists in settings.json `analysis.topics`) overall and per country, names and places, countries
+    mentioned, rising words vs the period before, rough word-based tone per country, and a Sri Lanka section.
+    Report in output/worldnews/analysis/ (html, md, json); run_all step `news_analyze` (in the default STEPS).
+    - First run: 19 sources on the Florida jet crash, 16 on the California ballots case, 13 on US strikes on Iran;
+      Sri Lanka: Trincomalee shooting, Deduru Oya overflow, Namal Rajapaksa in court.
+    - Rising words need a day of earlier data (the news history started on 2026-11-03).
+    - Ideas: a News Analysis panel in the dashboard; use the top stories in the briefing; weekly/monthly views.
 
 ## Open issues and things to watch
 

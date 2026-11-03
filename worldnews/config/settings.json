@@ -65,5 +65,30 @@
   "report": {
     "items_per_source_in_report": null,
     "new_badge": true
+  },
+
+  "analysis": {
+    "default_days": 1,
+    "topics": {
+      "politics": ["election", "elections", "parliament", "president", "prime minister", "minister", "government", "opposition", "congress", "senate", "senator", "democrats", "republicans", "trump", "vote", "voters", "campaign", "cabinet", "policy", "lawmakers", "mp", "mps", "party", "coalition", "referendum", "governor", "white house", "modi", "dissanayake"],
+      "economy": ["economy", "economic", "inflation", "gdp", "budget", "tax", "taxes", "tariff", "tariffs", "trade", "exports", "imports", "jobs", "unemployment", "wages", "imf", "debt", "central bank", "interest rate", "interest rates", "recession", "growth", "investment", "fuel price", "prices", "cost of living"],
+      "business": ["company", "companies", "ceo", "profit", "revenue", "earnings", "shares", "merger", "acquisition", "deal", "startup", "layoffs", "bank", "banks", "billion", "million", "sales", "market"],
+      "technology": ["ai", "artificial intelligence", "tech", "technology", "software", "app", "apple", "google", "microsoft", "openai", "nvidia", "meta", "amazon", "chip", "chips", "semiconductor", "cyber", "cyberattack", "hack", "data", "smartphone", "robot", "internet", "startup", "digital"],
+      "crypto": ["crypto", "bitcoin", "ethereum", "blockchain", "stablecoin", "token", "binance", "coinbase"],
+      "conflict": ["war", "attack", "attacks", "strike", "strikes", "missile", "missiles", "drone", "drones", "military", "army", "troops", "soldiers", "ceasefire", "bomb", "bombing", "airstrike", "invasion", "hostages", "terror", "terrorist", "militants", "gaza", "ukraine", "conflict"],
+      "crime_justice": ["police", "arrested", "arrest", "court", "judge", "trial", "jail", "prison", "murder", "killed", "shooting", "charged", "lawsuit", "fraud", "corruption", "crime", "stabbing", "drugs", "smuggling", "investigation", "sentenced", "bail", "cid"],
+      "accidents_disasters": ["crash", "accident", "fire", "flood", "floods", "earthquake", "storm", "cyclone", "hurricane", "landslide", "rescue", "dead", "injured", "collapse", "derail", "derailed", "wildfire", "disaster"],
+      "health": ["health", "hospital", "hospitals", "doctor", "doctors", "disease", "virus", "vaccine", "cancer", "covid", "outbreak", "dengue", "medical", "medicine", "patients", "mental health", "who"],
+      "climate_environment": ["climate", "environment", "emissions", "carbon", "renewable", "solar", "pollution", "heatwave", "weather", "rain", "forest", "wildlife", "elephant", "elephants", "cop30", "drought"],
+      "sports": ["cricket", "football", "soccer", "rugby", "tennis", "f1", "formula 1", "olympic", "olympics", "match", "tournament", "world cup", "league", "cup", "coach", "captain", "wicket", "goal", "win", "nba", "nfl", "t20", "odi", "test match", "ipl", "squad"],
+      "entertainment": ["film", "movie", "music", "singer", "actor", "actress", "celebrity", "netflix", "show", "concert", "album", "bollywood", "hollywood", "award", "awards", "series", "festival"],
+      "science_space": ["science", "scientists", "study", "research", "space", "nasa", "isro", "rocket", "moon", "mars", "satellite", "planet", "discovery"],
+      "education": ["school", "schools", "university", "universities", "students", "exam", "exams", "teachers", "education", "a/l", "o/l", "scholarship"],
+      "transport": ["train", "railway", "bus", "airport", "flight", "flights", "airline", "road", "roads", "highway", "traffic", "vehicle", "vehicles", "port", "shipping"]
+    },
+    "tone": {
+      "negative": ["killed", "kill", "dead", "death", "deaths", "dies", "died", "crash", "attack", "war", "crisis", "fears", "fear", "warns", "warning", "threat", "falls", "fall", "drop", "drops", "plunge", "plunges", "loss", "losses", "fraud", "arrested", "injured", "fire", "flood", "collapse", "protest", "protests", "strike", "slump", "worst", "fails", "failed", "scandal", "shooting", "violence", "victims", "ban", "cuts", "layoffs", "decline", "risk", "concern", "accused", "charged", "lawsuit", "shortage", "outage"],
+      "positive": ["wins", "win", "won", "record", "growth", "grows", "rises", "rise", "surge", "surges", "gains", "gain", "success", "successful", "boost", "boosts", "launches", "launch", "agreement", "deal", "peace", "recovery", "recovers", "best", "celebrates", "award", "awarded", "improves", "improved", "breakthrough", "rescued", "opens", "approved", "relief", "historic", "champion", "champions", "honoured", "honored"]
+    }
   }
 }
