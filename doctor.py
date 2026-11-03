@@ -9,6 +9,9 @@ fallback) and prints a clear verdict with the fix for anything wrong:
   - whether that drive supports symbolic links (Chromium on macOS needs them; exFAT/FAT don't have them)
   - whether Chromium starts and opens a page: directly with Playwright, then through crawl4ai
     (plain and with the stealth settings the vehicles scraper uses). No internet needed.
+  - whether it survives a page that needs graphics (WebGL + a screenshot). Simple pages don't start
+    Chromium's separate GPU process; real websites do, and on one Mac that process crashed and took
+    the browser with it. Tried with the tools' Chromium flags (CHROMIUM_ARGS) and without them.
 """
 
 import asyncio
@@ -91,12 +94,37 @@ async def try_crawl4ai(stealth: bool, vehicles_settings: bool = False) -> str | 
         except Exception:  # noqa: BLE001
             extra = {"magic": True, "delay_before_return_html": 2.0}
     try:
-        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False, enable_stealth=stealth)) as c:
+        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False, enable_stealth=stealth,
+                                                        extra_args=project_paths.chromium_args())) as c:
             r = await c.arun(url="raw://<html><body><h1>ok</h1><p>" + "word " * 50 + "</p></body></html>",
                              config=CrawlerRunConfig(verbose=False, **extra))
             return None if r.success and "ok" in (r.html or "") else (r.error_message or "no content")[:300]
     except Exception as e:  # noqa: BLE001
         return str(e).strip().splitlines()[0][:300]
+
+
+GRAPHICS_PAGE = ("raw://<html><body style='margin:0'><canvas id='c' width='400' height='300'></canvas>"
+                 "<div style='transform:rotate3d(1,1,0,30deg);will-change:transform;width:200px;height:100px;"
+                 "background:linear-gradient(red,blue)'>3d</div><h1>ok</h1><script>"
+                 "var g=document.getElementById('c').getContext('webgl');"
+                 "if(g){g.clearColor(0,0.5,1,1);g.clear(g.COLOR_BUFFER_BIT);}"
+                 "document.querySelector('h1').textContent=g?'ok webgl':'ok no-webgl';</script></body></html>")
+
+
+async def try_graphics_page(args: list[str]) -> str | None:
+    """A page that makes Chromium start its GPU process (WebGL, 3D CSS, a screenshot)."""
+    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+    try:
+        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False, extra_args=args)) as c:
+            for _ in range(2):                  # the crash came on the 2nd or 3rd page: try more than one
+                r = await c.arun(url=GRAPHICS_PAGE, config=CrawlerRunConfig(verbose=False, screenshot=True))
+                if not (r.success and "ok" in (r.html or "")):
+                    return (r.error_message or "no content").strip().splitlines()[0][:300]
+            return None
+    except Exception as e:  # noqa: BLE001
+        lines = [ln for ln in str(e).splitlines() if ln.strip()]
+        why = [ln.strip() for ln in lines if "FATAL" in ln or "GPU process" in ln]
+        return " | ".join(why[-2:])[:300] if why else (lines[0][:300] if lines else type(e).__name__)
 
 
 def main() -> None:
@@ -147,6 +175,17 @@ def main() -> None:
         if err:
             problems.append("crawl4ai-vehicles" if veh else "crawl4ai-stealth" if stealth else "crawl4ai")
 
+    args = project_paths.chromium_args()
+    shown = " ".join(args) or "none"
+    err = asyncio.run(try_graphics_page(args))
+    line(OK if not err else BAD, f"crawl4ai opens a graphics page (tools' flags: {shown})", err or "")
+    if err:
+        problems.append("graphics")
+    if args:                                    # for information: is the flag actually needed here?
+        plain = asyncio.run(try_graphics_page([]))
+        line(OK if not plain else WARN, "  same page without those flags",
+             "also works (the flags aren't needed here)" if not plain else f"fails: {plain}")
+
     print()
     if not problems:
         print("All good: the browser works here.")
@@ -167,6 +206,14 @@ def main() -> None:
         print("  - Only the vehicles page settings fail: in vehicles/config/sites.json try \"magic\": false for each site.")
     if set(problems) <= {"crawl4ai-stealth", "crawl4ai-vehicles"} and "crawl4ai-stealth" in problems:
         print("  - Only stealth mode fails: in automation.conf set  VEHICLES_ARGS=\"--limit 20 --no-stealth\"")
+    if "graphics" in problems:
+        if args:
+            print("  - Chromium crashes on pages that need graphics even with CHROMIUM_ARGS. In automation.conf try\n"
+                  "      CHROMIUM_ARGS=\"--in-process-gpu --disable-gpu-sandbox\"\n"
+                  "    then run this check again, and send the output with --verbose.")
+        else:
+            print("  - Chromium crashes on pages that need graphics. Remove CHROMIUM_ARGS from automation.conf\n"
+                  "    (the default, --in-process-gpu, is meant for this), then run this check again.")
     if not verbose:
         print("  - For Chromium's own messages (why it stopped), run again with:  uv run python doctor.py --verbose")
     sys.exit(1)

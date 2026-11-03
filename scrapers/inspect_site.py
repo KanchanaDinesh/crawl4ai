@@ -25,11 +25,11 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig
 
-from .common import load_config, output_path
+from .common import browser_config, load_config, output_path
 
 
 async def fetch_html(url: str) -> str | None:
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=browser_config()) as crawler:
         result = await crawler.arun(url=url, config=CrawlerRunConfig(cache_mode=CacheMode.BYPASS))
     if not result.success:
         print(f"Error fetching {url}: {result.error_message}")

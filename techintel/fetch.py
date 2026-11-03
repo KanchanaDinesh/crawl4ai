@@ -20,6 +20,8 @@ from urllib.parse import urlsplit
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig, HTTPCrawlerConfig
 from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
 
+import project_paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,7 +124,7 @@ class Fetcher:
 
     async def _start(self) -> None:
         user_agent = self.config.get("user_agent")
-        browser_config = BrowserConfig(headless=True, verbose=False,
+        browser_config = BrowserConfig(headless=True, verbose=False, extra_args=project_paths.chromium_args(),
                                        **({"user_agent": user_agent} if user_agent else {}))
         if self.mode == "http":
             http_config = HTTPCrawlerConfig(headers={"User-Agent": user_agent} if user_agent else None)

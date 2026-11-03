@@ -31,6 +31,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
+import project_paths
 from scrapers.common import now_str, output_path
 
 from . import store
@@ -207,7 +208,7 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
     """Scrape each site. A site gets at most `max_seconds` (default SITE_SECONDS, or its config's
     "max_seconds"); a slow or stuck page is abandoned and the next site gets a fresh browser."""
     reports = []
-    browser = BrowserConfig(headless=True, enable_stealth=stealth)
+    browser = BrowserConfig(headless=True, enable_stealth=stealth, extra_args=project_paths.chromium_args())
     crawler = None
     try:
         for site in sites:

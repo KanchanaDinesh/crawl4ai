@@ -15,7 +15,7 @@ import logging
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 
-from .common import load_json, save_json, setup_logging
+from .common import browser_config, load_json, save_json, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ async def run() -> None:
     existing = {_key(i): i for i in load_json(OUTPUT_FILE, default=[])}
     logger.info("Loaded %d existing items.", len(existing))
 
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=browser_config()) as crawler:
         new_items: list[dict] = []
         if html := await _fetch_html(crawler, TOP_250_URL):
             new_items += parse_top_250(html)

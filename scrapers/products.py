@@ -18,7 +18,7 @@ from urllib.parse import urljoin
 
 from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig, JsonCssExtractionStrategy
 
-from .common import load_config, save_json, setup_logging
+from .common import browser_config, load_config, save_json, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ async def scrape_site(crawler: AsyncWebCrawler, site: dict) -> list[dict]:
 
 
 async def run(sites: list[dict]) -> None:
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=browser_config()) as crawler:
         for site in sites:
             await scrape_site(crawler, site)
 

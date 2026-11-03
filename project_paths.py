@@ -31,6 +31,34 @@ def browsers_on_system_drive() -> bool:
     return bool(re.search(r'^\s*BROWSERS_ON_SYSTEM_DRIVE="?1"?(\s|#|$)', text, re.M))
 
 
+# Chromium's separate graphics (GPU) process crashed on Kanchana's Mac ("GPU process isn't usable. Goodbye."),
+# and took the whole browser with it: tech intel profiling failed and the news fallback hung. With
+# --in-process-gpu the graphics code runs inside the browser process, so there's no GPU process to crash.
+DEFAULT_CHROMIUM_ARGS = ["--in-process-gpu"]
+
+
+def _conf_value(name: str) -> str | None:
+    """NAME="value" from automation.conf, or None if it isn't there."""
+    import re
+    try:
+        text = (REPO_ROOT / "automation.conf").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = re.search(rf'^\s*{name}="([^"]*)"', text, re.M)
+    return m.group(1) if m else None
+
+
+def chromium_args() -> list[str]:
+    """Extra Chromium flags for every browser the tools start (tech intel, news fallback, vehicles, scrapers).
+
+    CHROMIUM_ARGS in the environment or automation.conf replaces the default; CHROMIUM_ARGS="" means none.
+    `uv run python doctor.py` shows whether they're needed on this machine."""
+    value = os.environ.get("CHROMIUM_ARGS")
+    if value is None:
+        value = _conf_value("CHROMIUM_ARGS")
+    return DEFAULT_CHROMIUM_ARGS[:] if value is None else value.split()
+
+
 def apply_local_env() -> None:
     if browsers_on_system_drive() and not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
         import platform

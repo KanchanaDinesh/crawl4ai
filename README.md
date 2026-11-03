@@ -320,6 +320,11 @@ It prints the verdict and any Chromium crash messages, and saves everything to `
 - **Broken or mismatched browser:** run
   `source env.sh && rm -rf "$PLAYWRIGHT_BROWSERS_PATH"/chromium* && uv run crawl4ai-setup`.
 - **Only stealth mode fails:** set `VEHICLES_ARGS="--limit 20 --no-stealth"`.
+- **"GPU process isn't usable. Goodbye."** (the doctor's "graphics page" check fails): Chromium's separate
+  graphics process crashes and takes the browser with it. Simple pages don't start that process; real
+  websites do. Every tool starts Chromium with `--in-process-gpu` (graphics inside the browser process) to
+  avoid it. If the check still fails, try `CHROMIUM_ARGS="--in-process-gpu --disable-gpu-sandbox"` in
+  `automation.conf`.
 
 The scrapers also restart a crashed browser and retry once by themselves.
 

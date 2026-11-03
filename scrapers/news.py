@@ -21,7 +21,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig
 
-from .common import load_config, now_str, save_json, setup_logging
+from .common import browser_config, load_config, now_str, save_json, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ async def scrape_site(crawler: AsyncWebCrawler, site: NewsSite) -> list[dict]:
 async def run(sites: list[NewsSite], output_file: str) -> list[dict]:
     items: list[dict] = []
     seen_urls: set[str] = set()
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=browser_config()) as crawler:
         for site in sites:
             fetched_at = now_str()
             for headline in await scrape_site(crawler, site):

@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+import project_paths
+
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent
 CONFIG_DIR = PACKAGE_DIR / "config"
@@ -80,3 +82,10 @@ def save_csv(rows: Iterable[dict], filename: str) -> Path:
         writer.writerows(rows)
     _record(filename, rows)
     return path
+
+
+def browser_config():
+    """The browser settings every scraper uses: headless, plus the shared Chromium flags
+    (project_paths.chromium_args(), e.g. keeping the GPU code in the browser process)."""
+    from crawl4ai import BrowserConfig
+    return BrowserConfig(headless=True, extra_args=project_paths.chromium_args())

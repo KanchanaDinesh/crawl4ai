@@ -47,12 +47,58 @@ def test_doctor_advice(fs, links, expect, monkeypatch, capsys, tmp_path):
         return await browser_ok()
     monkeypatch.setattr(doctor, "try_playwright", browser_ok)
     monkeypatch.setattr(doctor, "try_crawl4ai", crawl_ok)
+    monkeypatch.setattr(doctor, "try_graphics_page", lambda args: browser_ok())
     if links:
         doctor.main()
     else:
         with pytest.raises(SystemExit):
             doctor.main()
     assert expect in capsys.readouterr().out
+
+
+def test_chromium_args_default_and_override(tmp_path, monkeypatch):
+    import project_paths
+    monkeypatch.setattr(project_paths, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("CHROMIUM_ARGS", raising=False)
+    assert project_paths.chromium_args() == ["--in-process-gpu"]          # no automation.conf: the default
+    (tmp_path / "automation.conf").write_text('CHROMIUM_ARGS="--in-process-gpu --disable-gpu-sandbox"\n')
+    assert project_paths.chromium_args() == ["--in-process-gpu", "--disable-gpu-sandbox"]
+    (tmp_path / "automation.conf").write_text('CHROMIUM_ARGS=""\n')
+    assert project_paths.chromium_args() == []
+    monkeypatch.setenv("CHROMIUM_ARGS", "--foo")                          # the environment wins
+    assert project_paths.chromium_args() == ["--foo"]
+
+
+@pytest.mark.parametrize("with_flags, plain, expect", [
+    (None, "FATAL: GPU process isn't usable. Goodbye.", "All good"),       # the flag fixes it: say so
+    ("FATAL: GPU process isn't usable. Goodbye.", "FATAL: GPU process isn't usable. Goodbye.", "--disable-gpu-sandbox"),
+])
+def test_doctor_graphics_page(with_flags, plain, expect, monkeypatch, capsys, tmp_path):
+    import doctor
+    importlib.reload(doctor)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    monkeypatch.delenv("CHROMIUM_ARGS", raising=False)
+    (tmp_path / "chromium-1248").mkdir()
+    monkeypatch.setattr(doctor, "filesystem_of", lambda p: "apfs")
+    monkeypatch.setattr(doctor, "supports_symlinks", lambda p: True)
+
+    async def ok(*a, **k):
+        return None
+
+    async def graphics(args):
+        return with_flags if args else plain
+    monkeypatch.setattr(doctor, "try_playwright", ok)
+    monkeypatch.setattr(doctor, "try_crawl4ai", ok)
+    monkeypatch.setattr(doctor, "try_graphics_page", graphics)
+    if with_flags:
+        with pytest.raises(SystemExit):
+            doctor.main()
+    else:
+        doctor.main()
+    out = capsys.readouterr().out
+    assert expect in out and "graphics page" in out
+    if not with_flags:
+        assert "same page without those flags: fails" in out
 
 
 def test_symlink_and_filesystem_probes(tmp_path):

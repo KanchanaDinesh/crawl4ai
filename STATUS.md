@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 79 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 82 tests pass.
 
 ## Parts and how to run them
 
@@ -128,6 +128,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Old "unreachable" rows saved during crashes are removed automatically (profiles + their site_down changes).
     - Enrich stops for the run when rdap.org refuses (401/403/429), saves nothing for those domains, and sends
       an honest user agent.
+22. Browser crash fix for all modules: Chromium's GPU process crashed on the Mac ("GPU process isn't usable").
+    - `project_paths.chromium_args()` (default `--in-process-gpu`, override CHROMIUM_ARGS in automation.conf)
+      is passed by tech intel (and so the news fallback), vehicles and the `scrapers/` tools.
+    - doctor.py checks a page that needs graphics (WebGL + screenshot), with and without the flags.
+    - Plan agreed with Kanchana: fix the shared browser problem first, then go through each module's own errors
+      one at a time (news: Reuters/news.com.au robots, HN feed 419, Yahoo feed 404; tech: crt.sh 502, rdap.org 429).
 
 ## Open issues and things to watch
 
@@ -136,7 +142,13 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
   run then hung. The same fetcher worked fine from Claude's shell on vercel.com, ietf.org and astral.sh.
   - Now (item 21): crashes aren't saved, the stage stops after 3 restarts, and the log line
     `Chromium said: ...` shows the real reason. First report (2026-11-03) only had crawl4ai's wrapper line, so the
-    first crash now also logs "full browser error (first crash only)". Next: Kanchana sends that block.
+    first crash now also logs "full browser error (first crash only)".
+  - **Cause found (2026-11-03, run 05:31):** `GPU process exited unexpectedly: exit_code=5`, 3 times, then
+    `FATAL: GPU process isn't usable. Goodbye.` (the 03:38 vehicles crash also had `icudtl.dat not found in bundle`).
+    Simple pages never start the GPU process, so doctor.py passed and Claude's test runs worked.
+  - **Fix tried (item 22):** every browser starts with `--in-process-gpu`, and doctor.py has a "graphics page"
+    check, with and without the flag. **Not confirmed on the Mac yet:** Kanchana runs `uv run python doctor.py`
+    and then `./run_all.sh tech_update`. If the graphics check still fails: CHROMIUM_ARGS in automation.conf.
   - Also seen: rdap.org answered 403 to every registration lookup. Enrich now backs off; if it keeps refusing,
     consider querying the registries' own RDAP servers (IANA bootstrap file) instead of rdap.org.
 
