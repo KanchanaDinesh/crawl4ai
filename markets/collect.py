@@ -3,7 +3,7 @@ commodities, exchange rates and the crypto top N. Sources run in parallel; one f
 source never stops the others.
 
 Where each price comes from, in order (the first that works wins):
-  US indices/stocks, commodities  Yahoo Finance -> Stooq
+  US indices/stocks, commodities  Yahoo Finance -> Stooq (Stooq now shows a bot check: no real backup)
   exchange rates                  Yahoo Finance -> Stooq -> open.er-api.com (daily)
   Sri Lanka                       cse.lk
   crypto                          CoinGecko -> CoinPaprika
@@ -78,6 +78,7 @@ async def run_collection(settings: dict, only: list[str] | None = None, previous
     quotes: list[dict] = []
     sources: list[dict] = []
     backoff = yahoo.YahooBackoff()
+    stooq_blocked: list[str] = []          # once Stooq shows its bot check, it isn't asked again this run
     use_yahoo = fetch_cfg.get("try_yahoo", True)
     use_stooq = fetch_cfg.get("stooq_fallback", True)
 
@@ -112,10 +113,15 @@ async def run_collection(settings: dict, only: list[str] | None = None, previous
                         return [await yahoo.fetch(session, symbol, asset_class, name, extra, timeout, backoff)]
                     except ValueError as e:
                         errors.append(f"yahoo: {e}")
-                if use_stooq and stooq_symbol:
+                if use_stooq and stooq_symbol and stooq_blocked:
+                    errors.append(f"stooq: skipped ({stooq_blocked[0]})")
+                elif use_stooq and stooq_symbol:
                     try:
                         return [await stooq.fetch(session, stooq_symbol, asset_class, symbol, name or symbol,
                                                   "USD" if asset_class != "fx" else None, extra, timeout)]
+                    except stooq.StooqBlocked as e:
+                        stooq_blocked.append(str(e))
+                        errors.append(f"stooq: {e}")
                     except (aiohttp.ClientError, TimeoutError, ValueError) as e:
                         errors.append(f"stooq: {e}")
                 raise ValueError("; ".join(errors) or "no source configured")

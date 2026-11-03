@@ -8,17 +8,24 @@ import pytest
 
 from markets import collect
 from markets.collect import lkr_metal_prices, run_collection
-from markets.providers import crypto, cse, yahoo
+from markets.providers import crypto, cse, stooq, yahoo
 from test_pipeline_e2e import Site
 
 FIX = Path(__file__).parent / "fixtures"
 
 
-def chart(symbol, closes, price, currency="USD", name=None):
+MARKET_TIME = 1762113600                      # 2025-11-02 20:00 UTC
+DAY = 86400
+
+
+def chart(symbol, closes, price, currency="USD", name=None, today_included=True):
+    """Yahoo's answer: one close per day, the last one on the latest price's day (unless it isn't in yet)."""
+    last_day = MARKET_TIME - MARKET_TIME % DAY - (0 if today_included else DAY)
+    stamps = [last_day - (len(closes) - 1 - i) * DAY + 14 * 3600 for i in range(len(closes))]
     return {"chart": {"result": [{"meta": {"symbol": symbol, "currency": currency, "regularMarketPrice": price,
-                                           "regularMarketTime": 1762113600, "longName": name or symbol,
-                                           "regularMarketVolume": 1000, "exchangeName": "X"},
-                                  "timestamp": list(range(len(closes))),
+                                           "regularMarketTime": MARKET_TIME, "longName": name or symbol,
+                                           "regularMarketVolume": 1000, "exchangeName": "X", "gmtoffset": 0},
+                                  "timestamp": stamps,
                                   "indicators": {"quote": [{"close": closes}]}}], "error": None}}
 
 
@@ -45,6 +52,13 @@ def test_yahoo_parse_uses_previous_close_and_sparkline():
     assert q["extra"]["spark"] == [5600.0, 5650.0, 5700.0, 5728.8] and q["as_of"] == "2025-11-02T20:00:00Z"
     with pytest.raises(ValueError):
         yahoo.parse_chart({"chart": {"result": None, "error": {"description": "No data found"}}}, "index")
+
+
+def test_yahoo_previous_close_when_today_isnt_in_the_closes_yet():
+    """USD/LKR once compared today with the day before yesterday: today's close wasn't in Yahoo's list."""
+    q = yahoo.parse_chart(chart("LKR=X", [322.51, 322.45, 322.48, 322.62], 332.58, "LKR", today_included=False), "fx")
+    assert q["prev_close"] == 322.62 and q["change_pct"] == pytest.approx(3.087, rel=1e-3)
+    assert q["extra"]["spark"][-1] == 332.58                       # today's price is shown at the end
 
 
 def test_cse_parsers_on_real_responses():
@@ -209,3 +223,10 @@ def test_saving_a_run_with_no_prices(tmp_path):
     assert store.con.execute("select count(*) from runs").fetchone()[0] == 2
     assert store.con.execute("select error from source_runs").fetchone()[0] == "offline"
     store.close()
+
+
+def test_stooqs_browser_check_is_recognised_not_worked_around():
+    page = ("<!DOCTYPE html><html><body><noscript>This site requires JavaScript to verify your browser.</noscript>"
+            "<script>fetch('/__verify',{method:'POST'})</script></body></html>")
+    with pytest.raises(stooq.StooqBlocked):
+        stooq.parse_history_csv(page, "stock_us", "AAPL", "Apple")

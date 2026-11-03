@@ -33,7 +33,16 @@ collector doesn't try to get around that: on Yahoo's first "blocked" or "too man
 stops asking Yahoo for the rest of the run and uses the next source instead. `run` prints how many
 prices came from each source. Stooq gives daily closing prices (today's price while the market is
 open), so its prices may lag slightly behind Yahoo's. Requests identify themselves honestly with the
-`fetch.user_agent` setting.
+`fetch.user_agent` setting, and the CSE API is called without pretending to be cse.lk's own website.
+
+**Stooq now shows a "verify your browser" puzzle** to automated requests (November 2026). It isn't
+worked around: after the first such answer Stooq isn't asked again that run. So for US stocks, indices
+and metals there's currently **no working backup** if Yahoo blocks us; exchange rates still have
+open.er-api.com.
+
+**The day's change** compares with the last close from an *earlier day*, using the dates of Yahoo's daily
+closes. (Yahoo's list sometimes doesn't include today yet; taking "the second-to-last close" then compared
+with the day before yesterday.)
 
 **Gold and silver in LKR** (per gram, and gold 24K/22K per pawn of 8 g) are calculated from the
 international USD price and USD/LKR. They're a **reference price, not a local jeweller's rate**, which

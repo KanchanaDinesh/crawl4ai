@@ -28,6 +28,29 @@ class YahooBackoff:
         self.reason: str | None = None
 
 
+def _day(epoch, meta: dict) -> int | None:
+    """The market's calendar day of a timestamp (its own time zone, from gmtoffset)."""
+    return None if epoch is None else (int(epoch) + int(meta.get("gmtoffset") or 0)) // 86400
+
+
+def previous_close(stamps: list, closes: list, meta: dict) -> float | None:
+    """The last close from a day *before* the latest price's day.
+
+    Yahoo's daily closes sometimes don't include today yet. Taking "the second-to-last close"
+    then compared today with the day before yesterday (USD/LKR once showed the wrong change)."""
+    today = _day(meta.get("regularMarketTime"), meta)
+    if today is None or not stamps or len(stamps) != len(closes):
+        return None
+    earlier = [c for t, c in zip(stamps, closes) if c is not None and _day(t, meta) < today]
+    return earlier[-1] if earlier else None
+
+
+def has_today(stamps: list, closes: list, meta: dict) -> bool:
+    """Is the latest price's day among the daily closes?"""
+    dated = [t for t, c in zip(stamps, closes) if c is not None]
+    return bool(dated) and _day(dated[-1], meta) == _day(meta.get("regularMarketTime"), meta)
+
+
 def parse_chart(data: dict, asset_class: str, name: str | None = None, extra: dict | None = None) -> dict:
     result = ((data or {}).get("chart") or {}).get("result") or []
     if not result:
@@ -35,11 +58,17 @@ def parse_chart(data: dict, asset_class: str, name: str | None = None, extra: di
         raise ValueError(err.get("description") or "no chart data")
     r = result[0]
     meta = r.get("meta") or {}
-    closes = [c for c in (((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []) if c is not None]
+    raw = (((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or [])
+    stamps = r.get("timestamp") or []
+    closes = [c for c in raw if c is not None]
     price = meta.get("regularMarketPrice")
     if price is None and closes:
         price = closes[-1]
-    prev = closes[-2] if len(closes) >= 2 else meta.get("previousClose") or meta.get("chartPreviousClose")
+    prev = previous_close(stamps, raw, meta)
+    if prev is None:                              # no dates to go by: assume the last close is today's
+        prev = closes[-2] if len(closes) >= 2 else meta.get("previousClose") or meta.get("chartPreviousClose")
+    elif price is not None and not has_today(stamps, raw, meta):
+        closes = [*closes, price]                 # today isn't in the list yet: show it in the sparkline
     return quote(asset_class, meta.get("symbol") or "", name or meta.get("longName") or meta.get("shortName") or meta.get("symbol"),
                  price, prev_close=prev, currency=meta.get("currency"), volume=meta.get("regularMarketVolume"),
                  high=meta.get("regularMarketDayHigh"), low=meta.get("regularMarketDayLow"),

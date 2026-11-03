@@ -5,6 +5,10 @@ The last row is the latest close (today's, while the market is open); the row be
 
 Stooq uses its own symbols: aapl.us, ^spx, ^dji, ^ndq, xauusd, xagusd, usdlkr, eurusd, cl.f ...
 Set "stooq" per instrument in settings.json; US stocks default to "<symbol>.us".
+
+Since November 2026 Stooq answers automated requests with a "verify your browser" JavaScript
+puzzle. We don't solve it (no getting around bot checks): StooqBlocked is raised, and collect.py
+stops asking Stooq for the rest of the run.
 """
 
 import csv
@@ -21,9 +25,18 @@ def default_symbol(yahoo_symbol: str) -> str:
     return f"{yahoo_symbol.lower()}.us"
 
 
+class StooqBlocked(ValueError):
+    pass
+
+
+BOT_CHECK = ("verify your browser", "requires javascript", "/__verify")
+
+
 def parse_history_csv(text: str, asset_class: str, symbol: str, name: str, currency: str | None = None,
                       extra: dict | None = None) -> dict:
     head = text.strip()[:200].lower()
+    if any(w in text[:3000].lower() for w in BOT_CHECK):
+        raise StooqBlocked("Stooq asks for a browser check (a JavaScript puzzle); not worked around")
     if not head.startswith("date,"):
         raise ValueError(f"no data from Stooq ({text.strip()[:60] or 'empty response'})")
     rows = [r for r in csv.DictReader(io.StringIO(text)) if r.get("Close") not in (None, "", "0")]

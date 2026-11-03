@@ -55,9 +55,9 @@ def parse_trade_summary(data) -> list[dict]:
     return out
 
 
-async def _post(session: aiohttp.ClientSession, endpoint: str, referer: str, timeout: float):
-    headers = {"Accept": "application/json, text/plain, */*", "Origin": "https://www.cse.lk",
-               "Referer": f"https://www.cse.lk/{referer}"}
+async def _post(session: aiohttp.ClientSession, endpoint: str, timeout: float):
+    # Only our own headers: the API answers without pretending to be cse.lk's website (Origin/Referer)
+    headers = {"Accept": "application/json, text/plain, */*"}
     async with session.post(f"{API}/{endpoint}", headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
         if resp.status >= 400:
             raise ValueError(f"{endpoint}: HTTP {resp.status}")
@@ -65,8 +65,8 @@ async def _post(session: aiohttp.ClientSession, endpoint: str, referer: str, tim
 
 
 async def fetch_indices(session, timeout: float = 25) -> list[dict]:
-    return parse_market_summary(await _post(session, "dailyMarketSummery", "equity/daily-market-summary", timeout))
+    return parse_market_summary(await _post(session, "dailyMarketSummery", timeout))
 
 
 async def fetch_stocks(session, timeout: float = 25) -> list[dict]:
-    return parse_trade_summary(await _post(session, "tradeSummary", "equity/trade-summary", timeout))
+    return parse_trade_summary(await _post(session, "tradeSummary", timeout))
