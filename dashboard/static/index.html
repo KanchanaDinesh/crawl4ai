@@ -47,6 +47,17 @@
       <label class="tog"><input type="checkbox" id="news-new"> New in last run</label>
       <input type="search" id="news-q" placeholder="Search headlines, summaries, sources…">
     </div>
+    <!-- our own analysis of the period's headlines (python -m worldnews analyze), follows the period and country filters -->
+    <div class="chartgrid analysis">
+      <div class="panel span2"><h3><span>Biggest stories <small>the same story from several sources</small></span>
+        <small id="na-label"></small></h3><div id="na-stories"></div></div>
+      <div class="panel"><h3>Topics <small>share of headlines</small></h3><div id="na-topics" class="bars"></div></div>
+      <div class="panel"><h3>Names and places <small>click to search</small></h3><div id="na-names" class="bars click-bars"></div></div>
+      <div class="panel"><h3>Countries mentioned <small>click to search</small></h3><div id="na-countries" class="bars click-bars"></div></div>
+      <div class="panel"><h3>Tone <small id="na-tone-label">word-based, rough</small></h3><div id="na-tone"></div></div>
+      <div class="panel"><h3>What each country's news is about</h3><div id="na-by-group"></div></div>
+      <div class="panel"><h3>Rising words <small>before → now, click to search</small></h3><div id="na-rising"></div></div>
+    </div>
     <div class="layout">
       <div>
         <div class="panel">

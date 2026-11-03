@@ -207,3 +207,14 @@ def test_vehicles_endpoints(dash, tmp_path, monkeypatch):
     s = summary["data"]
     assert sum(r["n"] for r in s["price_ranges"]) == 7 and s["makes"][0]["n"] >= 1
     assert all(r["make"][0].isupper() for r in s["makes"])
+
+
+def test_news_analysis(dash):
+    server, _ = dash
+    all_news, lk, empty = call(server, "/api/news/analysis?days=7", "/api/news/analysis?days=7&group=LK",
+                               "/api/news/analysis?days=7&group=XX")
+    a = all_news["data"]
+    assert a["headlines"] > 0 and a["topics"] and a["tone"]["label"] and all("label" in g for g in a["tone"]["by_group"])
+    assert {"stories", "people", "countries", "rising", "topics_by_group", "sri_lanka"} <= set(a)
+    assert 0 < lk["data"]["headlines"] < a["headlines"] and {g["group"] for g in lk["data"]["tone"]["by_group"]} == {"LK"}
+    assert empty["data"] == {"headlines": 0}

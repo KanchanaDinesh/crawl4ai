@@ -79,6 +79,22 @@ def news_items(con, *, group=None, source=None, tech=False, topic=None, new=Fals
     return {"total": total, "items": items}
 
 
+def news_analysis(con, days: int, groups: list[str] | None = None) -> dict:
+    """Our own analysis of the period's headlines (worldnews/analysis.py): stories, topics, names, countries, tone."""
+    from worldnews.analysis import analyze, balance_label
+    from worldnews.analysis_report import fetch_items
+    from worldnews.settings import load_settings
+    settings = load_settings()
+    items, previous = fetch_items(con, days, groups)
+    if not items:
+        return {"headlines": 0}
+    result = analyze(items, previous, settings.section("analysis"), settings.group_names)
+    result["tone"]["label"] = balance_label(result["tone"]["all"]["balance"])
+    for g in result["tone"]["by_group"]:
+        g["label"] = balance_label(g["balance"])
+    return result
+
+
 def news_sources(con) -> list[dict]:
     """Status of every source in the last run, plus how many runs in a row it has failed."""
     return rows(con, f"""

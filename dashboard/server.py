@@ -85,6 +85,12 @@ async def news_items(request):
     return web.json_response(_query("news", lambda c: queries.news_items(c, **args), f"news_items:{sorted(args.items())}"))
 
 
+async def news_analysis(request):
+    days = _int(request, "days", 7)
+    groups = [g for g in (request.query.get("group") or "").upper().split(",") if g] or None
+    return web.json_response(_query("news", lambda c: queries.news_analysis(c, days, groups), f"news_analysis:{days}:{groups}"))
+
+
 async def news_sources(request):
     return web.json_response(_query("news", queries.news_sources, "news_sources"))
 
@@ -199,6 +205,7 @@ def build_app() -> web.Application:
         web.get("/api/news/summary", news_summary),
         web.get("/api/news/items", news_items),
         web.get("/api/news/sources", news_sources),
+        web.get("/api/news/analysis", news_analysis),
         web.get("/api/news/runs", news_runs),
         web.get("/api/tech/summary", tech_summary),
         web.get("/api/tech/domains", tech_domains),

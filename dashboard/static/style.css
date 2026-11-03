@@ -113,3 +113,13 @@ td.pc{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   background:var(--bg);border:1px solid var(--line);color:var(--muted);text-decoration:none}
 .soc:hover{color:var(--accent);border-color:var(--accent)}
 .people-list div{margin:2px 0}
+
+/* news analysis panels */
+.analysis .span2{grid-column:span 2}@media (max-width:760px){.analysis .span2{grid-column:auto}}
+.story{padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}.story:last-child{border:0}
+.story .n{display:inline-block;min-width:24px;margin-right:8px;font-weight:700;color:var(--accent)}
+.story details summary{cursor:pointer;color:var(--muted);font-size:12px}.story details div{font-size:13px;margin:2px 0 2px 32px}
+.click-bars .row{cursor:pointer}.click-bars .row:hover span:first-child{color:var(--accent)}
+.tone-row{display:grid;grid-template-columns:minmax(80px,32%) 1fr 110px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
+.tone-row .stack{margin:0;height:10px;background:var(--line)}.tone-row em{font-style:normal;color:var(--muted);font-size:12px}
+.tag.click{cursor:pointer}.tag.click:hover{border-color:var(--accent);color:var(--accent)}

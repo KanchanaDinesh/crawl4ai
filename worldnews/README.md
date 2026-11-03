@@ -108,6 +108,7 @@ Our own numbers about the saved headlines, offline, in about 2 seconds. It print
 - **Sri Lanka:** the same for Sri Lankan sources and anything mentioning Sri Lanka.
 
 `./run_all.sh` runs it after `news` (step `news_analyze`; options in `NEWS_ANALYZE_ARGS`, e.g. `--days 7`).
+The dashboard's World News tab shows the same analysis live, for the period and country you pick there.
 
 ## Data
 

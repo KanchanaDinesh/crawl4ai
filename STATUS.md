@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 106 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 107 tests pass.
 
 ## Parts and how to run them
 
@@ -25,7 +25,7 @@ Run every command from the project folder, after `source env.sh`.
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News, Tech Intel, Markets, Vehicles. **Restart it after every `git pull`** |
+| Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles. **Restart it after every `git pull`** |
 | Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
@@ -215,7 +215,11 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - First run: 19 sources on the Florida jet crash, 16 on the California ballots case, 13 on US strikes on Iran;
       Sri Lanka: Trincomalee shooting, Deduru Oya overflow, Namal Rajapaksa in court.
     - Rising words need a day of earlier data (the news history started on 2026-11-03).
-    - Ideas: a News Analysis panel in the dashboard; use the top stories in the briefing; weekly/monthly views.
+    - Dashboard (World News tab): analysis panels above the headlines, following the period and country filters:
+      biggest stories (with all their headlines), topics, names and places, countries, tone per country, what each
+      country's news is about, rising words. Clicking a name, country or rising word searches the headlines.
+      API: /api/news/analysis?days=N&group=LK (computed live, ~1s for 1,800 headlines).
+    - Ideas: use the top stories in the briefing; weekly/monthly views.
 
 ## Open issues and things to watch
 

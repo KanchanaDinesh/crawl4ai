@@ -221,7 +221,58 @@ async function loadNews() {
     <tr><td class="nowrap">${fmtTime(r.run_at)}<div class="muted small">${r.seconds ?? "?"}s · limit ${r.item_limit}</div></td>
     <td class="num">${r.sources_ok}/${r.sources}</td><td class="num">${r.headlines}</td><td class="num">${r.new_headlines}</td></tr>`).join("")}</table>` : "";
   await loadNewsItems(true);
+  loadNewsAnalysis();
 }
+
+// Our own analysis of the headlines in the chosen period and country (worldnews/analysis.py)
+const TOPIC_NAME = { crime_justice: "crime & justice", accidents_disasters: "accidents & disasters",
+  climate_environment: "climate & environment", science_space: "science & space" };
+let analysisReq = 0;
+async function loadNewsAnalysis() {
+  const ticket = ++analysisReq;
+  $("na-label").textContent = "working…";
+  const res = await api("/api/news/analysis", { days: news.days, group: news.group });
+  if (ticket !== analysisReq) return;
+  const a = res.data;
+  const none = `<div class="muted small">No headlines in this period yet.</div>`;
+  if (!a || !a.headlines) {
+    ["na-stories", "na-topics", "na-names", "na-countries", "na-tone", "na-by-group", "na-rising"].forEach((id) => { $(id).innerHTML = none; });
+    $("na-label").textContent = ""; return;
+  }
+  $("na-label").textContent = `${fmtNum(a.headlines)} headlines · ${a.sources} sources`;
+  $("na-stories").innerHTML = (a.stories || []).slice(0, 8).map((s) => `<div class="story">
+      <span class="n" title="${esc(s.sources.join(", "))}">${s.sources.length}</span>${link(s.url, s.headline)}
+      <details><summary>${esc(s.sources.slice(0, 6).join(", "))}${s.sources.length > 6 ? ` +${s.sources.length - 6}` : ""} · ${s.count} headlines</summary>
+        ${s.headlines.map((h) => `<div>${link(h.url, h.title)} <span class="muted">· ${esc(h.source || "")}</span></div>`).join("")}</details></div>`).join("")
+    || `<div class="muted small">No story was told by several sources in this period.</div>`;
+  bars($("na-topics"), (a.topics || []).filter((t) => t.topic !== "other").slice(0, 12), "topic", "headlines",
+    (r) => `${TOPIC_NAME[r.topic] || r.topic} · ${r.share}%`);
+  bars($("na-names"), (a.people || []).slice(0, 15), "name", "headlines");
+  bars($("na-countries"), (a.countries || []).slice(0, 15), "country", "headlines");
+  const toneRow = (label, t) => `<div class="tone-row"><span>${esc(label)}</span>
+    <div class="stack" title="${t.negative} negative, ${t.neutral} neutral, ${t.positive} positive">
+      <i style="width:${(100 * t.negative) / (t.headlines || 1)}%;background:var(--bad)"></i>
+      <i style="width:${(100 * t.neutral) / (t.headlines || 1)}%;background:transparent"></i>
+      <i style="width:${(100 * t.positive) / (t.headlines || 1)}%;background:var(--ok)"></i></div><em>${esc(t.label || "")}</em></div>`;
+  $("na-tone-label").textContent = `overall ${a.tone.label} · word-based, rough`;
+  $("na-tone").innerHTML = (a.tone.by_group || []).map((g) => toneRow(g.name, g)).join("")
+    + `<div class="muted small" style="margin-top:6px">red: words like killed, crisis · green: wins, record</div>`;
+  $("na-by-group").innerHTML = `<table>${(a.topics_by_group || []).map((g) => `<tr><td class="nowrap">${esc(g.name)}</td>
+    <td class="small">${g.top.slice(0, 4).map((t) => `${esc(TOPIC_NAME[t.topic] || t.topic)} <span class="muted">${t.headlines}</span>`).join(" · ")}</td></tr>`).join("")}</table>`;
+  $("na-rising").innerHTML = (a.rising || []).length
+    ? a.rising.map((w) => `<span class="tag click" data-q="${esc(w.word)}">${esc(w.word)} <span class="muted">${w.before}→${w.now}</span></span>`).join("")
+    : `<div class="muted small">Needs an earlier period to compare with: shows up after another ${news.days === 1 ? "day" : "period"} of collecting.</div>`;
+}
+function searchNews(text) {
+  news.q = text; $("news-q").value = text; loadNewsItems(true);
+  $("news-list").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+for (const id of ["na-names", "na-countries"]) {
+  $(id).addEventListener("click", (e) => {
+    const row = e.target.closest(".row"); if (row) searchNews(row.querySelector("span").textContent.trim());
+  });
+}
+$("na-rising").addEventListener("click", (e) => { const t = e.target.closest("[data-q]"); if (t) searchNews(t.dataset.q); });
 
 let newsReq = 0;
 async function loadNewsItems(reset) {
@@ -250,6 +301,7 @@ $("news-groups").addEventListener("click", (e) => {
   news.group = b.dataset.group;
   document.querySelectorAll("#news-groups .chip").forEach((c) => c.classList.toggle("active", c === b));
   loadNewsItems(true);
+  loadNewsAnalysis();                                     // the analysis follows the chosen country
 });
 $("news-days").addEventListener("change", (e) => { news.days = +e.target.value; loadNews(); });
 $("news-source").addEventListener("change", (e) => { news.source = e.target.value; loadNewsItems(true); });

@@ -20,25 +20,29 @@ def topic_label(t: str) -> str:
     return TOPIC_LABEL.get(t, t)
 
 
+def fetch_items(con, days: float, groups: list[str] | None = None, now: datetime | None = None) -> tuple[list, list]:
+    """Headlines first seen in the last `days`, and in the `days` before that (for "rising"), from an open connection."""
+    now = now or datetime.now(timezone.utc)
+    start, before = now - timedelta(days=days), now - timedelta(days=2 * days)
+    where = " and group_code in (" + ",".join("?" * len(groups)) + ")" if groups else ""
+    cur = con.execute(f"""select url, title, summary, source, group_code, published_at, first_seen_at
+        from news_items where first_seen_at >= ? {where} order by first_seen_at""",
+                      [before, *(g.upper() for g in groups or [])])
+    cols = [c[0] for c in cur.description]
+    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    return [r for r in rows if r["first_seen_at"] >= start], [r for r in rows if r["first_seen_at"] < start]
+
+
 def load_items(settings, days: float, groups: list[str] | None = None, now: datetime | None = None) -> tuple[list, list]:
-    """Headlines first seen in the last `days`, and in the `days` before that (for "rising")."""
     import warehouse
     path = settings.data_dir / "worldnews.duckdb"
     if not path.exists():
         raise SystemExit("No news saved yet. Run:  uv run python -m worldnews run")
-    now = now or datetime.now(timezone.utc)
-    start, before = now - timedelta(days=days), now - timedelta(days=2 * days)
     con = warehouse.connect(path, read_only=True, wait_seconds=30)
     try:
-        where = " and group_code in (" + ",".join("?" * len(groups)) + ")" if groups else ""
-        cur = con.execute(f"""select url, title, summary, source, group_code, published_at, first_seen_at
-            from news_items where first_seen_at >= ? {where} order by first_seen_at""",
-                          [before, *(g.upper() for g in groups or [])])
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return fetch_items(con, days, groups, now)
     finally:
         con.close()
-    return [r for r in rows if r["first_seen_at"] >= start], [r for r in rows if r["first_seen_at"] < start]
 
 
 def run(settings, days: float | None = None, groups: list[str] | None = None) -> tuple[dict, dict]:
