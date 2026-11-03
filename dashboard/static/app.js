@@ -221,7 +221,7 @@ async function loadNews() {
     <tr><td class="nowrap">${fmtTime(r.run_at)}<div class="muted small">${r.seconds ?? "?"}s · limit ${r.item_limit}</div></td>
     <td class="num">${r.sources_ok}/${r.sources}</td><td class="num">${r.headlines}</td><td class="num">${r.new_headlines}</td></tr>`).join("")}</table>` : "";
   await loadNewsItems(true);
-  loadNewsAnalysis();
+  await loadNewsAnalysis();                                // errors reach refresh(), which explains them
 }
 
 // Our own analysis of the headlines in the chosen period and country (worldnews/analysis.py)
@@ -231,7 +231,13 @@ let analysisReq = 0;
 async function loadNewsAnalysis() {
   const ticket = ++analysisReq;
   $("na-label").textContent = "working…";
-  const res = await api("/api/news/analysis", { days: news.days, group: news.group });
+  let res;
+  try {
+    res = await api("/api/news/analysis", { days: news.days, group: news.group });
+  } catch (err) {
+    $("na-label").textContent = "could not load";
+    throw err;
+  }
   if (ticket !== analysisReq) return;
   const a = res.data;
   const none = `<div class="muted small">No headlines in this period yet.</div>`;
@@ -301,7 +307,7 @@ $("news-groups").addEventListener("click", (e) => {
   news.group = b.dataset.group;
   document.querySelectorAll("#news-groups .chip").forEach((c) => c.classList.toggle("active", c === b));
   loadNewsItems(true);
-  loadNewsAnalysis();                                     // the analysis follows the chosen country
+  loadNewsAnalysis().catch(showLoadError);              // the analysis follows the chosen country
 });
 $("news-days").addEventListener("change", (e) => { news.days = +e.target.value; loadNews(); });
 $("news-source").addEventListener("change", (e) => { news.source = e.target.value; loadNewsItems(true); });
@@ -873,13 +879,16 @@ async function refresh() {
     await ({ news: loadNews, tech: loadTech, markets: loadMarkets, vehicles: loadVehicles })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;
   } catch (err) {
-    const outdated = / HTTP 404$/.test(err.message);   // page is newer than the running server
-    setBanner([{ error: outdated
-      ? `Could not load data: ${err.message}. The dashboard server is running older code than this page `
-        + "(the project was updated after it started). Restart it: press Ctrl+C in its Terminal window, "
-        + "then run: uv run python -m dashboard --open"
-      : `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
+    showLoadError(err);
   }
+}
+function showLoadError(err) {
+  const outdated = / HTTP 404$/.test(err.message);     // page is newer than the running server
+  setBanner([{ error: outdated
+    ? `Could not load data: ${err.message}. The dashboard server is running older code than this page `
+      + "(the project was updated after it started). Restart it: press Ctrl+C in its Terminal window, "
+      + "then run: uv run python -m dashboard --open"
+    : `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
 }
 function show(v) {
   view = ["news", "tech", "markets", "vehicles"].includes(v) ? v : "news";
