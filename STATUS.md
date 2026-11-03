@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 96 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 100 tests pass.
 
 ## Parts and how to run them
 
@@ -20,7 +20,7 @@ Run every command from the project folder, after `source env.sh`.
 
 | Part | Command | Status |
 |---|---|---|
-| Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
+| Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
@@ -193,6 +193,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     default STEPS. Built-in check: a day's change over 10x the typical daily move is held back (USD/LKR +3.1% was 18x,
     a gap in Yahoo's history; Brent's real -11% was 5.8x). Markets now save 6 months of daily closes.
     - Next: channel name/link via BRIEFING_ARGS; a Telegram bot to post it (after the legal checks in the business plan).
+
+31. `techintel company` (Kanchana's request, 2026-11-03): company facts for each qualified site, from the company's
+    own homepage + about/team/contact pages (HTTP, no browser): social account links, leadership names, employees
+    (schema.org or "team of N"), public emails/phones, founded, address, and GitHub's public numbers via its API.
+    Table `companies`, view `tech.v_companies`, run_all step `tech_company` (in the default STEPS, 10 min limit).
+    - LinkedIn and Facebook are **not** scraped (their terms forbid it, and it needs a login): links only. Agreed rule.
+    - 60 real sites in 35s: 55 with social links, 31 LinkedIn, 8 with named leadership, 34 GitHub numbers.
+    - GitHub allows 60 lookups/hour without a token; refused lookups are filled in on later runs. `GITHUB_TOKEN` raises it.
+    - Next: show it in the dashboard's Tech Intel tab (not built yet).
 
 ## Open issues and things to watch
 

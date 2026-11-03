@@ -52,14 +52,15 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 ## Automation: run everything with one command
 
 ```bash
-./run_all.sh                       # run the default steps once: markets, news, tech_collect, tech_update, vehicles
+./run_all.sh                       # run the default steps once (STEPS in automation.conf)
 ./run_all.sh --profile frequent    # a profile: tech_quick + vehicles
 ./run_all.sh markets vehicles      # only some steps
 ./run_all.sh --list                # steps, profiles and the exact commands
 ./run_all.sh --status              # the last runs
 ```
 
-**Steps:** `markets`, `news`, `tech_collect` (find and store new tech sites, fast, no browser), `tech_update`
+**Steps:** `markets`, `news`, `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
+(company facts from each site's own pages: social links, people, employees, GitHub), `tech_update`
 (profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
 registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`, `briefing` (summary + video, last). **Profiles** group steps that run at
 the same speed; they're defined in `automation.conf`.

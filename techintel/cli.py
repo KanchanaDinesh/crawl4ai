@@ -5,6 +5,8 @@
     enrich    [--limit N] [--domain D ...]      registration dates (RDAP)
     profile   [--limit N] [--domain D ...]
     monitor   [--limit N] [--force] [--domain D ...]
+    company   [--limit N] [--domain D ...]      company facts from its own site: social links, people,
+                                                employees, contacts, GitHub numbers (no browser)
     analyze   [--days N]
     report    [--days N]
     collect   new sites, fast and without a browser: discover -> qualify -> enrich
@@ -84,9 +86,12 @@ def status(store) -> None:
           f"{sum(1 for r in regs.values() if r.get('error'))} without")
     print(f"profiled        {len(store.keys('profiles'))}")
     print(f"changes         {sum(1 for _ in store.read('changes'))}")
+    companies = store.latest("companies")
+    print(f"companies       {sum(1 for c in companies.values() if c.get('status') == 'ok')} read, "
+          f"{sum(1 for c in companies.values() if c.get('social', {}).get('linkedin'))} with LinkedIn")
     last = {r["stage"]: r for r in store.read("runs")}
     print("\nlast runs:")
-    for stage in STAGE_ORDER:
+    for stage in (*STAGE_ORDER, "company"):
         if stage in last:
             r = last[stage]
             took = _dur(r["seconds"]) if r.get("seconds") is not None else "?"
@@ -110,7 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (("qualify", "Cheap homepage check"),
                             ("enrich", "Look up domain registration dates (RDAP)"),
                             ("profile", "Deep crawl of qualified sites"),
-                            ("monitor", "Re-crawl profiled sites and record changes")):
+                            ("monitor", "Re-crawl profiled sites and record changes"),
+                            ("company", "Company facts from its own site: social links, people, employees, GitHub")):
         s = sub.add_parser(name, help=help_text)
         s.add_argument("--limit", type=int, help="Process at most N sites")
         s.add_argument("--domain", action="append", dest="domains", help="Only this domain (repeatable)")

@@ -19,6 +19,7 @@ uv run crawl4ai-setup                     # one-time: browser for the profile st
 uv run python -m techintel collect        # part 1: find and store new sites (fast, no browser)
 uv run python -m techintel update         # part 2: profile new sites, re-check known ones, report (browser)
 uv run python -m techintel run            # both parts in one go
+uv run python -m techintel company        # company facts: social links, people, employees, GitHub (no browser)
 uv run python -m techintel status         # counts and last run of each stage
 open output/techintel/reports/            # the reports (macOS)
 ```
@@ -64,6 +65,37 @@ recorded without a date and no request is made. An honest user agent is sent (`e
 **Honest user agent:** the quick homepage check (qualify) says what it is (`crawl4ai-techintel/1.0 …`);
 left unset, crawl4ai would send a made-up Windows browser one. A site that refuses us (401/403/429/503)
 stays on "watch" and is never retried in the browser; the browser is only for pages that load empty.
+
+### Company facts: `company`
+
+For every qualified site (newest first), `company` reads the homepage plus its about, team and contact
+pages (plain HTTP, no browser, robots.txt respected) and saves what the company publishes about itself
+in the `companies` table (`v_companies` view):
+
+- **Social accounts:** LinkedIn company page, Facebook, X, Instagram, YouTube, GitHub, TikTok, ... (links).
+  Share buttons are skipped. Personal LinkedIn pages linked from a team page are kept apart (`linkedin_people`).
+- **People:** CEO, founders, directors as named on the about/team pages, or in the page's schema.org data.
+  Homepage names are ignored: they're mostly testimonials.
+- **Employees:** schema.org `numberOfEmployees` (e.g. "11-50"), else a phrase such as "team of 25" as the
+  site writes it. Neither is a verified count.
+- **Contacts and more:** public emails (mailto: and text), phone numbers (tel: links), legal name,
+  founding date and address from schema.org.
+- **GitHub:** public numbers from GitHub's API for the company's GitHub account (repos, followers, since when).
+  Without a token GitHub allows 60 lookups an hour. When it refuses, it isn't asked again that run, and the
+  missing numbers are filled in on a later run. For more, set `GITHUB_TOKEN` (a token with no permissions).
+
+**LinkedIn, Facebook and other social sites are never fetched.** Their terms forbid automated collection
+and most of their data needs a login, so we keep the links only: the profile is one click away.
+
+A site is checked again after `company.recheck_days` (30), or after `retry_failed_days` (3) if it couldn't be
+read. Measured on 3 Nov 2026: 60 sites in 35s; 55 had social links, 31 a LinkedIn page, 8 named their
+leadership, and 34 got GitHub numbers. `./run_all.sh tech_company` runs it with `TECH_COMPANY_ARGS`.
+
+```bash
+uv run python -m techintel company --limit 50          # the next 50 sites
+uv run python -m techintel company --domain zapier.com # one site, again
+uv run python -m warehouse sql "select domain, linkedin, employees, people, github_repos from tech.v_companies"
+```
 
 ## Running it often: `quick` and `watch`
 

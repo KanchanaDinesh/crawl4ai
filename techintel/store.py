@@ -7,10 +7,11 @@ DuckStore (default) keeps every table in one DuckDB file, data/techintel/techint
     registrations    enrich:   domain registration date / registrar (RDAP)
     profiles         profile/monitor: one snapshot per crawl (history kept)
     changes          monitor:  one row per detected change
+    companies        company:  what each company publishes about itself (social links, people, employees)
     runs             every stage: one row per run (counts, errors), for health checks
 
 Each row keeps the full record as JSON (so the stages stay flexible), and typed views
-(v_candidates, v_qualifications, v_registrations, v_profiles, v_changes) make it easy to
+(v_candidates, v_qualifications, v_registrations, v_profiles, v_changes, v_companies) make it easy to
 query with SQL. Page text stays as files under raw/pages/<domain>/.
 
 FileStore is the original JSON Lines version, with the same methods. Existing .jsonl
@@ -23,7 +24,7 @@ import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-TABLES = ("candidates", "qualifications", "registrations", "profiles", "changes", "runs")
+TABLES = ("candidates", "qualifications", "registrations", "profiles", "changes", "companies", "runs")
 
 
 class FileStore:
@@ -97,6 +98,20 @@ VIEWS = {
                data->'before' as before, data->'after' as after,
                try_cast(data->>'detected_at' as timestamptz) as detected_at
         from changes""",
+    "v_companies": """
+        select key as domain, data->>'name' as name, data->'social'->>'linkedin' as linkedin,
+               data->'social'->>'facebook' as facebook, data->'social'->>'x' as x,
+               data->'social'->>'instagram' as instagram, data->'social'->>'github' as github,
+               data->'social' as social, data->'people' as people,
+               coalesce(data->>'employees', data->>'employees_hint') as employees, data->>'founded' as founded,
+               data->>'legal_name' as legal_name, data->>'address' as address, data->'emails' as emails,
+               data->'phones' as phones, data->'linkedin_people' as linkedin_people,
+               try_cast(data->'github'->>'public_repos' as integer) as github_repos,
+               try_cast(data->'github'->>'followers' as integer) as github_followers,
+               try_cast(data->'github'->>'created_at' as timestamptz) as github_since,
+               try_cast(data->>'checked_at' as timestamptz) as checked_at
+        from companies where data->>'status' = 'ok'
+        qualify row_number() over (partition by key order by row_id desc) = 1""",
 }
 
 

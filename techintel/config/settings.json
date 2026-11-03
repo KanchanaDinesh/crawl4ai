@@ -140,6 +140,19 @@
     "top_keywords": 20
   },
 
+  "company": {
+    "fetch_mode": "http",
+    "max_pages": 4,
+    "recheck_days": 30,
+    "retry_failed_days": 3,
+    "github_enabled": true,
+    "key_pages": {
+      "about":   ["about", "about-us", "company", "who-we-are", "our-story"],
+      "team":    ["team", "our-team", "people", "leadership", "founders", "management"],
+      "contact": ["contact", "contact-us"]
+    }
+  },
+
   "quick": {
     "sources": ["stream", "hackernews", "seeds"],
     "qualify_max_minutes": 8,
