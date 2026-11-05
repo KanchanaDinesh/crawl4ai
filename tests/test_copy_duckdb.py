@@ -58,13 +58,17 @@ OLD_TECH_DUCKDB = "create sequence row_seq;\n" + "\n".join(
     "created_at timestamp default current_timestamp, data json);"
     for t in ("candidates", "qualifications", "registrations", "profiles", "changes", "companies", "runs"))
 OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB, "markets": OLD_MARKETS_DUCKDB,
-              "vehicles": OLD_VEHICLES_DUCKDB, "tech": OLD_TECH_DUCKDB}
+              "vehicles": OLD_VEHICLES_DUCKDB, "tech": OLD_TECH_DUCKDB,
+              # and the scrapers' table (warehouse/scrapers_db.py before 2026-11-06)
+              "scrapers": "create sequence scraper_row_seq; create table scraper_rows (row_id bigint primary key "
+                          "default nextval('scraper_row_seq'), saved_at timestamptz, scraper varchar, row_no integer, "
+                          "data json);"}
 
 
 @pytest.fixture
 def duck_files(tmp_path, monkeypatch, pg_env):
-    """Every tool's DuckDB file, made by the tools' own stores (so the test notices when a tool adds a table or a
-    column that warehouse/schema/*.sql doesn't have), in a temp folder. The PostgreSQL tables start empty."""
+    """Every tool's DuckDB file as it last was (OLD_DUCKDB: every tool has moved to PostgreSQL, so their stores
+    don't make DuckDB files any more), in a temp folder. The PostgreSQL tables start empty."""
     for name, path in list(DB_FILES.items()):
         monkeypatch.setitem(DB_FILES, name, tmp_path / path.parent.name / path.name)
     postgres.setup()

@@ -53,7 +53,7 @@ def load_json(filename: str, default: Any = None) -> Any:
 
 
 def _record(filename: str, data: Any) -> None:
-    """Also keep the result in data/scrapers/scrapers.duckdb (history across runs)."""
+    """Also keep the result in PostgreSQL, schema scrapers (history across runs)."""
     if os.environ.get("SCRAPERS_NO_DB"):
         return
     from warehouse.scrapers_db import record_output

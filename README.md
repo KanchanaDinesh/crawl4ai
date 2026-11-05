@@ -31,9 +31,9 @@ Everything lives inside the project folder, so it can sit on an external drive s
 
 | Folder | What's in it |
 |---|---|
-| `.venv/` | Python packages (crawl4ai, DuckDB, ...) |
+| `.venv/` | Python packages (crawl4ai, psycopg, ...) |
 | `.local/` | uv's download cache, the Chromium browser, crawl4ai's cache, and Python if uv downloads one |
-| `data/` | **Your databases** (DuckDB) and collected data |
+| `data/` | Collected files (raw pages, run snapshots, downloads) and the old DuckDB files; the data itself is in PostgreSQL |
 | `output/` | Reports and exported files |
 
 One-time setup (needs [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`):
@@ -189,23 +189,28 @@ uv run python -m dashboard --open                    # 5. look at it all in the 
 ```
 
 Or run steps 2–3 (and markets) together with `./run_all.sh`. They can also run in separate Terminal windows
-at the same time: each tool has its own database. Leave the
+at the same time. Leave the
 dashboard running and press **Refresh** (or turn on auto-refresh) to see new data as runs finish.
 
-## Database (DuckDB)
+## Database (PostgreSQL)
 
-Each tool stores its data in its own DuckDB file inside `data/`, so they can run at the same time:
+Everything is in one PostgreSQL database, `crawl4ai` (on the Mac: Homebrew's PostgreSQL 18), with one schema per
+tool. Collectors write and the dashboard and anyone else read at the same time; nobody waits. (Until 2026-11-06
+each tool had its own DuckDB file in `data/`, which allowed only one program at a time: see
+`docs/postgres-migration.md`.) Tables, indexes and views are in `warehouse/schema/<schema>.sql`.
 
-| Database | Contents |
+| Schema | Contents |
 |---|---|
-| `data/worldnews/worldnews.duckdb` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
-| `data/techintel/techintel.duckdb` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` |
-| `data/markets/markets.duckdb` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
-| `data/vehicles/vehicles.duckdb` | `ads` (every ad from every run), `runs` (per site: ok?, ads, seconds, error), views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes` |
-| `data/companies/companies.duckdb` | `companies` (one row per company per source: name, country, website, industry), `sites` (what each company website says), `refusals`, `cursors` (where each source stopped), `runs`, view `v_companies` |
-| `data/scrapers/scrapers.duckdb` | `scraper_rows` (every output of the `scrapers/` tools, every run), views `v_news_headlines`, `v_products` |
+| `news` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
+| `tech` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `companies`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes`, `v_companies` |
+| `markets` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
+| `vehicles` | `ads` (every ad from every run), `runs` (per site: ok?, ads, seconds, error), views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes` |
+| `companies` | `companies` (one row per company per source: name, country, website, industry), `sites` (what each company website says), `refusals`, `cursors` (where each source stopped), `runs`, view `v_companies` |
+| `scrapers` | `scraper_rows` (every output of the `scrapers/` tools, every run), views `v_news_headlines`, `v_products` |
 
-Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `markets.`, `vehicles.`, `companies.` or `scrapers.`:
+Two logins: `crawl4ai` (the collectors) and `crawl4ai_reader` (read-only, queries stop after 30 s). Set up or check:
+`uv run python -m warehouse setup`, `uv run python -m warehouse pg-check`. Query with the `warehouse` command
+(read-only login), prefixing tables with the schema, or `psql -U crawl4ai_reader crawl4ai`:
 
 ```bash
 uv run python -m warehouse info                    # sizes, tables, row counts
@@ -248,7 +253,7 @@ env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
 run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); settings in automation.conf
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
-warehouse/               DuckDB helpers, the `python -m warehouse` query tool, and PostgreSQL setup (`warehouse setup`, `pg-check`)
+warehouse/               PostgreSQL: connections, setup and checks (postgres.py), tables (schema/), the `python -m warehouse` query tool
 dashboard/               local web dashboard (python -m dashboard)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)

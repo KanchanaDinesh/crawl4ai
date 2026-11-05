@@ -34,11 +34,11 @@ the current state of every part, open issues and next steps. Read it before doin
 ## Layout and conventions
 
 ```
-techintel/  worldnews/  markets/  vehicles/   one package per tool, each with its own DuckDB in data/<tool>/:
+techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, each with its own PostgreSQL schema:
                                                __init__.py (calls project_paths.apply_local_env()), __main__.py,
                                                cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
-warehouse/       DuckDB helpers: DB_FILES, connect() (waits if another process is writing), python -m warehouse
+warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse
 dashboard/       local web dashboard (aiohttp + plain JS, no build step): python -m dashboard --open
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
@@ -48,15 +48,20 @@ tests/           pytest, offline (local HTTP servers, sample data in tests/sampl
 data/  output/  logs/  .local/  .venv/       git-ignored
 ```
 
-- **Databases:** DuckDB, one file per tool under `data/` (worldnews, techintel, markets, vehicles, scrapers), because DuckDB
-  allows only one writer per file. The dashboard opens them read-only, one query at a time, so it never
-  blocks a run. **Being replaced by PostgreSQL** (decided 2026-11-05, no sync, one schema per tool): follow
-  `docs/postgres-migration.md` and tick off its steps there and in STATUS.md as they're done. Already moved:
-  `warehouse.PG_TOOLS` (all but scrapers). Tests for those use the `pg_env` fixture (a throwaway PostgreSQL).
-- **Vehicle ads** are in `data/vehicles/vehicles.duckdb` (`vehicles/store.py`): tables `ads` and `runs`,
-  views `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
-  `data/scrapers/scrapers.duckdb` holds only the `scrapers/` tools' output (generic `scraper_rows`).
-- **Tests never touch the real `data/` or `output/`** (`tests/conftest.py` points them at a temp folder).
+- **Database: PostgreSQL** (since 2026-11-06; it replaced one DuckDB file per tool, which allowed only one
+  program at a time). Database `crawl4ai` on the Mac's Homebrew PostgreSQL 18, one schema per tool: news, tech,
+  markets, vehicles, companies, scrapers. Logins `crawl4ai` (writer) and `crawl4ai_reader` (read-only, 30 s query
+  limit); settings `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` / `CRAWL4AI_ADMIN_URL` or `.local/database.env`.
+  Each store opens a writer connection, runs `postgres.migrate` for its schema (only when the .sql file changed)
+  and saves in short transactions; the dashboard and CLIs read with the reader login. Placeholders are `%s`,
+  table names always with the schema, text through `postgres.clean_text`/`json_text` (no NUL). New tables or
+  views go in `warehouse/schema/<schema>.sql` (keep every statement safe to repeat). History of the move and
+  what's left (step 4, clean up): `docs/postgres-migration.md`.
+- **Vehicle ads** are in schema `vehicles` (`vehicles/store.py`): tables `ads` and `runs`, views
+  `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
+  Schema `scrapers` holds only the `scrapers/` tools' output (generic `scraper_rows`).
+- **Tests never touch the real `data/`, `output/` or PostgreSQL** (`tests/conftest.py`: a temp folder, and every
+  database address points nowhere unless a test takes the `pg_env` fixture, a throwaway PostgreSQL server).
 - **New step for automation:** add a default `STEP_<name>` / `TOOL_<name>` in `run_all.sh` (the tool
   name is the lock), and mention it in `automation.conf` and the README.
 - Code style: small functions, docstrings that explain the why, friendly log and error messages that say

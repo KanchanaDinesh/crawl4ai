@@ -1,27 +1,25 @@
-"""DuckDB storage: scrapers history, techintel JSONL import, views, local paths."""
+"""Storage: scrapers history, techintel JSONL import, views, local paths (PostgreSQL, the test server)."""
 
 import importlib
 import json
 
 
-def test_scrapers_outputs_build_history(tmp_path, monkeypatch):
-    monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
+def test_scrapers_outputs_build_history(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()
     monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
     monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
-    import project_paths
-    import warehouse
-    import warehouse.scrapers_db as sdb
     import scrapers.common as common
-    for mod in (project_paths, warehouse, sdb, common):
-        importlib.reload(mod)
+    importlib.reload(common)
     common.save_json([{"title": "a"}, {"title": "b"}], "news.json")
     common.save_csv([{"a": 1}, {"a": 2}], "cse_trade_summary.csv")
+    common.save_json([{"title": "Rice 5kg", "price": "Rs 1,200"}], "products_keells.json")
     assert (tmp_path / "out" / "news.json").exists()                            # files still written
-    con = warehouse.connect(warehouse.DB_FILES["scrapers"])
-    assert con.execute("select scraper, count(*) from scraper_rows group by 1 order by 1").fetchall() == \
-        [("cse_trade_summary", 2), ("news", 2)]
-    assert con.execute("select count(*) from v_news_headlines").fetchone()[0] == 2
-    con.close()
+    with postgres.connect("reader") as con:
+        assert con.execute("select scraper, count(*) from scrapers.scraper_rows group by 1 order by 1").fetchall() == \
+            [("cse_trade_summary", 2), ("news", 2), ("products_keells", 1)]
+        assert con.execute("select count(*) from scrapers.v_news_headlines").fetchone()[0] == 2
+        assert con.execute("select title, price from scrapers.v_products").fetchall() == [("Rice 5kg", "Rs 1,200")]
 
 
 def test_vehicles_history_latest_ads_and_price_changes(pg_env):
@@ -56,10 +54,9 @@ def test_vehicle_save_never_breaks_a_scrape(monkeypatch):
     assert vs.save_report({"site": "ikman", "ads": [{"title": "x"}]}) == 0
 
 
-def test_record_output_never_breaks_a_scrape(monkeypatch):
+def test_record_output_never_breaks_a_scrape():
     import warehouse.scrapers_db as sdb
-    monkeypatch.setattr(sdb, "connect", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk full")))
-    assert sdb.record_output("x", [{"a": 1}]) == 0
+    assert sdb.record_output("x", [{"a": 1}]) == 0       # no database reachable (tests' dead address): 0, no error
 
 
 def test_techintel_imports_old_jsonl_and_views_work(settings, pg_env):

@@ -334,6 +334,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       Counts match DuckDB plus this run (qualified 1,487 + 6, dated 1,604 + 7, companies 1,464 + 6, profiles 336).
       The tab and a site's details panel showed it, no browser errors.
     - **Next: step 3f, scrapers** (the older single-file scrapers; then briefing, which only reads, then step 4).
+43. **PostgreSQL step 3f: scrapers switched, so every tool is on PostgreSQL (2026-11-06).** `warehouse/scrapers_db.py`
+    saves each output to schema `scrapers` (views `v_news_headlines`, `v_products` in `warehouse/schema/scrapers.sql`).
+    The briefing was already reading PostgreSQL for every part. `warehouse sql` now runs on PostgreSQL with the
+    read-only login (`pg` is the same command), and `info`, `examples` and the prompt too; no tool reads or writes
+    DuckDB any more (only `copy-from-duckdb` still opens the old files).
+    - Checked on the Mac: copy (75 rows match), then a real `python -m scrapers.news` saved 683 headlines; the view
+      shows them. `warehouse info` lists the six schemas (87 MB in all).
+    - **Next: step 4, clean up**: remove the DuckDB code and the `duckdb` package (or keep it only for
+      `copy-from-duckdb`), archive the old .duckdb files in `data/archive/`, add a daily `pg_dump` backup step,
+      and update the docs.
 
 ## Open issues and things to watch
 
