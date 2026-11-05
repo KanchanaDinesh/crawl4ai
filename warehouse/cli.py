@@ -5,7 +5,7 @@
     sql "QUERY"          run SQL across all of them (read-only); without a query: interactive prompt
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
-    pg "QUERY"           run SQL on PostgreSQL (read-only login): the tools already moved there (companies)
+    pg "QUERY"           run SQL on PostgreSQL (read-only login): the tools already moved there (companies, news)
     pg "QUERY" --csv F   save the result as a CSV file
 
     setup                PostgreSQL: create or repair the logins, database, schemas and grants (safe to run again)
@@ -15,9 +15,10 @@
                          [--tool companies] [--replace: copy again] [--check: only compare]
                          (PostgreSQL is replacing DuckDB: docs/postgres-migration.md)
 
-In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  scrapers.*
-e.g.  select * from news.news_items order by published_at desc limit 20
-Moved to PostgreSQL (use `pg` instead of `sql`, or psql crawl4ai):  companies.*
+In SQL, prefix tables with the database name:  tech.*  markets.*  vehicles.*  scrapers.*
+e.g.  select * from markets.v_latest limit 20
+Moved to PostgreSQL (use `pg` instead of `sql`, or psql crawl4ai):  companies.*  news.*
+e.g.  pg "select * from news.news_items order by published_at desc limit 20"
 """
 
 import argparse
@@ -26,10 +27,6 @@ import sys
 from . import DB_FILES, PG_TOOLS, connect
 
 EXAMPLES = {
-    "Latest 20 headlines": "select published_at, source, title from news.news_items order by published_at desc nulls last limit 20",
-    "Headlines per country today": "select group_code, count(*) from news.news_items where first_seen_at >= current_date group by 1 order by 2 desc",
-    "Tech headlines this week": "select first_seen_at, source, title from news.news_items where list_contains(topics, 'tech') and first_seen_at >= now() - interval 7 day order by first_seen_at desc",
-    "Source health (last run)": "select source, status, via, headlines, error from news.news_source_runs where run_at = (select max(run_at) from news.news_runs) order by status, source",
     "New tech sites by category": "select category, count(*) from tech.v_qualifications where status = 'qualified' group by 1 order by 2 desc",
     "Most used tech stack": "select t.value::varchar as tech, count(*) from tech.v_profiles, json_each(tech_stack) t group by 1 order by 2 desc limit 15",
     "Recent site changes": "select detected_at, domain, change_type, field from tech.v_changes order by detected_at desc limit 20",
@@ -43,6 +40,10 @@ EXAMPLES = {
 }
 
 PG_EXAMPLES = {
+    "Latest 20 headlines": "select published_at, source, title from news.news_items order by published_at desc nulls last limit 20",
+    "Headlines per country today": "select group_code, count(*) from news.news_items where first_seen_at >= current_date group by 1 order by 2 desc",
+    "Tech headlines this week": "select first_seen_at, source, title from news.news_items where 'tech' = any(topics) and first_seen_at >= now() - interval '7 days' order by first_seen_at desc",
+    "Source health (last run)": "select source, status, via, headlines, error from news.news_source_runs where run_at = (select max(run_at) from news.news_runs) order by status, source",
     "Companies per country": "select country, count(*) as companies, count(website) as with_website from companies.companies group by 1 order by 2 desc limit 20",
     "Company websites with LinkedIn": "select name, country, website, linkedin, employees from companies.v_companies where linkedin is not null limit 20",
     "Search companies by name": "select name, country, website, site_status from companies.v_companies where lower(name) like '%bank%' and country = 'LK' order by name limit 20",
@@ -168,7 +169,8 @@ def run_sql(query: str, csv_path: str | None = None) -> None:
 
 def repl() -> None:
     con = open_all()
-    print("SQL prompt (read-only). Tables: news.*, tech.*, scrapers.*, markets.*  Type 'examples' or 'exit'.")
+    print("SQL prompt (read-only). Tables: tech.*, scrapers.*, markets.*, vehicles.*  (news and companies: "
+          "python -m warehouse pg)  Type 'examples' or 'exit'.")
     while True:
         try:
             query = input("sql> ").strip().rstrip(";")

@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 135 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 136 tests pass.
 
 ## Parts and how to run them
 
@@ -23,7 +23,7 @@ Run every command from the project folder, after `source env.sh`.
 | Part | Command | Status |
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
-| World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
+| World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
@@ -289,6 +289,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       showed it all, no browser errors.
     - `data/companies/companies.duckdb` is not used any more (kept until step 4).
     - **Next: step 3b, world news** (then markets, vehicles, tech intel, scrapers, briefing).
+39. **PostgreSQL step 3b: world news switched (2026-11-06).** `worldnews/store.py` saves to schema `news` (each run
+    in one short transaction); the World News tab, `worldnews analyze` and the briefing's news numbers read with
+    the read-only login. `worldnews check` is now a dry run: it reads the real history but saves nothing (it used
+    to write to a separate `_check` DuckDB). The dashboard shows an empty tab instead of an error when a tool's
+    tables don't exist yet. The "busy database" test moved to tech intel (still DuckDB); a new test checks the
+    news tab answers while a run's transaction is open.
+    - Checked on the Mac: fresh copy (5 tables match), then a real `worldnews run` (71/71 sources, 704 headlines,
+      172 new) while summary + analysis were read every 4 s (all answered, ~1 s each); 4,582 + 172 = 4,754 saved;
+      `check` saved nothing; `analyze` and the briefing read PostgreSQL; the World News tab showed it, no errors.
+    - **Next: step 3c, markets** (then vehicles, tech intel, scrapers, briefing).
 
 ## Open issues and things to watch
 

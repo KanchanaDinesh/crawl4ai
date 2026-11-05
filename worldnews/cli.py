@@ -64,7 +64,8 @@ async def cmd_run(settings, args, check: bool = False) -> None:
     sources = select_sources(settings, args.group, args.source)
     if not sources:
         sys.exit("No sources matched.")
-    store = NewsStore(settings.data_dir if not check else settings.data_dir / "_check")
+    # check: reads the saved history (to mark new headlines) but saves nothing; its snapshot goes to _check/runs/
+    store = NewsStore(settings.data_dir if not check else settings.data_dir / "_check", dry_run=check)
     limit = 3 if check else (args.limit or int(settings.raw.get("limit_per_source", 10)))
     try:
         snapshot = await run_collection(settings, store, sources, limit,

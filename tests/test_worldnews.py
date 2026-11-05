@@ -93,7 +93,9 @@ def test_tech_tagger_and_sorting():
 
 # ── end to end ────────────────────────────────────────────────────────────
 @pytest.fixture
-def news_env(tmp_path, monkeypatch):
+def news_env(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()                                  # news is saved in the test PostgreSQL (a database of its own)
     monkeypatch.setenv("WORLDNEWS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("WORLDNEWS_OUTPUT_DIR", str(tmp_path / "out"))
     cfg = tmp_path / "config"
@@ -178,12 +180,13 @@ def test_end_to_end(news_env):
 
     # the database has the history: unique headlines, how often each was seen, per-source health
     con = store.con
-    assert con.execute("select count(*) from news_items").fetchone()[0] == 24
-    assert con.execute("select times_seen from news_items where title = 'Feed story number 0 about markets'").fetchone()[0] == 3
-    assert con.execute("select count(*) from news_runs").fetchone()[0] == 3
-    assert con.execute("select count(*) from news_source_runs where status = 'failed'").fetchone()[0] == 6
-    assert con.execute("select list_contains(topics, 'tech') from news_items where source = 'Disc Site'").fetchone()[0]
-    assert con.execute("select feed_url from feed_cache").fetchone()[0].endswith("/feed")
+    assert con.execute("select count(*) from news.news_items").fetchone()[0] == 24
+    assert con.execute("select times_seen from news.news_items "
+                       "where title = 'Feed story number 0 about markets'").fetchone()[0] == 3
+    assert con.execute("select count(*) from news.news_runs").fetchone()[0] == 3
+    assert con.execute("select count(*) from news.news_source_runs where status = 'failed'").fetchone()[0] == 6
+    assert con.execute("select 'tech' = any(topics) from news.news_items where source = 'Disc Site'").fetchone()[0]
+    assert con.execute("select feed_url from news.feed_cache").fetchone()[0].endswith("/feed")
     store.close()
 
     paths = write_report(snap3, settings)

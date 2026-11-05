@@ -44,9 +44,12 @@ def _pg_query(fn, cache_key: str):
         con = connect("reader", autocommit=True)
     except DatabaseError as e:
         return {"data": _cache.get(cache_key), "error": str(e)}
+    import psycopg
     try:
         con.execute("set timezone = 'UTC'")
         data = fn(con)
+    except psycopg.errors.UndefinedTable:          # nothing saved yet: the tool creates its tables on its first run
+        return {"empty": True, "data": None}
     finally:
         con.close()
     _cache[cache_key] = data

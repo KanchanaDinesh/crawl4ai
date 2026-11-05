@@ -1,4 +1,5 @@
-"""Storage: DuckDB database data/worldnews/worldnews.duckdb (+ a JSON snapshot file per run).
+"""Storage: PostgreSQL schema `news` (database crawl4ai; tables in warehouse/schema/news.sql) + a JSON snapshot
+file per run.
 
 Tables
     news_items         one row per headline ever seen (unique URL): title, summary, published_at,
@@ -10,6 +11,12 @@ Tables
 Files
     runs/<time>.json   full snapshot of each run (raw copy; the report is built from it)
 
+Moved from DuckDB (data/worldnews/worldnews.duckdb) on 2026-11-06, so the dashboard and analysis can read while a
+run saves. A run's results are saved in one short transaction.
+
+dry_run (`worldnews check`): reads the history and the feed cache, but saves nothing to the database (its
+snapshot file goes to the folder given, e.g. data/worldnews/_check/runs/).
+
 Older versions stored history in items.jsonl and feed_cache.json; they're imported once
 automatically and renamed to *.imported.
 """
@@ -17,30 +24,18 @@ automatically and renamed to *.imported.
 import json
 from pathlib import Path
 
-SCHEMA = """
-create table if not exists news_items (
-    url varchar primary key, id varchar, title varchar, summary varchar, published_at timestamptz,
-    source varchar, group_code varchar, topics varchar[], tech_terms varchar[], image varchar,
-    first_seen_at timestamptz, last_seen_at timestamptz, times_seen integer default 0);
-create table if not exists news_runs (
-    run_at timestamptz primary key, finished_at timestamptz, item_limit integer,
-    sources integer, sources_ok integer, headlines integer, new_headlines integer);
-create table if not exists news_source_runs (
-    run_at timestamptz, source varchar, group_code varchar, status varchar, via varchar,
-    feed_url varchar, error varchar, headlines integer);
-create table if not exists news_run_items (run_at timestamptz, url varchar, source varchar, rank integer);
-create table if not exists feed_cache (source varchar primary key, feed_url varchar, updated_at timestamptz);
-"""
-
 
 class NewsStore:
-    def __init__(self, root: Path):
-        from warehouse import connect
+    def __init__(self, root: Path, dry_run: bool = False):
+        from warehouse import postgres
         self.root = Path(root)
+        self.dry_run = dry_run
         (self.root / "runs").mkdir(parents=True, exist_ok=True)
-        self.con = connect(self.root / "worldnews.duckdb")
-        self.con.execute(SCHEMA)
-        self._import_old_files()
+        self.con = postgres.connect("writer", autocommit=True)
+        self.con.execute("set timezone = 'UTC'")
+        postgres.migrate(self.con, ("news",))
+        if not dry_run:
+            self._import_old_files()
 
     def close(self) -> None:
         self.con.close()
@@ -61,33 +56,45 @@ class NewsStore:
 
     # history ---------------------------------------------------------------
     def known_urls(self) -> set[str]:
-        return {u for (u,) in self.con.execute("select url from news_items").fetchall()}
+        return {u for (u,) in self.con.execute("select url from news.news_items").fetchall()}
 
     def append_items(self, items: list[dict], times_seen: int = 0) -> None:
-        rows = [(i["url"], i.get("id"), i.get("title"), i.get("summary"), i.get("published_at"), i.get("source"),
-                 i.get("group"), i.get("topics") or [], i.get("tech_terms") or [], i.get("image"),
+        from warehouse.postgres import clean_text as t
+        rows = [(t(i["url"]), t(i.get("id")), t(i.get("title")), t(i.get("summary")), i.get("published_at"),
+                 t(i.get("source")), i.get("group"), [t(x) for x in i.get("topics") or []],
+                 [t(x) for x in i.get("tech_terms") or []], t(i.get("image")),
                  i.get("first_seen_at") or i.get("collected_at"), i.get("collected_at"), times_seen) for i in items]
-        if rows:
-            self.con.executemany("""insert into news_items (url, id, title, summary, published_at, source, group_code,
-                topics, tech_terms, image, first_seen_at, last_seen_at, times_seen)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (url) do nothing""", rows)
+        if not rows or self.dry_run:
+            return
+        with self.con.transaction():
+            self.con.cursor().executemany("""insert into news.news_items (url, id, title, summary, published_at, source,
+                group_code, topics, tech_terms, image, first_seen_at, last_seen_at, times_seen)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on conflict (url) do nothing""", rows)
 
     # snapshots -------------------------------------------------------------
     def save_snapshot(self, snapshot: dict) -> Path:
+        from warehouse.postgres import clean_text as t
         run_at = snapshot["run_at"]
-        t = snapshot["totals"]
-        self.con.execute("insert or replace into news_runs values (?, ?, ?, ?, ?, ?, ?)",
-                         [run_at, snapshot.get("finished_at"), snapshot.get("limit"), t["sources"], t["ok"],
-                          t["headlines"], t["new"]])
-        self.con.executemany("insert into news_source_runs values (?, ?, ?, ?, ?, ?, ?, ?)", [
-            (run_at, s["name"], s.get("group"), s["status"], s.get("via"), s.get("feed_url"), s.get("error"),
-             len(s["items"])) for s in snapshot["sources"]])
-        run_items = [(run_at, i["url"], i["source"], i.get("rank")) for s in snapshot["sources"] for i in s["items"]]
-        if run_items:
-            self.con.executemany("insert into news_run_items values (?, ?, ?, ?)", run_items)
-            urls = sorted({u for _, u, _, _ in run_items})
-            self.con.execute("""update news_items set last_seen_at = ?, times_seen = times_seen + 1
-                                where list_contains(?, url)""", [run_at, urls])
+        tot = snapshot["totals"]
+        run_items = [(run_at, t(i["url"]), t(i["source"]), i.get("rank")) for s in snapshot["sources"] for i in s["items"]]
+        if not self.dry_run:
+            con = self.con
+            with con.transaction():
+                con.execute("""insert into news.news_runs values (%s, %s, %s, %s, %s, %s, %s)
+                    on conflict (run_at) do update set finished_at = excluded.finished_at,
+                        item_limit = excluded.item_limit, sources = excluded.sources, sources_ok = excluded.sources_ok,
+                        headlines = excluded.headlines, new_headlines = excluded.new_headlines""",
+                            [run_at, snapshot.get("finished_at"), snapshot.get("limit"), tot["sources"], tot["ok"],
+                             tot["headlines"], tot["new"]])
+                cur = con.cursor()
+                cur.executemany("insert into news.news_source_runs values (%s, %s, %s, %s, %s, %s, %s, %s)", [
+                    (run_at, t(s["name"]), s.get("group"), s["status"], s.get("via"), t(s.get("feed_url")),
+                     t(s.get("error")), len(s["items"])) for s in snapshot["sources"]])
+                if run_items:
+                    cur.executemany("insert into news.news_run_items values (%s, %s, %s, %s)", run_items)
+                    urls = sorted({u for _, u, _, _ in run_items})
+                    con.execute("""update news.news_items set last_seen_at = %s, times_seen = times_seen + 1
+                                   where url = any(%s)""", [run_at, urls])
         path = self.root / "runs" / f"{run_at.replace(':', '-')}.json"
         path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=1), encoding="utf-8")
         return path
@@ -98,8 +105,11 @@ class NewsStore:
 
     # discovered feeds ------------------------------------------------------
     def feed_cache(self) -> dict[str, str]:
-        return dict(self.con.execute("select source, feed_url from feed_cache").fetchall())
+        return dict(self.con.execute("select source, feed_url from news.feed_cache").fetchall())
 
     def save_feed_cache(self, cache: dict[str, str]) -> None:
-        if cache:
-            self.con.executemany("insert or replace into feed_cache values (?, ?, current_timestamp)", list(cache.items()))
+        if cache and not self.dry_run:
+            with self.con.transaction():
+                self.con.cursor().executemany("""insert into news.feed_cache values (%s, %s, now())
+                    on conflict (source) do update set feed_url = excluded.feed_url, updated_at = now()""",
+                                              list(cache.items()))

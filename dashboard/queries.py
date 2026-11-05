@@ -1,4 +1,5 @@
-"""SQL behind the dashboard. Each function takes an open (read-only) DuckDB connection.
+"""SQL behind the dashboard. Each function takes an open read-only connection: PostgreSQL (psycopg, %s placeholders)
+for the tools already moved there (warehouse.PG_TOOLS: news, companies), DuckDB (? placeholders) for the rest.
 
 Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
 """
@@ -20,62 +21,84 @@ def one(con, sql: str, params=None) -> dict:
 
 
 def _ts(col: str) -> str:
+    """DuckDB: a timestamp as "2026-11-02T08:15:00Z"."""
     return f"strftime({col}, '{UTC}')"
 
 
-# ── news ─────────────────────────────────────────────────────────────────
+def _pg_ts(col: str) -> str:
+    """A timestamptz as "2026-11-02T08:15:00Z" (what the browser expects, like _ts for DuckDB)."""
+    return f"""to_char({col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')"""
+
+
+# ── news: PostgreSQL, schema news (psycopg connection, %s placeholders) ─────
+def _since(days) -> str:
+    """'now() - interval ...' for a whole number of days (the number is made an int, so it's safe in the SQL)."""
+    return f"now() - interval '{int(days)} days'"
+
+
+def _day(col: str) -> str:
+    return f"to_char({col} at time zone 'UTC', 'YYYY-MM-DD')"
+
+
+def _like(q: str) -> str:
+    """A search text as an ILIKE pattern: % and _ in it are searched for, not wildcards."""
+    return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
 def news_summary(con, days: int) -> dict:
-    last = one(con, f"""select {_ts('run_at')} as run_at, sources, sources_ok, headlines, new_headlines, item_limit
-                        from news_runs order by run_at desc limit 1""")
+    last = one(con, f"""select {_pg_ts('run_at')} as run_at, sources, sources_ok, headlines, new_headlines, item_limit
+                        from news.news_runs order by news_runs.run_at desc limit 1""")
     totals = one(con, f"""select count(*) as headlines,
-            count(*) filter (where first_seen_at >= now() - interval {int(days)} day) as in_period,
+            count(*) filter (where first_seen_at >= {_since(days)}) as in_period,
             count(*) filter (where first_seen_at >= current_date) as today,
-            count(*) filter (where list_contains(topics, 'tech') and first_seen_at >= now() - interval {int(days)} day) as tech_in_period,
+            count(*) filter (where 'tech' = any(topics) and first_seen_at >= {_since(days)}) as tech_in_period,
             count(distinct source) as sources_seen
-        from news_items""")
-    by_group = rows(con, f"""select group_code, count(*) as n from news_items
-        where first_seen_at >= now() - interval {int(days)} day group by 1 order by 2 desc""")
-    by_day = rows(con, f"""select strftime(date_trunc('day', coalesce(published_at, first_seen_at)), '%Y-%m-%d') as day,
-            count(*) as n, count(*) filter (where list_contains(topics, 'tech')) as tech
-        from news_items where coalesce(published_at, first_seen_at) >= now() - interval 14 day group by 1 order by 1""")
-    top_sources = rows(con, f"""select source, group_code, count(*) as n from news_items
-        where first_seen_at >= now() - interval {int(days)} day group by 1, 2 order by 3 desc limit 12""")
-    topics_by_day = rows(con, f"""select strftime(date_trunc('day', coalesce(published_at, first_seen_at)), '%Y-%m-%d') as day,
-            count(*) filter (where list_contains(topics, 'tech')) as tech,
-            count(*) filter (where list_contains(topics, 'crypto')) as crypto,
-            count(*) filter (where list_contains(topics, 'markets')) as markets
-        from news_items where coalesce(published_at, first_seen_at) >= now() - interval 14 day group by 1 order by 1""")
+        from news.news_items""")
+    by_group = rows(con, f"""select group_code, count(*) as n from news.news_items
+        where first_seen_at >= {_since(days)} group by 1 order by 2 desc, 1""")
+    by_day = rows(con, f"""select {_day('coalesce(published_at, first_seen_at)')} as day,
+            count(*) as n, count(*) filter (where 'tech' = any(topics)) as tech
+        from news.news_items where coalesce(published_at, first_seen_at) >= {_since(14)} group by 1 order by 1""")
+    top_sources = rows(con, f"""select source, group_code, count(*) as n from news.news_items
+        where first_seen_at >= {_since(days)} group by 1, 2 order by 3 desc, 1 limit 12""")
+    topics_by_day = rows(con, f"""select {_day('coalesce(published_at, first_seen_at)')} as day,
+            count(*) filter (where 'tech' = any(topics)) as tech,
+            count(*) filter (where 'crypto' = any(topics)) as crypto,
+            count(*) filter (where 'markets' = any(topics)) as markets
+        from news.news_items where coalesce(published_at, first_seen_at) >= {_since(14)} group by 1 order by 1""")
     # UTC hour of publishing (the browser shifts it to local time); feeds that give only a date
     # show up as exactly midnight, so those are left out
-    by_hour = rows(con, f"""select hour(published_at) as hour, count(*) as n from news_items
-        where published_at >= now() - interval {max(int(days), 7)} day
-          and strftime(published_at, '%H:%M:%S') <> '00:00:00' group by 1 order by 1""")
+    by_hour = rows(con, f"""select extract(hour from published_at at time zone 'UTC')::int as hour, count(*) as n
+        from news.news_items
+        where published_at >= {_since(max(int(days), 7))}
+          and (published_at at time zone 'UTC')::time <> time '00:00:00' group by 1 order by 1""")
     return {"last_run": last, "totals": totals, "by_group": by_group, "by_day": by_day, "top_sources": top_sources,
             "topics_by_day": topics_by_day, "by_hour": by_hour}
 
 
 def news_items(con, *, group=None, source=None, tech=False, topic=None, new=False, q=None, days=7,
                limit=100, offset=0) -> dict:
-    where, params = [f"coalesce(published_at, first_seen_at) >= now() - interval {int(days)} day"], []
+    where, params = [f"coalesce(published_at, first_seen_at) >= {_since(days)}"], []
     if group:                                        # one group, or several: "MARKETS,CRYPTO"
         codes = [g.strip() for g in group.split(",") if g.strip()]
-        where.append(f"group_code in ({', '.join('?' * len(codes))})"); params += codes
+        where.append("group_code = any(%s)"); params.append(codes)
     if source:
-        where.append("source = ?"); params.append(source)
+        where.append("source = %s"); params.append(source)
     topic = topic or ("tech" if tech else None)
     if topic:
-        where.append("list_contains(topics, ?)"); params.append(topic)
+        where.append("%s = any(topics)"); params.append(topic)
     if new:
-        where.append("first_seen_at >= (select date_trunc('second', max(run_at)) from news_runs)")
+        where.append("first_seen_at >= (select date_trunc('second', max(run_at)) from news.news_runs)")
     if q:
-        where.append("(title ilike ? or summary ilike ? or source ilike ?)"); params += [f"%{q}%"] * 3
+        where.append("(title ilike %s or summary ilike %s or source ilike %s)"); params += [_like(q)] * 3
     cond = " and ".join(where)
-    total = con.execute(f"select count(*) from news_items where {cond}", params).fetchone()[0]
+    total = con.execute(f"select count(*) from news.news_items where {cond}", params).fetchone()[0]
     items = rows(con, f"""select url, title, summary, source, group_code, topics, tech_terms, times_seen,
-            {_ts('published_at')} as published_at, {_ts('first_seen_at')} as first_seen_at,
-            first_seen_at >= (select date_trunc('second', max(run_at)) from news_runs) as is_new
-        from news_items where {cond}
-        order by coalesce(published_at, first_seen_at) desc limit {int(limit)} offset {int(offset)}""", params)
+            {_pg_ts('published_at')} as published_at, {_pg_ts('first_seen_at')} as first_seen_at,
+            first_seen_at >= (select date_trunc('second', max(run_at)) from news.news_runs) as is_new
+        from news.news_items where {cond}
+        order by coalesce(news_items.published_at, news_items.first_seen_at) desc, url
+        limit {int(limit)} offset {int(offset)}""", params)
     return {"total": total, "items": items}
 
 
@@ -99,22 +122,22 @@ def news_sources(con) -> list[dict]:
     """Status of every source in the last run, plus how many runs in a row it has failed."""
     return rows(con, f"""
         with ordered as (
-            select *, row_number() over (partition by source order by run_at desc) as rn from news_source_runs),
+            select *, row_number() over (partition by source order by run_at desc) as rn from news.news_source_runs),
         streak as (
             select source, count(*) as failed_streak from ordered o
             where status = 'failed' and rn < coalesce((select min(rn) from ordered o2
                   where o2.source = o.source and o2.status = 'ok'), 1000000)
             group by 1)
-        select o.source, o.group_code, o.status, o.via, o.headlines, o.error, {_ts('o.run_at')} as run_at,
+        select o.source, o.group_code, o.status, o.via, o.headlines, o.error, {_pg_ts('o.run_at')} as run_at,
                coalesce(s.failed_streak, 0) as failed_streak
         from ordered o left join streak s using (source) where o.rn = 1
         order by o.status, o.group_code, o.source""")
 
 
 def news_runs(con, limit=20) -> list[dict]:
-    return rows(con, f"""select {_ts('run_at')} as run_at, item_limit, sources, sources_ok, headlines, new_headlines,
-            round(epoch(finished_at) - epoch(run_at)) as seconds
-        from news_runs order by run_at desc limit {int(limit)}""")
+    return rows(con, f"""select {_pg_ts('run_at')} as run_at, item_limit, sources, sources_ok, headlines, new_headlines,
+            round(extract(epoch from finished_at - run_at))::int as seconds
+        from news.news_runs order by news_runs.run_at desc limit {int(limit)}""")
 
 
 # ── tech intel ───────────────────────────────────────────────────────────
@@ -452,11 +475,6 @@ COMPANY_FILTERS = {
 }
 COMPANY_SORT = {"best": "(website is null), (site_status <> 'ok'), name", "name": "name",
                 "newest": "first_seen desc, name", "country": "country nulls last, name"}
-
-
-def _pg_ts(col: str) -> str:
-    """A timestamptz as "2026-11-02T08:15:00Z" (what the browser expects, like _ts for DuckDB)."""
-    return f"""to_char({col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')"""
 
 
 def _json(value, empty):

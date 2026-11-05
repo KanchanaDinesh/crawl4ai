@@ -78,7 +78,9 @@ def test_analyze_topics_tone_and_sri_lanka():
     assert analysis.balance_label(-40) == "mostly negative" and analysis.balance_label(0) == "mixed"
 
 
-def test_analyze_command_writes_the_report(tmp_path, monkeypatch, capsys):
+def test_analyze_command_writes_the_report(tmp_path, monkeypatch, capsys, pg_env):
+    from warehouse import postgres
+    postgres.setup()
     monkeypatch.setenv("WORLDNEWS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("WORLDNEWS_OUTPUT_DIR", str(tmp_path / "out"))
     from worldnews import cli

@@ -30,6 +30,15 @@ DERIVED_FROM = {"GOLD24K_LKR_PAWN": ["LKR=X", "GC=F"]}
 
 
 def _open(name: str):
+    if name in warehouse.PG_TOOLS:                     # moved to PostgreSQL: read with the read-only login
+        from warehouse.postgres import DatabaseError, connect
+        try:
+            con = connect("reader", autocommit=True)
+        except DatabaseError as e:
+            logger.info("%s: %s; that part is left out", name, e)
+            return None
+        con.execute("set timezone = 'UTC'")
+        return con
     path = warehouse.DB_FILES[name]
     if not path.exists():
         logger.info("%s: no database yet (%s); that part is left out", name, path)
@@ -72,8 +81,8 @@ def _markets(con) -> dict:
 
 
 def _news(con) -> dict:
-    n, sources = con.execute("""select count(*), count(distinct source) from news_items
-        where first_seen_at >= now() - interval 7 day""").fetchone()
+    n, sources = con.execute("""select count(*), count(distinct source) from news.news_items
+        where first_seen_at >= now() - interval '7 days'""").fetchone()
     return {"week_headlines": n, "week_sources": sources}
 
 

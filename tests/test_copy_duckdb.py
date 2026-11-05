@@ -22,6 +22,19 @@ create table refusals (domain varchar primary key, refused_at timestamptz, error
 create table cursors (source varchar, key varchar, value json, updated_at timestamptz, primary key (source, key));
 create table runs (started_at timestamptz, command varchar, seconds double, summary json);
 """
+# the same for world news (worldnews/store.py before 2026-11-06)
+OLD_NEWS_DUCKDB = """
+create table news_items (url varchar primary key, id varchar, title varchar, summary varchar, published_at timestamptz,
+    source varchar, group_code varchar, topics varchar[], tech_terms varchar[], image varchar,
+    first_seen_at timestamptz, last_seen_at timestamptz, times_seen integer default 0);
+create table news_runs (run_at timestamptz primary key, finished_at timestamptz, item_limit integer,
+    sources integer, sources_ok integer, headlines integer, new_headlines integer);
+create table news_source_runs (run_at timestamptz, source varchar, group_code varchar, status varchar, via varchar,
+    feed_url varchar, error varchar, headlines integer);
+create table news_run_items (run_at timestamptz, url varchar, source varchar, rank integer);
+create table feed_cache (source varchar primary key, feed_url varchar, updated_at timestamptz);
+"""
+OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB}
 
 
 @pytest.fixture
@@ -32,9 +45,10 @@ def duck_files(tmp_path, monkeypatch, pg_env):
         monkeypatch.setitem(DB_FILES, name, tmp_path / path.parent.name / path.name)
     postgres.setup()
     init()
-    DB_FILES["companies"].parent.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect(str(DB_FILES["companies"])) as con:
-        con.execute(OLD_COMPANIES_DUCKDB)
+    for tool, schema in OLD_DUCKDB.items():
+        DB_FILES[tool].parent.mkdir(parents=True, exist_ok=True)
+        with duckdb.connect(str(DB_FILES[tool])) as con:
+            con.execute(schema)
     return DB_FILES
 
 

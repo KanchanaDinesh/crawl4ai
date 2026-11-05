@@ -9,7 +9,9 @@ from sample_data import build_markets, build_news, build_tech
 
 
 @pytest.fixture
-def facts(tmp_path, monkeypatch):
+def facts(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()                                   # news lives in the test PostgreSQL
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
     for var in ("WORLDNEWS_DATA_DIR", "TECHINTEL_DATA_DIR", "MARKETS_DATA_DIR", "VEHICLES_DATA_DIR"):

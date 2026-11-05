@@ -11,7 +11,9 @@ from sample_data import build_news, build_tech
 
 
 @pytest.fixture
-def dash(tmp_path, monkeypatch):
+def dash(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()                                   # news (and companies) live in the test PostgreSQL
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("WORLDNEWS_DATA_DIR", raising=False)
     monkeypatch.delenv("TECHINTEL_DATA_DIR", raising=False)
@@ -108,19 +110,40 @@ def test_tech_company_facts(dash):
 
 
 def test_busy_database_serves_last_data(dash):
+    """DuckDB tools (tech intel until it moves): a run writing locks the file, so the last data is shown."""
     server, db_files = dash
-    first, = call(server, "/api/news/runs")
-    writer = duckdb.connect(str(db_files["news"]))                              # a run is "writing"
+    first, = call(server, "/api/tech/runs")
+    writer = duckdb.connect(str(db_files["tech"]))                              # a run is "writing"
     try:
-        busy, = call(server, "/api/news/runs")
+        busy, = call(server, "/api/tech/runs")
         assert busy["busy"] is True and busy["data"] == first["data"]
     finally:
         writer.close()
-    again, = call(server, "/api/news/runs")
+    again, = call(server, "/api/tech/runs")
     assert "busy" not in again
 
 
-def test_empty_databases(tmp_path, monkeypatch):
+def test_news_is_never_busy_while_a_run_writes(dash):
+    """PostgreSQL: a run in the middle of saving doesn't stop the dashboard; it shows what was saved before."""
+    from warehouse import postgres
+    server, _ = dash
+    before, = call(server, "/api/news/summary?days=7")
+    writer = postgres.connect("writer")                   # a run in the middle of saving, not committed yet
+    writer.execute("insert into news.news_items (url, title, first_seen_at) values ('https://x/new', 'New', now())")
+    writer.execute("update news.news_runs set headlines = headlines + 1")
+    try:
+        during, = call(server, "/api/news/summary?days=7")
+        assert "busy" not in during and during["data"]["totals"] == before["data"]["totals"]
+        writer.commit()
+        after, = call(server, "/api/news/summary?days=7")
+        assert after["data"]["totals"]["headlines"] == before["data"]["totals"]["headlines"] + 1
+    finally:
+        writer.close()
+
+
+def test_empty_databases(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()                                   # the database exists, but no tool has made its tables yet
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "nothing"))
     import project_paths
     import warehouse

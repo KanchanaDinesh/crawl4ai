@@ -1,7 +1,7 @@
 """`python -m worldnews analyze`: read the saved headlines, analyse them, write the report.
 
 Writes output/worldnews/analysis/analysis-<date>_<time>.{html,md,json} and analysis-latest.html,
-and prints a short summary. Reads the database read-only, so it can run while a collection runs.
+and prints a short summary. Reads PostgreSQL with the read-only login, so it can run while a collection runs.
 """
 
 import html
@@ -24,22 +24,26 @@ def fetch_items(con, days: float, groups: list[str] | None = None, now: datetime
     """Headlines first seen in the last `days`, and in the `days` before that (for "rising"), from an open connection."""
     now = now or datetime.now(timezone.utc)
     start, before = now - timedelta(days=days), now - timedelta(days=2 * days)
-    where = " and group_code in (" + ",".join("?" * len(groups)) + ")" if groups else ""
+    where, params = "", [before]
+    if groups:
+        where = " and group_code = any(%s)"
+        params.append([g.upper() for g in groups])
     cur = con.execute(f"""select url, title, summary, source, group_code, published_at, first_seen_at
-        from news_items where first_seen_at >= ? {where} order by first_seen_at""",
-                      [before, *(g.upper() for g in groups or [])])
+        from news.news_items where first_seen_at >= %s {where} order by first_seen_at, url""", params)
     cols = [c[0] for c in cur.description]
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     return [r for r in rows if r["first_seen_at"] >= start], [r for r in rows if r["first_seen_at"] < start]
 
 
 def load_items(settings, days: float, groups: list[str] | None = None, now: datetime | None = None) -> tuple[list, list]:
-    import warehouse
-    path = settings.data_dir / "worldnews.duckdb"
-    if not path.exists():
-        raise SystemExit("No news saved yet. Run:  uv run python -m worldnews run")
-    con = warehouse.connect(path, read_only=True, wait_seconds=30)
+    from warehouse.postgres import DatabaseError, connect
     try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        raise SystemExit(str(e)) from e
+    try:
+        if not con.execute("select to_regclass('news.news_items') is not null").fetchone()[0]:
+            raise SystemExit("No news saved yet. Run:  uv run python -m worldnews run")
         return fetch_items(con, days, groups, now)
     finally:
         con.close()
