@@ -45,3 +45,78 @@ def store(settings):
     s = DuckStore(settings.data_dir)      # tests run on the real database backend
     yield s
     s.close()
+
+
+# --- PostgreSQL ----------------------------------------------------------------------------------------------
+# Tests never touch the real PostgreSQL either: the first test that asks for it starts a throwaway server
+# (initdb into a temp folder, its own socket, no TCP port), stopped again when the tests finish. ~2-3 s.
+
+def _pg_bin(name: str) -> str | None:
+    import shutil
+    import subprocess
+    found = shutil.which(name)
+    if found:
+        return found
+    try:
+        bindir = subprocess.run(["pg_config", "--bindir"], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        bindir = ""
+    candidates = [Path(bindir)] if bindir else []
+    candidates += sorted(Path("/opt/homebrew/opt").glob("postgresql@*/bin"), reverse=True)
+    candidates += sorted(Path("/usr/lib/postgresql").glob("*/bin"), reverse=True)
+    for folder in candidates:
+        if (folder / name).exists():
+            return str(folder / name)
+    return None
+
+
+@pytest.fixture(scope="session")
+def pg_server():
+    """A throwaway PostgreSQL: yields the admin conninfo (superuser `admin`, database `postgres`)."""
+    import random
+    import shutil
+    import subprocess
+    initdb, pg_ctl = _pg_bin("initdb"), _pg_bin("pg_ctl")
+    if not initdb or not pg_ctl:
+        pytest.fail("PostgreSQL's programs (initdb, pg_ctl) aren't installed. On the Mac:  brew install postgresql@18")
+    # the socket path must stay short (about 100 characters at most), so not under pytest's long tmp paths
+    sock = Path(tempfile.mkdtemp(prefix="c4pg-"))
+    data = sock / "data"
+    port = random.randint(20000, 60000)
+    # macOS: with no valid LC_ALL the server stops at once ("postmaster became multithreaded during startup")
+    env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
+    # --locale=C: the shell's LANG/LC_* can be unset or unusable (initdb then refuses), and tests don't need one
+    made = subprocess.run([initdb, "-D", str(data), "-U", "admin", "--auth=trust", "-E", "UTF8", "--locale=C",
+                           "--no-sync", "--no-instructions"], capture_output=True, text=True, env=env)
+    if made.returncode != 0:
+        pytest.fail(f"initdb failed for the test PostgreSQL: {made.stderr or made.stdout}")
+    opts = f"-p {port} -k {sock} -c listen_addresses='' -c fsync=off -c full_page_writes=off"
+    started = subprocess.run([pg_ctl, "-D", str(data), "-o", opts, "-l", str(sock / "server.log"), "-w", "start"],
+                             capture_output=True, text=True, env=env)
+    if started.returncode != 0:
+        log = (sock / "server.log").read_text() if (sock / "server.log").exists() else ""
+        pytest.fail(f"The test PostgreSQL didn't start: {started.stderr or started.stdout}\n{log[-2000:]}")
+    try:
+        yield f"host={sock} port={port} user=admin dbname=postgres"
+    finally:
+        subprocess.run([pg_ctl, "-D", str(data), "-m", "immediate", "stop"], capture_output=True, env=env)
+        shutil.rmtree(sock, ignore_errors=True)
+
+
+@pytest.fixture
+def pg_env(pg_server, monkeypatch):
+    """Points CRAWL4AI_*_URL at the test server, with a database and logins of this test's own (new names
+    per test, so tests never see each other's tables). Returns the three conninfo strings."""
+    import uuid
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    tag = uuid.uuid4().hex[:8]
+    base = conninfo_to_dict(pg_server)
+    urls = {
+        "admin": pg_server,
+        "writer": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"w_{tag}"),
+        "reader": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"r_{tag}"),
+    }
+    monkeypatch.setenv("CRAWL4AI_ADMIN_URL", urls["admin"])
+    monkeypatch.setenv("CRAWL4AI_DATABASE_URL", urls["writer"])
+    monkeypatch.setenv("CRAWL4AI_READER_URL", urls["reader"])
+    return urls

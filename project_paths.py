@@ -59,7 +59,27 @@ def chromium_args() -> list[str]:
     return DEFAULT_CHROMIUM_ARGS[:] if value is None else value.split()
 
 
+def load_database_env(path: Path | None = None) -> None:
+    """KEY=value lines from .local/database.env (git-ignored): PostgreSQL addresses and passwords stay out of git.
+
+    Only sets variables that aren't already set, so the environment always wins."""
+    path = path or LOCAL_DIR / "database.env"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and not os.environ.get(key):
+            os.environ[key] = value
+
+
 def apply_local_env() -> None:
+    load_database_env()
     if browsers_on_system_drive() and not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
         import platform
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(

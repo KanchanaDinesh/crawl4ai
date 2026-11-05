@@ -12,6 +12,8 @@ fallback) and prints a clear verdict with the fix for anything wrong:
   - whether it survives a page that needs graphics (WebGL + a screenshot). Simple pages don't start
     Chromium's separate GPU process; real websites do, and on one Mac that process crashed and took
     the browser with it. Tried with the tools' Chromium flags (CHROMIUM_ARGS) and without them.
+  - PostgreSQL (the database the tools are moving to): reachable, schemas and extensions there, the reader
+    login can't write, free disk space. Same as:  uv run python -m warehouse pg-check
 """
 
 import asyncio
@@ -127,6 +129,16 @@ async def try_graphics_page(args: list[str]) -> str | None:
         return " | ".join(why[-2:])[:300] if why else (lines[0][:300] if lines else type(e).__name__)
 
 
+def check_postgres() -> bool:
+    """Print the PostgreSQL checks; True when one failed. Its own fixes are in each line, not in "What to do"."""
+    from warehouse.postgres import check
+    failed = False
+    for r in check():
+        line(WARN if r.ok and r.warn else (OK if r.ok else BAD), r.what, r.detail)
+        failed |= not r.ok
+    return failed
+
+
 def main() -> None:
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
     if verbose:
@@ -138,7 +150,7 @@ def main() -> None:
         print(f"  {name}={os.environ.get(name, '(not set)')}")
     print()
     line(OK, "Python", f"{sys.version.split()[0]} on {platform.system()} {platform.machine()}")
-    for pkg in ("crawl4ai", "playwright", "duckdb"):
+    for pkg in ("crawl4ai", "playwright", "duckdb", "psycopg"):
         try:
             line(OK, pkg, metadata.version(pkg))
         except metadata.PackageNotFoundError:
@@ -185,10 +197,16 @@ def main() -> None:
         line(OK if not plain else WARN, "  same page without those flags",
              "also works (the flags aren't needed here)" if not plain else f"fails: {plain}")
 
+    print("\nPostgreSQL...")
+    pg_failed = check_postgres()
+
     print()
-    if not problems:
-        print("All good: the browser works here.")
+    if not problems and not pg_failed:
+        print("All good: the browser and PostgreSQL work here.")
         return
+    if not problems:
+        print("The browser works here. PostgreSQL: see the FAIL lines above (each says what to do).")
+        sys.exit(1)
     print("What to do:")
     if "filesystem" in problems:
         print("  - This drive can't hold the browser properly (no symbolic links, which Chromium on macOS needs).\n"

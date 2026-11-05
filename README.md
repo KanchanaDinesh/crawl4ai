@@ -248,7 +248,7 @@ env.sh, setup_local.sh   keep tools and caches inside this folder (see Setup)
 run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); settings in automation.conf
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
-warehouse/               DuckDB helpers and the `python -m warehouse` query tool
+warehouse/               DuckDB helpers, the `python -m warehouse` query tool, and PostgreSQL setup (`warehouse setup`, `pg-check`)
 dashboard/               local web dashboard (python -m dashboard)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)

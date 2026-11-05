@@ -6,6 +6,10 @@
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
 
+    setup                PostgreSQL: create or repair the logins, database, schemas and grants (safe to run again)
+    pg-check             PostgreSQL: check that everything the tools need is there
+                         (PostgreSQL is replacing DuckDB: docs/postgres-migration.md)
+
 In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  companies.*  scrapers.*
 e.g.  select * from news.news_items order by published_at desc limit 20
 """
@@ -110,6 +114,29 @@ def repl() -> None:
                 print(f"Error: {e}")
 
 
+def pg_setup() -> None:
+    from .postgres import DatabaseError, names, setup
+    try:
+        done = setup()
+    except DatabaseError as e:
+        sys.exit(f"Setup failed: {e}")
+    n = names()
+    print("\n".join(f"  {d}" for d in done) if done else "  Everything was already there (grants re-applied).")
+    print(f"Database {n['database']}: writer login {n['writer']}, read-only login {n['reader']}.\n")
+    if not pg_check():
+        sys.exit(1)
+
+
+def pg_check() -> bool:
+    """Print the PostgreSQL checks; True when nothing failed."""
+    from .postgres import check
+    results = check()
+    for r in results:
+        state = "OK  " if r.ok and not r.warn else ("WARN" if r.ok else "FAIL")
+        print(f"[{state}] {r.what}{(': ' + r.detail) if r.detail else ''}")
+    return all(r.ok for r in results)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="python -m warehouse", description="The project's DuckDB databases.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -119,8 +146,14 @@ def main() -> None:
     q = sub.add_parser("sql")
     q.add_argument("query", nargs="?")
     q.add_argument("--csv", help="Save the result to this CSV file")
+    sub.add_parser("setup", help="PostgreSQL: create or repair the logins, database, schemas and grants")
+    sub.add_parser("pg-check", help="PostgreSQL: check that everything the tools need is there")
     args = p.parse_args()
-    if args.command == "init":
+    if args.command == "setup":
+        pg_setup()
+    elif args.command == "pg-check":
+        sys.exit(0 if pg_check() else 1)
+    elif args.command == "init":
         init()
     elif args.command == "info":
         info()

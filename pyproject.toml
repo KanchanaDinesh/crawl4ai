@@ -12,6 +12,7 @@ dependencies = [
     "feedparser>=6.0",
     "duckdb>=1.1",
     "pytz>=2026.6",
+    "psycopg[binary]>=3.2",
 ]
 
 [tool.uv]

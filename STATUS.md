@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 121 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 128 tests pass.
 
 ## Parts and how to run them
 
@@ -265,6 +265,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     3) switch tool by tool (companies first) with its dashboard tab; 4) clean up. Later: a server with 100+ GB,
     per-section schedules, the GLEIF full file (3.5M companies, downloads in ~35 s; no websites in it, only
     ~21,600 get one through Wikidata's LEI links).
+36. **PostgreSQL step 1 done (2026-11-05):** database `crawl4ai` on the Mac's PostgreSQL 18 with logins `crawl4ai`
+    (writer) and `crawl4ai_reader` (read-only, 30 s query limit), extensions pg_trgm + unaccent, schemas news, tech,
+    markets, vehicles, companies, scrapers. `uv run python -m warehouse setup` (safe to repeat), `warehouse
+    pg-check`, and doctor.py checks it. Settings: `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` /
+    `CRAWL4AI_ADMIN_URL`, or `.local/database.env`. Driver psycopg 3. Tests use a throwaway server. The tools still
+    use DuckDB; **next: step 2, copy all the data** (`docs/postgres-migration.md`).
 
 ## Open issues and things to watch
 

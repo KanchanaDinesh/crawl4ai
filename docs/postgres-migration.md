@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **planned, not started.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **step 1 done (2026-11-05); next: step 2.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -73,7 +73,7 @@ Locally the Mac's PostgreSQL uses socket login without a password. On the server
 
 - `CRAWL4AI_DATABASE_URL` (writers) and `CRAWL4AI_READER_URL` (dashboard). Defaults:
   `postgresql:///crawl4ai` (local socket, current user), so it works on the Mac with no setup.
-- Server passwords go in `.local/database.env` (git-ignored, read by `env.sh` and `project_paths.apply_local_env`),
+- Server passwords go in `.local/database.env` (git-ignored, `KEY=value` lines, read by `project_paths.apply_local_env`),
   never in `automation.conf` or the code.
 
 ### Python side
@@ -133,17 +133,23 @@ Found by searching the code (22 Python files import or use DuckDB; most SQL is i
 The order Kanchana asked for: create the database, move all the data, then switch the collectors and the dashboard.
 To lose nothing written in between, each tool's data is copied **again** at the moment that tool switches.
 
-### Step 1: Create the database (on the Mac)
+### Step 1: Create the database (on the Mac) ✅ done 2026-11-05
 
-1. `create role crawl4ai login;` `create role crawl4ai_reader login;` `create database crawl4ai owner crawl4ai;`
-2. In `crawl4ai`: `create extension pg_trgm; create extension unaccent;` the six schemas; grants (reader: `usage` on
-   the schemas, `select` on all tables, and the same for future tables via `alter default privileges`).
-3. All of this as a script, `warehouse/setup.sql`, run by `python -m warehouse setup` (safe to run again).
-4. `doctor.py` checks: PostgreSQL reachable, version, our database and schemas exist, the reader can't write,
-   free disk space.
+Built in `warehouse/postgres.py` (Python rather than a .sql file, so every step checks first and can run again):
 
-**Done when:** `uv run python -m warehouse setup` and `uv run python doctor.py` say OK, and
-`psql crawl4ai -c '\dn'` lists the six schemas.
+1. `uv run python -m warehouse setup` creates what's missing: logins `crawl4ai` and `crawl4ai_reader`, database
+   `crawl4ai` (owner `crawl4ai`, UTF8), extensions `pg_trgm` and `unaccent`, the six schemas (owned by `crawl4ai`),
+   and the grants: the reader may use the schemas and read every table, including tables made later (default
+   privileges); it is read-only (`default_transaction_read_only`) and its queries stop after 30 s. A password in
+   `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` is set on that login (for the server later).
+2. `uv run python -m warehouse pg-check` and `uv run python doctor.py` check: PostgreSQL reachable (version),
+   schemas, extensions, database size, the reader can't write, free disk space where PostgreSQL keeps its files.
+3. Tests (`tests/test_postgres.py`, 7) run on a throwaway server (`tests/conftest.py`: `pg_server`, `pg_env`), and
+   include "a reader is never blocked by a writer's open transaction".
+4. Found on the way: on macOS a fresh PostgreSQL server stops at once without a valid `LC_ALL` ("postmaster became
+   multithreaded during startup"); the test server sets `LC_ALL=C`.
+
+Result on the Mac: all checks OK (database 7.8 MB, empty). Warning: 1.2 GB free on the Mac's own drive.
 
 ### Step 2: Copy all the data (DuckDB stays the live database)
 
