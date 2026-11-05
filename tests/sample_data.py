@@ -131,7 +131,7 @@ def build_markets(root, now: datetime | None = None, runs: int = 6) -> None:
     rnd = random.Random(3)
     base = {("index", "^GSPC", "S&P 500", "USD"): 5728.8, ("index", "^IXIC", "Nasdaq Composite", "USD"): 18200.4,
             ("index", "^DJI", "Dow Jones", "USD"): 42114.4, ("index", "^VIX", "VIX (volatility)", "USD"): 16.2,
-            ("index", "ASPI", "All Share Price Index (ASPI)", "LKR"): 20364.97, ("index", "S&P SL20", "S&P Sri Lanka 20", "LKR"): 11681.77,
+            ("index", "ASPI", "All Share Price Index (ASPI)", "LKR"): 20364.97, ("index", "S&P SL20", "S&P Sri Lanka 20", "LKR"): 5686.82,
             ("stock_us", "AAPL", "Apple Inc.", "USD"): 225.1, ("stock_us", "NVDA", "NVIDIA Corporation", "USD"): 138.4,
             ("stock_us", "MSFT", "Microsoft Corporation", "USD"): 410.3, ("stock_us", "TSLA", "Tesla, Inc.", "USD"): 248.9,
             ("stock_lk", "JKH.N0000", "John Keells Holdings PLC", "LKR"): 21.4, ("stock_lk", "COMB.N0000", "Commercial Bank Of Ceylon PLC", "LKR"): 140.25,

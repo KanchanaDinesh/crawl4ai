@@ -22,7 +22,7 @@ adds a point to the history and the dashboard charts.
 
 | Group | Instruments | Sources, in order (the first that works is used) |
 |---|---|---|
-| `lk` | **ASPI** and **S&P SL20** (with P/E, P/BV, dividend yield, turnover), and **every CSE-listed company**: price, change, volume, turnover, market cap | cse.lk's own API |
+| `lk` | **ASPI** and **S&P SL20**, live during trading (cse.lk's `aspiData`/`snpData`; the daily summary only has finished days), with P/E, P/BV, dividend yield, turnover; **S&P SL20 TRI** (total return, end of day); and **every CSE-listed company**: price, change, volume, turnover, market cap | cse.lk's own API |
 | `us` | S&P 500, Dow Jones, Nasdaq Composite, Nasdaq 100, Russell 2000, VIX, plus the `us_stocks` watchlist | Yahoo Finance → Stooq |
 | `metals` | Gold, silver, platinum (USD/oz), WTI and Brent crude, plus **gold and silver in LKR** | Yahoo Finance → Stooq |
 | `fx` | USD/LKR, EUR/USD, GBP/USD, USD/INR, USD/JPY, US Dollar Index | Yahoo Finance → Stooq → open.er-api.com (daily rates) |

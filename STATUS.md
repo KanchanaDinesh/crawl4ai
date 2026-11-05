@@ -12,7 +12,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 107 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 109 tests pass.
 
 ## Parts and how to run them
 
@@ -220,6 +220,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       country's news is about, rising words. Clicking a name, country or rising word searches the headlines.
       API: /api/news/analysis?days=N&group=LK (computed live, ~1s for 1,800 headlines).
     - Ideas: use the top stories in the briefing; weekly/monthly views.
+33. ASPI was a day behind (Kanchana noticed, 2026-11-05): cse.lk's `dailyMarketSummery` only has finished trading days,
+    so during trading it still gave yesterday's close. Now ASPI and S&P SL20 come from `aspiData` / `snpData` (live,
+    as on cse.lk's front page, with `marketStatus`), and the summary is the fallback (and gives P/E, turnover).
+    - Also found: "S&P SL20" had been saved from the field `spt`, which is the S&P SL20 **total return** index (~12,400);
+      the price index is `spp` (~6,000). Fixed; the 15 old rows were relabelled "S&P SL20 TRI" (nothing deleted), and
+      the TRI is still saved each day under that name. S&P SL20's own history starts again on 2026-11-05.
 
 ## Open issues and things to watch
 

@@ -61,12 +61,41 @@ def test_yahoo_previous_close_when_today_isnt_in_the_closes_yet():
     assert q["extra"]["spark"][-1] == 332.58                       # today's price is shown at the end
 
 
+def test_cse_live_index_replaces_yesterdays_summary():
+    """During trading the daily summary still shows yesterday: aspiData / snpData have today's value."""
+    aspi = cse.parse_market_summary(json.loads((FIX / "cse_daily_market_summary.json").read_text()))[0]
+    later = 1774204200000 + 86400000 + 4 * 3600000                                   # the next day, mid-session
+    live = {"value": 20956.9, "change": 591.93, "percentage": 2.906, "highValue": 20960.0, "lowValue": 20364.97,
+            "timestamp": later}
+    now = cse.apply_live(aspi, live, "Regular Trading")
+    assert now["price"] == 20956.9 and now["prev_close"] == pytest.approx(20364.97) and now["change_pct"] == 2.906
+    assert now["as_of"] > aspi["as_of"] and now["extra"]["market_status"] == "Regular Trading"
+    assert now["extra"]["per"] == 10.3 and now["extra"]["summary_date"] == aspi["as_of"]
+    assert cse.apply_live(aspi, None) is aspi                                         # live failed: keep the summary
+    assert cse.apply_live(aspi, {**live, "timestamp": 1774204200000 - 86400000}) is aspi   # older than the summary
+
+
+def test_old_sl20_rows_are_relabelled_as_total_return(tmp_path):
+    from markets.store import MarketStore
+    store = MarketStore(tmp_path)
+    store.con.execute("""insert into quotes (run_at, asset_class, symbol, name, price, source, extra) values
+        ('2026-11-04 10:00:00+00', 'index', 'S&P SL20', 'S&P Sri Lanka 20', 12394.73, 'cse', '{"market": "LK"}'),
+        ('2026-11-05 10:00:00+00', 'index', 'S&P SL20', 'S&P Sri Lanka 20', 6033.19, 'cse', '{"field": "spp"}')""")
+    store.close()
+    store = MarketStore(tmp_path)
+    rows = store.con.execute("select symbol, price from quotes order by run_at").fetchall()
+    assert rows == [("S&P SL20 TRI", 12394.73), ("S&P SL20", 6033.19)]
+    store.close()
+
+
 def test_cse_parsers_on_real_responses():
     idx = cse.parse_market_summary(json.loads((FIX / "cse_daily_market_summary.json").read_text()))
-    aspi, sl20 = idx
+    aspi, sl20, tri = idx
     assert aspi["symbol"] == "ASPI" and aspi["price"] == 20364.97 and aspi["prev_close"] is not None
     assert aspi["change_pct"] == pytest.approx((20364.97 - aspi["prev_close"]) / aspi["prev_close"] * 100)
-    assert sl20["symbol"] == "S&P SL20" and sl20["price"] == 11681.77 and aspi["extra"]["per"] == 10.3
+    # "spp" is the S&P SL20 price index; "spt" (about twice as big) is its total return index
+    assert sl20["symbol"] == "S&P SL20" and sl20["price"] == 5686.82 and sl20["prev_close"] == 5752.19
+    assert tri["symbol"] == "S&P SL20 TRI" and tri["price"] == 11681.77 and aspi["extra"]["per"] == 10.3
     stocks = cse.parse_trade_summary(json.loads((FIX / "cse_trade_summary.json").read_text()))
     first = stocks[0]
     assert (first["symbol"], first["name"], first["price"], first["prev_close"]) == \

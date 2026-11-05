@@ -35,6 +35,14 @@ class MarketStore:
         self.root = Path(root)
         self.con = connect(self.root / "markets.duckdb")
         self.con.execute(SCHEMA)
+        self._relabel_sl20_total_return()
+
+    def _relabel_sl20_total_return(self) -> None:
+        """Until 2026-11-05, "S&P SL20" was saved from the CSE field "spt", which is the S&P SL20 *total return*
+        index (about 12,000; the price index is about 6,000). Those rows keep their values under the right name.
+        Rows saved since then carry extra.field, so this only ever touches the old ones."""
+        self.con.execute("""update quotes set symbol = 'S&P SL20 TRI', name = 'S&P Sri Lanka 20 Total Return'
+            where symbol = 'S&P SL20' and source = 'cse' and json_extract_string(extra, '$.field') is null""")
 
     def save_run(self, run_at: str, finished_at: str, quotes: list[dict], sources: list[dict]) -> None:
         if quotes:     # (DuckDB rejects an empty batch; a run with no prices still records its sources)
