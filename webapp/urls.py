@@ -11,7 +11,8 @@ urlpatterns = [
     path("admin/audit/", include("webapp.audit.urls")),
     path("grid-test/", include("webapp.gridtest.urls")),
     # pages of later phases: the menu items exist now, so rights can be set up front
-    path("datasets/", core.coming("datasets"), name="datasets"),
+    path("datasets/", include("webapp.explore.urls")),
+    path("admin/catalog/", include("webapp.catalog.urls")),
     path("dashboard/", core.coming("dashboard"), name="dashboard"),
     path("my-tables/", core.coming("my_tables"), name="my_tables"),
     path("charts/", core.coming("charts"), name="charts"),

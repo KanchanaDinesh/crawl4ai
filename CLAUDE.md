@@ -39,7 +39,8 @@ techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, 
                                                cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
 warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse
-webapp/          the user platform (Django + HTMX): python -m webapp runserver 8060; its tables in schema `app`
+webapp/          the user platform (Django + HTMX): python -m webapp runserver 8060; its tables in schema `app`.
+                 catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them
 dashboard/       local web dashboard (aiohttp + plain JS, no build step): python -m dashboard --open (until phase 3)
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)

@@ -221,6 +221,9 @@ uv run python -m warehouse sql "select * from vehicles.v_vehicle_price_changes" 
 uv run python -m warehouse sql                     # interactive prompt
 ```
 
+**Catalog:** the `catalog` step refreshes the web app's list of datasets and fields, so a new table or field shows up
+there (`uv run python -m webapp catalog_scan` by hand).
+
 **Backups:** the `backup` step (last in the default `./run_all.sh` steps) saves a full copy with `pg_dump` in
 `data/backups/crawl4ai-<date>-<time>.dump` and keeps the newest 7 (`BACKUP_ARGS` in automation.conf). By hand:
 `uv run python -m warehouse backup`. To restore one (it replaces what's in the database):

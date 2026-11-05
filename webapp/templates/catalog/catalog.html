@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Catalog{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Catalog</h1><p class="muted">Built automatically from the database{% if last_scan %}; last scan {{ last_scan|date:"j M Y H:i" }}{% endif %}.</p></div>
+  <div class="toolbar">
+    <a class="btn" href="{% url 'dataset_rights' %}">Dataset rights</a>
+    <form method="post" action="{% url 'catalog_scan' %}">{% csrf_token %}<button class="btn primary" type="submit">Scan now</button></form>
+  </div>
+</div>
+<div class="toolbar"><input type="search" name="q" value="{{ q }}" placeholder="Find a dataset" aria-label="Find a dataset" hx-get="{% url 'catalog' %}" hx-trigger="input changed delay:250ms, search" hx-target="#rows"></div>
+<div class="table-wrap"><table class="list">
+  <thead><tr><th>Dataset</th><th>Name in the database</th><th>Rows</th><th>Fields</th><th>Roles that see it</th><th>Status</th></tr></thead>
+  <tbody id="rows">{% include "catalog/_rows.html" %}</tbody>
+</table></div>
+{% endblock %}

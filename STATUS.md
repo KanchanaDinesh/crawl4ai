@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a local web dashboard. Collectors write while the
 dashboard and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 152 tests pass.
+All 174 tests pass.
 
 ## Parts and how to run them
 
@@ -30,7 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060 | Phase 1 of the user platform: sign-in, users, roles, menu rights, audit log, grid test. Django; schema `app`. The dashboard below stays until phase 3 |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-2: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel. Django; schema `app`. The dashboard below stays until phase 3 |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -392,6 +392,14 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       count as one; at most 40 characters, no commas; each addition is in the audit log. Model `GridTestChoice`,
       endpoint `/grid-test/api/choice/`, `DataGrid.addChoice`. Phase 5's real choice fields reuse this.
     - **Next: phase 2** (automatic catalog, every dataset in the grid, saved views, exports).
+48. **User platform phase 2 built (2026-11-06):** `webapp/catalog/` (automatic scan: 38 datasets, 653 fields, 6 s; run_all
+    step `catalog`; screens for names, fields, on/off; rights to see and export per dataset and role) and
+    `webapp/explore/` (one page and endpoints for every dataset: heading filters including tick lists, search, multi-sort,
+    column chooser, saved views, CSV and Excel). A new table appears after a scan, for administrators until granted.
+    Details and limits: `docs/user-platform-plan.md` → "Phase 2 results".
+    - Found while checking in the browser: Tabulator read a key released on a filter as typing, which cleared tick-list
+      filters; `[hidden]` didn't hide buttons; tables with no rows had no columns to show. All fixed.
+    - **Next: phase 3** (today's dashboard tabs in Django, charts in Plotly; then the aiohttp dashboard retires).
 
 ## Open issues and things to watch
 
@@ -441,7 +449,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phase 1 is built; phase 2 is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-2 are built; phase 3 is next. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).

@@ -7,9 +7,13 @@
      rowsUrl     GET ?start&limit&sort&dir&<filters> -> {total, rows:[{id, ...}], ms}
      editUrl     POST {id, field, value} -> {ok, value} | {error}
      choiceUrl   POST {field, value} -> {ok, value, choices} | {error}   (columns with allow_new)
-     filters()   returns the current filter values (object)
-     onStatus(text), onSelection(count), onError(text)
-   returns { reload(), selectedIds(), applyValue(ids, field, value), destroy() }
+     filters()   returns extra request values (object)
+     headerFilters  true: a filter under each heading (column.filter: text|number|date|choice)
+     state       {columns:[{field, visible, width}], sorts:[{field, dir}], filters:[{field, value}]} to start from
+     defaultSort {field, dir}, shown on the heading
+     onStatus(text), onSelection(count), onError(text), onTotal(total)
+   returns { reload(), selectedIds(), applyValue(ids, field, value), state(), params(), chooseColumns(anchor),
+             clearFilters(), destroy() }
 
    DataGrid.pick(anchor, {choices, value, noun, onAdd(text), onDone(list), onCancel()})
      the searchable multiple-choice list, also usable outside the grid (the bulk edit bar uses it). With onAdd
@@ -25,15 +29,19 @@
     return m ? decodeURIComponent(m[1]) : "";
   }
 
-  async function getRows(opt, start, limit, sort) {
+  async function getRows(opt, start, limit, sort, extra) {
     const qs = new URLSearchParams({ start, limit });
     if (sort && sort.field) { qs.set("sort", sort.field); qs.set("dir", sort.dir || "asc"); }
-    const f = opt.filters ? opt.filters() : {};
+    const f = { ...(opt.filters ? opt.filters() : {}), ...(extra || {}) };
     for (const k in f) if (f[k]) qs.set(k, f[k]);
     const t0 = performance.now();
     const res = await fetch(`${opt.rowsUrl}?${qs}`, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Loading rows failed (HTTP ${res.status})`);
+    if (!res.ok) {
+      const problem = await res.json().catch(() => ({}));
+      throw new Error(problem.error || `Loading rows failed (HTTP ${res.status})`);
+    }
     const data = await res.json();
+    opt.onTotal && opt.onTotal(data.total);
     const ms = Math.round(performance.now() - t0);
     opt.onStatus && opt.onStatus(`Rows ${data.total ? start + 1 : 0}–${Math.min(start + limit, data.total)} of ` +
       `${data.total.toLocaleString("en-US")} in ${ms} ms (database ${data.ms} ms)`);
@@ -196,7 +204,8 @@
     }
     const done = () => close(true);
     const outside = (e) => { if (!box.contains(e.target)) { e.stopPropagation(); close(true); } };
-    const scrolled = (e) => { if (!box.contains(e.target)) close(true); };
+    // only when what it's attached to moved: a grid that finishes loading mustn't close the list of a toolbar button
+    const scrolled = (e) => { if (e.target === document || (e.target.contains && e.target.contains(anchor))) close(true); };
 
     search.addEventListener("input", () => { active = 0; drawList(); });
     search.addEventListener("keydown", (e) => {
@@ -237,8 +246,58 @@
   }
 
   // ── The grid ─────────────────────────────────────────────────────────────────────────────────────────────
+  const WIDTHS = { number: 110, datetime: 140, bool: 80, link: 220, list: 200, json: 220, text: 190 };
+
+  // A tick-list filter under a heading: the searchable list, for fields with few different values
+  function choiceFilter(cell, onRendered, success, cancel, params) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "filter-btn";
+    let current = Array.isArray(cell.getValue()) ? cell.getValue() : [];
+    const show = () => {
+      button.textContent = !current.length ? "Any" : current.length === 1 ? current[0] : `${current.length} chosen`;
+      button.title = current.join(", ");
+      button.classList.toggle("on", current.length > 0);
+    };
+    show();
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pick(button, { choices: params.choices, value: current, noun: "value",
+        onDone: (list) => { current = list; show(); success(list); button.focus(); },
+        onCancel: () => button.focus() });
+    });
+    // Tabulator treats a key released on the filter's element as typing and reads its .value, which would clear the
+    // filter (focus comes back here just before the key is released). So the element it gets is a wrapper.
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(button);
+    button.addEventListener("keyup", (e) => e.stopPropagation());
+    return wrapper;
+  }
+
+  function headerFilter(col, c) {
+    if (c.filter === "choice") {
+      col.headerFilter = choiceFilter;
+      col.headerFilterParams = { choices: c.choices || [] };
+      col.headerFilterEmptyCheck = (v) => !v || !v.length;
+    } else if (c.filter) {
+      col.headerFilter = "input";
+      col.headerFilterPlaceholder = { number: ">10, 5..20", date: "7d, 2026-11-01", text: "contains" }[c.filter] || "";
+    }
+  }
+
+  const NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 });
+
   function column(c, opt) {
-    const col = { field: c.field, title: c.title, width: c.width || 150, headerSort: true, resizable: true };
+    const col = { field: c.field, title: c.title, width: c.width || WIDTHS[c.type] || 150, headerSort: c.type !== "json", resizable: true };
+    if (c.description) col.headerTooltip = c.description;
+    if (opt.headerFilters) headerFilter(col, c);
+    if (c.visible === false) col.visible = false;
+    if (c.type === "number") {
+      col.hozAlign = "right";
+      col.formatter = (cell) => (cell.getValue() === null || cell.getValue() === undefined ? "" : NUMBER.format(cell.getValue()));
+    }
+    if (c.type === "bool") col.formatter = (cell) => (cell.getValue() === true ? "yes" : cell.getValue() === false ? "no" : "");
+    if (c.type === "list") col.formatter = (cell) => chipsHtml(cell.getValue());
     if (c.editable) col.editor = c.type === "choice" ? "list" : "input";
     if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true, listOnEmpty: true };
     if (c.type === "multi") {
@@ -254,28 +313,50 @@
 
   function create(el, opt) {
     const original = new Map();          // id -> the row as loaded (and as saved since)
+    const editable = !!opt.editUrl;
+    const state = opt.state || {};
+    // a saved view: its columns first, in its order and widths; anything else after them, hidden
+    let columns = opt.columns.map((c) => ({ ...c, visible: c.shown !== false }));
+    if (state.columns && state.columns.length) {
+      const byField = new Map(columns.map((c) => [c.field, c]));
+      const inView = state.columns.filter((c) => byField.has(c.field)).map((c) => ({
+        ...byField.get(c.field), visible: c.visible !== false, width: c.width || byField.get(c.field).width }));
+      const named = new Set(inView.map((c) => c.field));
+      columns = [...inView, ...columns.filter((c) => !named.has(c.field)).map((c) => ({ ...c, visible: false }))];
+    }
+    const shownFields = () => table.getColumns().filter((c) => c.getField() && c.isVisible()).map((c) => c.getField());
+    let lastParams = {};
     // Tabulator writes its height onto the element itself; "100%" of a box without a fixed height made the grid
     // grow to the full data and keep loading pages, so pass the box's height in pixels
     const height = el.getBoundingClientRect().height || 560;
     const table = new window.Tabulator(el, {
       height: `${Math.round(height)}px`,
       layout: "fitData",
-      columns: opt.columns.map((c) => column(c, opt)),
-      index: "id",
+      columns: columns.map((c) => column(c, opt)),
+      index: opt.index || "id",
+      nestedFieldSeparator: false,       // a field "extra.city" is one field, not a key inside "extra"
+      movableColumns: !!opt.headerFilters,
+      headerSortClickElement: "header",
+      columnHeaderSortMulti: true,
+      filterMode: "remote",
+      headerFilterLiveFilterDelay: 400,
+      initialHeaderFilter: (state.filters || []).map((f) => ({ field: f.field, value: f.value })),
+      initialSort: (state.sorts && state.sorts.length ? state.sorts
+        : opt.defaultSort ? [opt.defaultSort] : []).filter((s) => columns.some((c) => c.field === s.field && c.visible)).map((s) => ({ column: s.field, dir: s.dir })),
       // Spreadsheet-style cell blocks, with copy and paste (also from Excel)
       selectableRange: 1,
       selectableRangeColumns: true,
       selectableRangeRows: true,
       selectableRangeClearCells: false,
       editTriggerEvent: "dblclick",
-      clipboard: true,
+      clipboard: editable ? true : "copy",
       clipboardCopyStyled: false,
       clipboardCopyConfig: { rowHeaders: false, columnHeaders: false },
       clipboardCopyRowRange: "range",
       clipboardPasteParser: "range",
       clipboardPasteAction: "range",
       rowHeader: { resizable: false, frozen: true, width: 46, hozAlign: "center", formatter: "rownum", headerSort: false },
-      history: true,
+      history: editable,
       progressiveLoad: "scroll",
       progressiveLoadScrollMargin: 400,
       paginationSize: PAGE,
@@ -284,8 +365,13 @@
       ajaxRequestFunc: async (url, config, params) => {
         const page = params.page || 1, size = params.size || PAGE;
         const s = (params.sort || [])[0];
+        const sorts = (params.sort || []).map((x) => ({ field: x.field, dir: x.dir }));
+        const filters = (params.filter || []).map((x) => ({ field: x.field, value: x.value }));
+        // what a generic dataset's endpoint needs; the same values make the export links
+        lastParams = opt.headerFilters ? { cols: JSON.stringify(shownFields()),
+          filters: filters.length ? JSON.stringify(filters) : "", sorts: sorts.length ? JSON.stringify(sorts) : "" } : {};
         try {
-          const data = await getRows(opt, (page - 1) * size, size, s ? { field: s.field, dir: s.dir } : null);
+          const data = await getRows(opt, (page - 1) * size, size, s ? { field: s.field, dir: s.dir } : null, lastParams);
           for (const r of data.rows) original.set(r.id, { ...r });      // to undo pastes into read-only cells
           return { last_page: Math.max(1, Math.ceil(data.total / size)), data: data.rows };
         } catch (e) { opt.onError && opt.onError(e.message); throw e; }
@@ -346,6 +432,31 @@
       }
     });
     return {
+      state() {
+        return {
+          columns: table.getColumns().filter((c) => c.getField()).map((c) => ({ field: c.getField(), visible: c.isVisible(), width: c.getWidth() })),
+          sorts: table.getSorters().map((s) => ({ field: s.field, dir: s.dir })),
+          filters: table.getHeaderFilters().map((f) => ({ field: f.field, value: f.value })),
+        };
+      },
+      params() { return { ...lastParams, cols: JSON.stringify(shownFields()) }; },
+      chooseColumns(anchor) {
+        const byTitle = new Map(columns.map((c) => [c.title, c.field]));
+        pick(anchor, { choices: columns.map((c) => c.title), noun: "column",
+          value: columns.filter((c) => table.getColumn(c.field).isVisible()).map((c) => c.title),
+          onDone: (titles) => {
+            if (!titles.length) { opt.onError && opt.onError("Keep at least one column."); return; }
+            const keep = new Set(titles.map((t) => byTitle.get(t)));
+            for (const c of table.getColumns()) {
+              const f = c.getField();
+              if (!f) continue;
+              if (keep.has(f)) c.show(); else c.hide();
+            }
+            table.setData();
+          },
+        });
+      },
+      clearFilters() { table.clearHeaderFilter(); },
       reload() { table.setData(); },
       selectedIds() { return selectedRows().map((r) => r.getData().id); },
       applyValue(ids, field, value) {

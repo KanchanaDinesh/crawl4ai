@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% load humanize %}{% block title %}{{ ds.label }} · Catalog{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ ds.label }}</h1><p class="muted mono small">{{ ds.ref }}</p></div>
+  <div class="toolbar"><a class="btn" href="{% url 'dataset' ds.ref %}">Open the data</a><a href="{% url 'catalog' %}">Back to the catalog</a></div></div>
+<form method="post" class="card">{% csrf_token %}
+  <div class="grid-2">
+    <div class="field"><label for="label">Name</label><input type="text" id="label" name="label" value="{{ ds.label }}" maxlength="120"></div>
+    <div class="field"><label for="description">What it holds</label><input type="text" id="description" name="description" value="{{ ds.description }}" maxlength="300"></div>
+  </div>
+  <label><input type="checkbox" name="enabled" {% if ds.enabled %}checked{% endif %}> On: roles with the right can see it</label>
+  <p class="muted small">{{ ds.row_count|default_if_none:"?"|intcomma }} rows{% if ds.key_columns %}; identified by {{ ds.key_columns|join:", " }}{% endif %}; last scan {{ ds.scanned_at|date:"j M Y H:i" }}. What the scan finds (types, value lists) updates by itself; names and switches here are kept.</p>
+  <div class="table-wrap"><table class="list">
+    <thead><tr><th>Field</th><th>In the database</th><th>Type</th><th>Filled</th><th>Values</th><th>Available</th><th>Shown first</th><th>What it means</th></tr></thead>
+    <tbody>{% for f in fields %}
+    <tr><td><input type="text" name="label_{{ f.pk }}" value="{{ f.label }}" maxlength="120" aria-label="Name of {{ f.path }}"></td>
+      <td class="mono small">{{ f.path }}{% if f.missing %} <span class="pill bad">gone</span>{% endif %}</td>
+      <td class="small">{{ f.type }}</td><td class="small">{{ f.fill_pct }}%</td>
+      <td class="small">{% if f.values %}{{ f.values|length }} choices{% endif %}</td>
+      <td><input type="checkbox" name="available_{{ f.pk }}" aria-label="{{ f.label }} available" {% if f.available %}checked{% endif %}></td>
+      <td><input type="checkbox" name="shown_{{ f.pk }}" aria-label="{{ f.label }} shown first" {% if f.shown %}checked{% endif %}></td>
+      <td><input type="text" name="desc_{{ f.pk }}" value="{{ f.description }}" maxlength="300" aria-label="What {{ f.label }} means"></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <div class="form-actions"><button class="btn primary" type="submit">Save</button></div>
+</form>
+{% endblock %}

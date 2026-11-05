@@ -8,6 +8,9 @@ ACTIONS = {
     "user_activated": "User activated", "password_set": "Password set", "password_changed": "Own password changed",
     "role_created": "Role created", "role_updated": "Role changed", "role_deleted": "Role deleted",
     "rights_changed": "Menu rights changed",
+    "catalog_scanned": "Catalog scanned", "dataset_updated": "Dataset changed in the catalog",
+    "dataset_rights_changed": "Dataset rights changed", "export": "Data exported",
+    "view_saved": "View saved", "view_deleted": "View deleted",
     "gridtest_edit": "Grid test: cell edited", "gridtest_bulk_edit": "Grid test: rows edited together",
     "gridtest_choice_added": "Grid test: new choice added",
 }

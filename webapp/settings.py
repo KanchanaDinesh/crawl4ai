@@ -49,12 +49,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "django_htmx",
     "axes",
     "webapp.core",
     "webapp.accounts",
     "webapp.audit",
     "webapp.gridtest",
+    "webapp.catalog",
+    "webapp.explore",
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Datasets{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Datasets</h1></div>
+<div class="toolbar"><input type="search" name="q" value="{{ q }}" placeholder="Find a dataset or a field, e.g. linkedin, price" aria-label="Find a dataset" hx-get="{% url 'datasets' %}" hx-trigger="input changed delay:250ms, search" hx-target="#cards"></div>
+<div id="cards">{% include "explore/_cards.html" %}</div>
+{% endblock %}

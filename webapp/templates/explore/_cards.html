@@ -1,0 +1,17 @@
+{% load humanize %}{% regroup datasets by schema as groups %}
+{% for g in groups %}
+<section class="ds-group">
+  <h2 class="mono">{{ g.grouper }}</h2>
+  <div class="ds-cards">
+    {% for d in g.list %}
+    <a class="card ds-card" href="{% url 'dataset' d.ref %}">
+      <strong>{{ d.label }}</strong>
+      <span class="muted small">{{ d.description }}</span>
+      <span class="small ds-count">{{ d.row_count|default_if_none:"?"|intcomma }} rows</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% empty %}
+<div class="card muted">{% if q %}Nothing matches “{{ q }}”.{% else %}No datasets yet. An administrator gives roles access under Roles and rights, after a catalog scan.{% endif %}</div>
+{% endfor %}

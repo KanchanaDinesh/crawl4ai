@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06); grid chosen: Tabulator; phase 2 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 and 2 built (2026-11-06); grid: Tabulator; phase 3 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -121,6 +121,35 @@ their own table (never the collected data) and the audit log.
 
 **Chosen: Tabulator** (Kanchana, 2026-11-06). `datagrid.js` keeps only Tabulator, and it now follows the app's
 dark and light themes.
+
+## Phase 2 results (2026-11-06)
+
+**Catalog** (`webapp/catalog/`): `python -m webapp catalog_scan`, the **Scan now** button, and run_all step `catalog`
+look at every table and view in the data schemas: 38 datasets, 653 fields, 6 seconds on the real database. Fields are
+real columns and keys found inside JSONB columns, with type, how full, and a value list when there are at most 300
+different values (looking at no more than 100,000 rows, so a value that only appears later can be missing from a
+list until it's in the sample). What the scan finds updates by itself; names, descriptions and switches an
+administrator set are kept. What disappears is marked gone, never deleted.
+
+**Rights:** see and export per dataset and role, on the Dataset rights page. Known datasets start with Editor,
+Analyst and Viewer seeing them, and Editor and Analyst exporting; internal ones (cursors, run logs, raw JSON tables)
+start switched off; **a new unknown table stays with administrators until they grant it**.
+
+**Datasets** (`webapp/explore/`): one page and one set of endpoints for every dataset. Filters under each heading:
+text "contains", numbers (`>10`, `5..20`), dates (`7d`, `2026-11-01`, `>2026-11-01`, ranges), and the searchable tick
+list for fields with few values. Search box, sort by several columns, move and resize columns, column chooser.
+Rows load 100 at a time; the first page of 132,742 companies takes ≈50–100 ms, and the count isn't repeated while
+scrolling. Requests name fields only by their catalog path: anything else is refused, values are always parameters,
+and each query stops after 30 seconds with a message.
+
+**Saved views:** columns, order, widths, sorting, filters and search under a name, private or shared, each with its own
+link. Rights are checked again on opening, so sharing a view gives nobody a dataset they couldn't see.
+
+**Exports:** CSV and Excel (openpyxl) of what's on screen, at most 200,000 rows, each one in the audit log. Text that
+would run as a formula in Excel (starting with = + - @) is made plain text.
+
+Known limits, for later: paging uses offsets, so very deep pages over millions of rows will slow down (keyset paging
+when the GLEIF file comes); links between datasets aren't in the catalog yet (phase 5/7).
 
 ## How it fits together
 
@@ -278,9 +307,8 @@ only vehicles"), both from the catalog.
 webapp/                    the Django project (python -m webapp / manage.py)
   settings.py, urls.py
   accounts/                users, roles, menus, rights, admin screens, login protection
-  catalog/                 dataset registry, automatic scan, field settings, links
-  data/                    dataset pages, grid data, inline and bulk edit, history, rule A, hide
-  views_saved/             saved grid views
+  catalog/                 dataset registry, automatic scan, field settings, dataset rights
+  explore/                 dataset pages, grid data, saved views, exports (phase 4 adds editing, history, rule A, hide)
   userdata/                own tables, imports, tags, links
   charts/                  chart builder, dashboards (Plotly)
   reports/                 report templates, PDF (WeasyPrint), schedules
@@ -298,7 +326,7 @@ app runs next to it during the build (e.g. port 8060).
 | # | Phase | Done when |
 |---|---|---|
 | 1 ✅ | **Foundation + grid test:** Django project in `webapp/`, schema `app`, login, users, roles, menu rights, admin screens, audit log; the AG Grid vs Tabulator test; the `datagrid.js` wrapper | An admin creates a user and a role; the user signs in and sees only the menus granted; grid chosen with the test's results written down |
-| 2 | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
+| 2 ✅ | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
 | 3 | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
 | 4 | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
 | 5 | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |

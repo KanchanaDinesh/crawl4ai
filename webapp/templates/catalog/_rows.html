@@ -1,0 +1,10 @@
+{% load humanize %}{% for d in datasets %}
+<tr>
+  <td><a href="{% url 'catalog_dataset' d.pk %}">{{ d.label }}</a></td>
+  <td class="mono small">{{ d.ref }}{% if d.kind == "view" %} <span class="pill">view</span>{% endif %}</td>
+  <td>{{ d.row_count|default_if_none:"?"|intcomma }}</td>
+  <td>{{ d.field_count }}</td>
+  <td>{% if d.role_count %}{{ d.role_count }}{% else %}<span class="pill accent">administrators only</span>{% endif %}</td>
+  <td>{% if d.missing %}<span class="pill bad">gone</span>{% elif d.enabled %}<span class="pill ok">on</span>{% else %}<span class="pill">off</span>{% endif %}</td>
+</tr>
+{% empty %}<tr><td colspan="6" class="muted">{% if q %}Nothing matches.{% else %}Nothing yet: press Scan now.{% endif %}</td></tr>{% endfor %}

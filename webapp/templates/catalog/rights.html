@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Dataset rights{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Dataset rights</h1><p class="muted">Tick what each role may do with each dataset. Administrators can always see and export everything.</p></div>
+  <a href="{% url 'roles' %}">Back to roles</a></div>
+<form method="post" class="card">{% csrf_token %}
+  <div class="table-wrap"><table class="list matrix">
+    <thead><tr><th rowspan="2">Dataset</th>{% for g in groups %}<th colspan="2">{{ g.name }}</th>{% endfor %}</tr>
+      <tr>{% for g in groups %}<th>See</th><th>Export</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% regroup rows by ds.schema as schemas %}
+    {% for s in schemas %}
+      <tr class="sec"><td colspan="{{ groups|length|add:groups|length|add:1 }}">{{ s.grouper }}</td></tr>
+      {% for row in s.list %}
+      <tr><td>{{ row.ds.label }}{% if not row.ds.enabled %} <span class="pill">off</span>{% endif %}<div class="muted small mono">{{ row.ds.ref }}</div></td>
+        {% for c in row.cells %}
+        <td><input type="checkbox" name="v_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may see {{ row.ds.label }}" {% if c.right.can_view %}checked{% endif %}></td>
+        <td><input type="checkbox" name="e_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may export {{ row.ds.label }}" {% if c.right.can_export %}checked{% endif %}></td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="form-actions"><button class="btn primary" type="submit">Save dataset rights</button></div>
+</form>
+{% endblock %}
