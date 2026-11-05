@@ -49,7 +49,9 @@ def store(settings):
 
 # --- PostgreSQL ----------------------------------------------------------------------------------------------
 # Tests never touch the real PostgreSQL either: the first test that asks for it starts a throwaway server
-# (initdb into a temp folder, its own socket, no TCP port), stopped again when the tests finish. ~2-3 s.
+# (initdb, its own socket, no TCP port), stopped and deleted again when the tests finish. ~1-2 s.
+# Its files go in the project's .local/ folder, not the system temp folder: the Mac's own drive was nearly full
+# (254 MB free on 2026-11-06), and "No space left on device" then failed half the test suite.
 
 def _pg_bin(name: str) -> str | None:
     import shutil
@@ -73,15 +75,26 @@ def _pg_bin(name: str) -> str | None:
 @pytest.fixture(scope="session")
 def pg_server():
     """A throwaway PostgreSQL: yields the admin conninfo (superuser `admin`, database `postgres`)."""
-    import random
     import shutil
-    import subprocess
     initdb, pg_ctl = _pg_bin("initdb"), _pg_bin("pg_ctl")
     if not initdb or not pg_ctl:
         pytest.fail("PostgreSQL's programs (initdb, pg_ctl) aren't installed. On the Mac:  brew install postgresql@18")
     # the socket path must stay short (about 100 characters at most), so not under pytest's long tmp paths
     sock = Path(tempfile.mkdtemp(prefix="c4pg-"))
-    data = sock / "data"
+    local = Path(os.environ.get("PROJECT_LOCAL_DIR", ROOT / ".local")) / "test-postgres"
+    local.mkdir(parents=True, exist_ok=True)
+    data = Path(tempfile.mkdtemp(prefix="data-", dir=local))
+    try:
+        yield from _run_pg_server(initdb, pg_ctl, sock, data)
+    finally:
+        shutil.rmtree(sock, ignore_errors=True)
+        shutil.rmtree(data, ignore_errors=True)
+
+
+def _run_pg_server(initdb: str, pg_ctl: str, sock: Path, data: Path):
+    import random
+    import subprocess
+    data.rmdir()                                   # initdb wants to make the folder itself
     port = random.randint(20000, 60000)
     # macOS: with no valid LC_ALL the server stops at once ("postmaster became multithreaded during startup")
     env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
@@ -90,17 +103,18 @@ def pg_server():
                            "--no-sync", "--no-instructions"], capture_output=True, text=True, env=env)
     if made.returncode != 0:
         pytest.fail(f"initdb failed for the test PostgreSQL: {made.stderr or made.stdout}")
-    opts = f"-p {port} -k {sock} -c listen_addresses='' -c fsync=off -c full_page_writes=off"
-    started = subprocess.run([pg_ctl, "-D", str(data), "-o", opts, "-l", str(sock / "server.log"), "-w", "start"],
+    opts = (f"-p {port} -k {sock} -c listen_addresses='' -c fsync=off -c full_page_writes=off "
+            f"-c max_wal_size=64MB -c min_wal_size=32MB")
+    log = data / "server.log"
+    started = subprocess.run([pg_ctl, "-D", str(data), "-o", opts, "-l", str(log), "-w", "start"],
                              capture_output=True, text=True, env=env)
     if started.returncode != 0:
-        log = (sock / "server.log").read_text() if (sock / "server.log").exists() else ""
-        pytest.fail(f"The test PostgreSQL didn't start: {started.stderr or started.stdout}\n{log[-2000:]}")
+        text = log.read_text() if log.exists() else ""
+        pytest.fail(f"The test PostgreSQL didn't start: {started.stderr or started.stdout}\n{text[-2000:]}")
     try:
         yield f"host={sock} port={port} user=admin dbname=postgres"
     finally:
         subprocess.run([pg_ctl, "-D", str(data), "-m", "immediate", "stop"], capture_output=True, env=env)
-        shutil.rmtree(sock, ignore_errors=True)
 
 
 @pytest.fixture
@@ -119,4 +133,10 @@ def pg_env(pg_server, monkeypatch):
     monkeypatch.setenv("CRAWL4AI_ADMIN_URL", urls["admin"])
     monkeypatch.setenv("CRAWL4AI_DATABASE_URL", urls["writer"])
     monkeypatch.setenv("CRAWL4AI_READER_URL", urls["reader"])
-    return urls
+    yield urls
+    import psycopg
+    from psycopg import sql
+    with psycopg.connect(pg_server, autocommit=True) as con:      # a database per test adds up: drop it again
+        con.execute(sql.SQL("drop database if exists {} with (force)").format(sql.Identifier(f"c4_{tag}")))
+        for role in (f"w_{tag}", f"r_{tag}"):
+            con.execute(sql.SQL("drop role if exists {}").format(sql.Identifier(role)))

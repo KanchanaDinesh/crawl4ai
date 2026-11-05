@@ -8,6 +8,9 @@
 
     setup                PostgreSQL: create or repair the logins, database, schemas and grants (safe to run again)
     pg-check             PostgreSQL: check that everything the tools need is there
+    migrate              PostgreSQL: create the tables and indexes (warehouse/schema/*.sql; safe to run again)
+    copy-from-duckdb     PostgreSQL: copy the DuckDB data in, with a check per table
+                         [--tool companies] [--replace: copy again] [--check: only compare]
                          (PostgreSQL is replacing DuckDB: docs/postgres-migration.md)
 
 In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  companies.*  scrapers.*
@@ -122,9 +125,36 @@ def pg_setup() -> None:
         sys.exit(f"Setup failed: {e}")
     n = names()
     print("\n".join(f"  {d}" for d in done) if done else "  Everything was already there (grants re-applied).")
-    print(f"Database {n['database']}: writer login {n['writer']}, read-only login {n['reader']}.\n")
+    print(f"Database {n['database']}: writer login {n['writer']}, read-only login {n['reader']}.")
+    pg_migrate()
+    print()
     if not pg_check():
         sys.exit(1)
+
+
+def pg_migrate() -> None:
+    from .postgres import DatabaseError, migrate
+    try:
+        done = migrate()
+    except DatabaseError as e:
+        sys.exit(f"Creating the tables failed: {e}")
+    print(f"Tables and indexes are there for: {', '.join(done)}.")
+
+
+def pg_copy(tools: list[str] | None, replace: bool, check_only: bool) -> bool:
+    from .copy_duckdb import copy_all, report
+    from .postgres import SCHEMAS, DatabaseError
+    unknown = [t for t in tools or [] if t not in SCHEMAS]
+    if unknown:
+        sys.exit(f"Unknown tool {', '.join(unknown)}. Choose from: {', '.join(SCHEMAS)}")
+    try:
+        results = copy_all(tools, replace, check_only)
+    except DatabaseError as e:
+        sys.exit(f"Copy failed: {e}")
+    print(report(results, check_only))
+    bad = [r.schema for r in results if not r.ok and r.error != "no DuckDB file (nothing to copy)"]
+    print(f"\n{'All good.' if not bad else 'Problems in: ' + ', '.join(bad)}")
+    return not bad
 
 
 def pg_check() -> bool:
@@ -148,8 +178,18 @@ def main() -> None:
     q.add_argument("--csv", help="Save the result to this CSV file")
     sub.add_parser("setup", help="PostgreSQL: create or repair the logins, database, schemas and grants")
     sub.add_parser("pg-check", help="PostgreSQL: check that everything the tools need is there")
+    sub.add_parser("migrate", help="PostgreSQL: create the tables and indexes (safe to run again)")
+    c = sub.add_parser("copy-from-duckdb", help="PostgreSQL: copy the DuckDB data in, with a check per table")
+    c.add_argument("--tool", action="append", help="Only this tool (news, tech, markets, vehicles, companies, "
+                   "scrapers); repeatable")
+    c.add_argument("--replace", action="store_true", help="Copy again: empties the PostgreSQL tables first")
+    c.add_argument("--check", action="store_true", help="Only compare DuckDB and PostgreSQL, copy nothing")
     args = p.parse_args()
-    if args.command == "setup":
+    if args.command == "migrate":
+        pg_migrate()
+    elif args.command == "copy-from-duckdb":
+        sys.exit(0 if pg_copy(args.tool, args.replace, args.check) else 1)
+    elif args.command == "setup":
         pg_setup()
     elif args.command == "pg-check":
         sys.exit(0 if pg_check() else 1)

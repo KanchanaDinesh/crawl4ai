@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 128 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 134 tests pass.
 
 ## Parts and how to run them
 
@@ -271,12 +271,24 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     pg-check`, and doctor.py checks it. Settings: `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` /
     `CRAWL4AI_ADMIN_URL`, or `.local/database.env`. Driver psycopg 3. Tests use a throwaway server. The tools still
     use DuckDB; **next: step 2, copy all the data** (`docs/postgres-migration.md`).
+37. **PostgreSQL step 2 done (2026-11-06):** tables in `warehouse/schema/<schema>.sql` (same columns as DuckDB, plus
+    indexes and name-search indexes); `uv run python -m warehouse migrate` creates them, and
+    `uv run python -m warehouse copy-from-duckdb [--tool X] [--replace] [--check]` copies with a check per table
+    (rows + newest time), all or nothing per tool. Real copy: all 25 tables match (~145,000 rows, ~9 s); the same
+    questions give the same answers in both, 1-46 ms each in PostgreSQL. The tools still write to DuckDB, so the
+    PostgreSQL copy gets older until each tool switches. **Next: step 3, switch companies (store, dashboard tab).**
 
 ## Open issues and things to watch
 
 - **PostgreSQL migration planned (item 35).** Until it's done, DuckDB is still the live database for every tool.
   The Mac's own drive had only 1.1 GB free (2026-11-05), where Homebrew keeps PostgreSQL's data: fine for today's
   data, not for the GLEIF full file.
+  - **2026-11-06 the Mac's drive filled up completely** (0 bytes; our database is only 82 MB, the rest was other
+    things on the Mac). Commands and tests failed with "No space left on device", and PostgreSQL (with all of
+    Kanchana's databases, not only ours) can stop when that happens. Kanchana freed ~1 GB. Watch it with `df -h /`
+    and `uv run python -m warehouse pg-check` (warns under 2 GB). The test PostgreSQL now keeps its files in
+    `.local/test-postgres/` on the external drive, drops each test's database, and pytest keeps only the last run's
+    temp folder.
 
 - **Browser crashes in tech intel (2026-11-03), cause not known yet.** In Kanchana's `./run_all.sh` at 05:11 the
   browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the

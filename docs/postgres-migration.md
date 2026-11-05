@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **step 1 done (2026-11-05); next: step 2.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **steps 1 and 2 done (2026-11-05/06); next: step 3, companies first.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -89,8 +89,10 @@ Locally the Mac's PostgreSQL uses socket login without a password. On the server
 
 ### Schema files and migrations
 
-- Each tool gets `<tool>/schema.sql` with its tables, indexes and views (`create ... if not exists`).
-- Later changes are numbered files `<tool>/migrations/NNN_what.sql`; a `public.schema_versions` table remembers
+- One file per schema, `warehouse/schema/<schema>.sql`, with its tables, sequences and indexes (`create ... if not
+  exists`); views are added in step 3 together with each tool's queries. `python -m warehouse migrate` applies them
+  (as the writer login, so the tables belong to `crawl4ai`); `warehouse setup` runs it too.
+- Later changes (columns added to existing tables) are numbered files `warehouse/schema/migrations/NNN_what.sql`; a `public.schema_versions` table remembers
   which ran. `python -m warehouse migrate` applies what's new (also run by `warehouse init` and at the start of
   `run_all.sh`).
 - Times: `timestamptz` everywhere, session time zone UTC (as the dashboard already does).
@@ -151,19 +153,37 @@ Built in `warehouse/postgres.py` (Python rather than a .sql file, so every step 
 
 Result on the Mac: all checks OK (database 7.8 MB, empty). Warning: 1.2 GB free on the Mac's own drive.
 
-### Step 2: Copy all the data (DuckDB stays the live database)
+### Step 2: Copy all the data (DuckDB stays the live database) ✅ done 2026-11-06
 
-1. Write every tool's `schema.sql` (tables as they are today, plus the indexes above).
-2. `python -m warehouse copy-from-duckdb [--tool companies] [--replace]`:
-   - opens each DuckDB file read-only (says so and stops if a run is writing to it), reads each table, and loads it
-     with COPY;
-   - `--replace` empties the PostgreSQL table first, so it can be run again and again;
+1. `warehouse/schema/{news,tech,markets,vehicles,companies,scrapers}.sql`: the same tables and columns as the DuckDB
+   files (VARCHAR → text, DOUBLE → double precision, JSON → jsonb, VARCHAR[] → text[]), plus the indexes above.
+   techintel's plain `created_at TIMESTAMP` (the Mac's local time) became `timestamptz`.
+2. `uv run python -m warehouse copy-from-duckdb [--tool companies] [--replace] [--check]`
+   (`warehouse/copy_duckdb.py`):
+   - opens each DuckDB file read-only (if a run is writing to it, says so after 10 s and skips that tool);
+   - loads each table with COPY, one transaction per tool: if anything fails or doesn't match, nothing of that tool
+     is kept;
+   - refuses to copy into a table that already has rows, unless `--replace` (empties it first, safe to repeat);
+     `--check` only compares;
+   - removes what PostgreSQL can't store (the NUL character in text, `\u0000` in JSON) and counts it in the report;
    - sets each sequence to the highest copied id;
-   - prints a check per table: rows in DuckDB vs PostgreSQL, newest timestamp in each. Any difference = failed.
+   - prints a check per table: rows and the newest time in DuckDB vs PostgreSQL.
 3. The DuckDB files are only read, never changed.
+4. Tests: `tests/test_copy_duckdb.py` (6). They make each tool's DuckDB file with the tool's own store, so a table
+   or column added to a tool later without adding it to `warehouse/schema/` makes the test fail.
 
-**Done when:** the copy reports equal counts for every table, and the same question gives the same answer in both,
-e.g. companies per country, latest market prices, newest headlines.
+**Result on the Mac (2026-11-06):** all 25 tables copied, every count and newest time the same, ~9 s in all
+(companies 105,777 rows in 7 s). No NUL characters needed removing. The same questions gave the same answers in
+both: companies per country and per source, websites by status, newest headlines, headlines per country, cheapest
+vehicle ads, tech qualifications by status (a JSON field), latest prices. Each took 1-46 ms in PostgreSQL; name
+search "%bank%" over 105,777 companies: 10 ms.
+
+**Note for step 3:** text sorts differently. The database sorts like a dictionary (`en_US.UTF-8`: `^GSPC` comes with
+the G's), DuckDB by character code (`^GSPC` after `Z`). The same rows, another order. Where exact order matters, use
+`order by x collate "C"`.
+
+**Until a tool switches (step 3), its PostgreSQL copy gets older:** the tools still write to DuckDB. That's why
+step 3 copies each tool again (`--replace`) right before it switches.
 
 ### Step 3: Switch each tool, then the dashboard (one tool at a time)
 
@@ -205,8 +225,8 @@ While this is going on, the dashboard reads PostgreSQL for tools already switche
 Tests stay offline and never touch the real database:
 
 - `tests/conftest.py` starts a **throwaway PostgreSQL** once per test session: `initdb` into a temp folder,
-  `pg_ctl start` on a free port with its socket in that folder (Homebrew's binaries; about 2-3 s), then runs every
-  `schema.sql`. Each test gets clean tables (truncate) and `CRAWL4AI_DATABASE_URL` pointing at it.
+  `pg_ctl start` with its socket in that folder (Homebrew's binaries; about 1-2 s). Each test gets a database and
+  logins of its own (`pg_env`: new names per test) and `CRAWL4AI_*_URL` pointing at them.
 - If PostgreSQL's programs aren't found, the tests stop with one line saying how to install them.
 - New tests: the DuckDB → PostgreSQL copy (counts and timestamps match, `--replace` is safe to repeat); a reader
   query works while a writer transaction is open (the whole point); the reader role can't write.

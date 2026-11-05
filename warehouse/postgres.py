@@ -216,3 +216,26 @@ def _disk_check() -> list[Check]:
     return [Check(True, "Free disk space for PostgreSQL",
                   f"{free_gb:.1f} GB at {row[0]}" + (" (low: big imports such as the GLEIF file won't fit)"
                                                       if low else ""), warn=low)]
+
+
+# --- tables ------------------------------------------------------------------------------------------------
+
+SCHEMA_DIR = Path(__file__).resolve().parent / "schema"
+
+
+def schema_file(schema: str) -> Path:
+    return SCHEMA_DIR / f"{schema}.sql"
+
+
+def migrate(con=None, schemas: list[str] | tuple[str, ...] = SCHEMAS) -> list[str]:
+    """Create the tables, sequences and indexes of each schema (warehouse/schema/<schema>.sql). Safe to repeat:
+    every statement is `create ... if not exists`. Returns the schemas applied."""
+    own = con is None
+    con = con or connect("writer", autocommit=True)
+    try:
+        for schema in schemas:
+            con.execute(schema_file(schema).read_text(encoding="utf-8"))
+    finally:
+        if own:
+            con.close()
+    return list(schemas)

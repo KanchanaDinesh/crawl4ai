@@ -26,3 +26,5 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# pytest keeps the temp folders of the last 3 runs on the Mac's own drive (~140 MB); that drive was nearly full
+tmp_path_retention_count = 1
