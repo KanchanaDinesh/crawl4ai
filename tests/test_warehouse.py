@@ -93,3 +93,31 @@ def test_local_env_keeps_tool_files_in_project(tmp_path, monkeypatch):
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", "/custom")                         # explicit settings win
     project_paths.apply_local_env()
     assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == "/custom"
+
+
+def test_backup_writes_a_dump_and_keeps_the_newest(pg_env, tmp_path):
+    """python -m warehouse backup: pg_dump of the whole database; older backups beyond --keep are removed."""
+    import subprocess
+    from datetime import datetime
+    from warehouse import backup, postgres
+    postgres.setup()
+    postgres.migrate()
+    with postgres.connect("writer") as con:
+        con.execute("insert into news.news_items (url, title) values ('https://x/1', 'Kept in the backup')")
+    made = []
+    for day in (1, 2, 3):
+        path, removed = backup.backup(tmp_path, keep=2, now=datetime(2026, 11, day, 3, 0, 0))
+        made.append(path)
+    assert [p.name for p in backup.backups(tmp_path)] == ["crawl4ai-20261103-030000.dump", "crawl4ai-20261102-030000.dump"]
+    assert removed == [made[0]] and not list(tmp_path.glob(".*partial"))
+    listing = subprocess.run([backup.find_pg_dump().replace("pg_dump", "pg_restore"), "--list", str(made[-1])],
+                             capture_output=True, text=True, check=True).stdout
+    assert "TABLE DATA news news_items" in listing and "VIEW tech v_companies" in listing
+
+
+def test_a_failed_backup_leaves_nothing_behind(tmp_path):
+    from warehouse import backup
+    import pytest
+    with pytest.raises(backup.BackupError, match="pg_dump said"):     # tests' dead database address
+        backup.backup(tmp_path)
+    assert list(tmp_path.iterdir()) == []

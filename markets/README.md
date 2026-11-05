@@ -62,8 +62,7 @@ includes duties and margins.
 ## Data
 
 PostgreSQL, database `crawl4ai`, schema `markets` (since 2026-11-06; tables in `warehouse/schema/markets.sql`).
-The dashboard reads while a run is saving. The old DuckDB file `data/markets/markets.duckdb` is no longer used (kept
-as a backup until the move is finished).
+The dashboard reads while a run is saving. The old DuckDB file is kept in `data/archive/duckdb-2026-11/` as a backup.
 
 | Table / view | Contents |
 |---|---|
@@ -72,7 +71,7 @@ as a backup until the move is finished).
 | `v_daily` | The last price of each day (UTC), for longer-term charts |
 | `runs`, `source_runs` | Each run and each source's result (to spot sources that stop working) |
 
-Query with `uv run python -m warehouse pg "select * from markets.v_latest where asset_class = 'stock_lk' order by change_pct desc nulls last limit 10"`.
+Query with `uv run python -m warehouse sql "select * from markets.v_latest where asset_class = 'stock_lk' order by change_pct desc nulls last limit 10"`.
 
 ## Notes
 

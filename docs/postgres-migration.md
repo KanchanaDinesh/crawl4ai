@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **steps 1 and 2 done; step 3 done: every tool is on PostgreSQL (2026-11-06); next: step 4, clean up.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **done (steps 1-4, 2026-11-05/06).** Step 5 (the server, more users) is for later. Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -221,14 +221,17 @@ layout is kept in `tests/test_copy_duckdb.py` so the copy test still covers it.
 **Done when (each tool):** a run of the tool and the dashboard tab work at the same time with no "busy" message;
 `warehouse sql` gives the same numbers as before the switch plus the new run.
 
-### Step 4: Clean up
+### Step 4: Clean up ✅ done 2026-11-06
 
-- `warehouse sql` / `repl` connect to PostgreSQL (or just use `psql crawl4ai`).
-- Remove the DuckDB code paths: `warehouse.connect` lock waiting, `attach`, the vehicles history import, techintel's
-  FileStore import, the dashboard's busy fallback.
-- Move the DuckDB files to `data/archive/duckdb-2026-11/` (kept as a backup, not deleted).
-- Remove `duckdb` from `pyproject.toml` unless we keep it for analysis (it can read PostgreSQL directly).
-- New run_all step `backup`: `pg_dump -Fc crawl4ai` to `data/backups/`, keep the last 7.
+- `warehouse sql`, `info`, `examples` and the prompt run on PostgreSQL with the read-only login (`pg` = `sql`).
+- DuckDB code removed: `warehouse.connect` and its lock waiting, `attach`, `DB_FILES`/`PG_TOOLS` (now
+  `warehouse.DATA_DIRS`, folders only), the vehicles history import, the dashboard's busy fallback, the briefing's
+  DuckDB path, and the copy tool `copy-from-duckdb` with its tests (its job is done). `duckdb` removed from
+  pyproject.toml / uv.lock. (techintel's FileStore stays: it reads old JSON Lines files and has no DuckDB in it.)
+- The DuckDB files moved to `data/archive/duckdb-2026-11/<tool>/` (kept, not deleted; README.txt there says how to
+  open one with `uvx duckdb -readonly`).
+- New run_all step `backup` (last in the default STEPS): `uv run python -m warehouse backup --keep 7`, a `pg_dump`
+  custom-format file in `data/backups/`. Checked: a restore into a temporary database matched every table.
 - README, CLAUDE.md, STATUS.md describe PostgreSQL.
 
 ### Step 5: Later

@@ -21,9 +21,9 @@ def facts(tmp_path, monkeypatch, pg_env):
     for mod in (project_paths, warehouse):
         importlib.reload(mod)
     from worldnews.settings import load_settings
-    build_news(warehouse.DB_FILES["news"].parent, load_settings().raw["tech_keywords"])
-    build_tech(warehouse.DB_FILES["tech"].parent)
-    build_markets(warehouse.DB_FILES["markets"].parent)
+    build_news(warehouse.DATA_DIRS["news"], load_settings().raw["tech_keywords"])
+    build_tech(warehouse.DATA_DIRS["tech"])
+    build_markets(warehouse.DATA_DIRS["markets"])
     from briefing import facts as facts_mod
     importlib.reload(facts_mod)
     return facts_mod.collect()

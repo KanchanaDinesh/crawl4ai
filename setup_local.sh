@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time setup that keeps everything inside this project folder:
-#   .venv/    Python packages (crawl4ai, duckdb, ...)
+#   .venv/    Python packages (crawl4ai, psycopg, ...)
 #   .local/   uv cache, Python (if downloaded), Chromium browser, crawl4ai cache
 #   data/     your databases (DuckDB) and collected data
 #

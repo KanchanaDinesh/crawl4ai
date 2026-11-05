@@ -31,8 +31,8 @@ SITE_FIELDS = ("domain", "url", "final_url", "checked_at", "status", "error", "n
 
 def data_dir() -> Path:
     """data/companies/: files that aren't in the database (Companies House zips waiting to be imported)."""
-    from warehouse import DB_FILES
-    return DB_FILES["companies"].parent
+    from warehouse import DATA_DIRS
+    return DATA_DIRS["companies"]
 
 
 def now_iso() -> str:

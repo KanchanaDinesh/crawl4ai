@@ -24,8 +24,8 @@ CONFIG = os.path.join(os.path.dirname(__file__), "config", "settings.json")
 
 
 def data_dir():
-    from warehouse import DB_FILES
-    return DB_FILES["markets"].parent
+    from warehouse import DATA_DIRS
+    return DATA_DIRS["markets"]
 
 
 def fmt(v, digits=2):

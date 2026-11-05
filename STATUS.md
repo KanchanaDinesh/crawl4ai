@@ -13,8 +13,10 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **Companies:** a directory of companies of every kind (US, UK, AU, IN, LK first, then the world) from open data,
   plus what each company's own website says (social links, people, employees, contacts).
 
-Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 136 tests pass.
+Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
+DuckDB files), backed up by the `backup` step, and shown in a local web dashboard. Collectors write while the
+dashboard and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
+All 132 tests pass.
 
 ## Parts and how to run them
 
@@ -29,7 +31,7 @@ Run every command from the project folder, after `source env.sh`.
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
-| Database queries | `uv run python -m warehouse info`, `sql "..."`, `pg "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.`, `vehicles.` (DuckDB, `sql`); `companies.` is in PostgreSQL: use `pg` (read-only login) |
+| Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
 ## Automation (the agreed plan)
@@ -344,12 +346,22 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **Next: step 4, clean up**: remove the DuckDB code and the `duckdb` package (or keep it only for
       `copy-from-duckdb`), archive the old .duckdb files in `data/archive/`, add a daily `pg_dump` backup step,
       and update the docs.
+44. **PostgreSQL step 4 done: the move is finished (2026-11-06).**
+    - No DuckDB left in the code: `warehouse.connect`/`DB_FILES`/`PG_TOOLS` became `warehouse.DATA_DIRS` (only the
+      folders for files kept next to the database), the briefing reads PostgreSQL only, the copy tool
+      (`copy-from-duckdb`) and its tests were removed (the copy is done), and `duckdb` is out of pyproject/uv.lock.
+    - The six .duckdb files were **moved, not deleted**, to `data/archive/duckdb-2026-11/<tool>/` (with a README).
+    - **Backups:** `uv run python -m warehouse backup [--keep 7]` (`warehouse/backup.py`): `pg_dump` custom format
+      to `data/backups/crawl4ai-<date>-<time>.dump`, written under a temporary name first, the newest 7 kept. New
+      run_all step `backup`, last in the default STEPS (`BACKUP_ARGS` in automation.conf). First real backup:
+      8.6 MB in 2.5 s; **restored into a temporary database and every table's count matched**, then it was removed.
+    - Kanchana's dashboard was still the old code (started before step 3a); it must be restarted.
 
 ## Open issues and things to watch
 
-- **PostgreSQL migration planned (item 35).** Until it's done, DuckDB is still the live database for every tool.
-  The Mac's own drive had only 1.1 GB free (2026-11-05), where Homebrew keeps PostgreSQL's data: fine for today's
-  data, not for the GLEIF full file.
+- **The Mac's own drive is nearly full, and PostgreSQL keeps its data there** (Homebrew,
+  `/opt/homebrew/var/postgresql@18`; 1.2 GB free on 2026-11-06). Our database is 87 MB, fine for now, but not for
+  the GLEIF full file. Backups go to the external drive (`data/backups/`). The plan is to move to a server.
   - **2026-11-06 the Mac's drive filled up completely** (0 bytes; our database is only 82 MB, the rest was other
     things on the Mac). Commands and tests failed with "No space left on device", and PostgreSQL (with all of
     Kanchana's databases, not only ours) can stop when that happens. Kanchana freed ~1 GB. Watch it with `df -h /`
@@ -388,8 +400,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 - **Companies:** the directory has no cross-source matching yet: the same company from Wikidata and GLEIF is two
   rows (the details panel lists other records with the same website). GLEIF has no websites, so most GLEIF rows
-  are never enriched. Turning on Companies House / ASIC adds millions of rows without websites (dashboard queries
-  stay fast in DuckDB, but the file grows by roughly 1 GB).
+  are never enriched. Turning on Companies House / ASIC adds millions of rows without websites (the database grows
+  by a few GB: wait for the server, see the disk note above).
 
 ## Ideas for next steps (not started)
 

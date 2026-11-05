@@ -23,10 +23,10 @@ def dash(tmp_path, monkeypatch, pg_env):
     for mod in (project_paths, warehouse, server):
         importlib.reload(mod)
     from worldnews.settings import load_settings
-    build_news(warehouse.DB_FILES["news"].parent, load_settings().raw["tech_keywords"])
-    build_tech(warehouse.DB_FILES["tech"].parent)
+    build_news(warehouse.DATA_DIRS["news"], load_settings().raw["tech_keywords"])
+    build_tech(warehouse.DATA_DIRS["tech"])
     server._cache.clear()
-    return server, warehouse.DB_FILES
+    return server, warehouse.DATA_DIRS
 
 
 def call(server, *paths):

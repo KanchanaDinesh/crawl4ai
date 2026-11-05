@@ -30,21 +30,14 @@ DERIVED_FROM = {"GOLD24K_LKR_PAWN": ["LKR=X", "GC=F"]}
 
 
 def _open(name: str):
-    if name in warehouse.PG_TOOLS:                     # moved to PostgreSQL: read with the read-only login
-        from warehouse.postgres import DatabaseError, connect
-        try:
-            con = connect("reader", autocommit=True)
-        except DatabaseError as e:
-            logger.info("%s: %s; that part is left out", name, e)
-            return None
-        con.execute("set timezone = 'UTC'")
-        return con
-    path = warehouse.DB_FILES[name]
-    if not path.exists():
-        logger.info("%s: no database yet (%s); that part is left out", name, path)
+    """PostgreSQL, read-only login. None (that part is left out of the briefing) if it can't be reached."""
+    from warehouse.postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        logger.info("%s: %s; that part is left out", name, e)
         return None
-    con = warehouse.connect(path, read_only=True, wait_seconds=30)
-    con.execute("set TimeZone = 'UTC'")
+    con.execute("set timezone = 'UTC'")
     return con
 
 

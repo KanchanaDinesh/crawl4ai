@@ -94,7 +94,7 @@ leadership, and 34 got GitHub numbers. `./run_all.sh tech_company` runs it with 
 ```bash
 uv run python -m techintel company --limit 50          # the next 50 sites
 uv run python -m techintel company --domain zapier.com # one site, again
-uv run python -m warehouse pg "select domain, linkedin, employees, jsonb_array_length(people) as people, github_repos from tech.v_companies"
+uv run python -m warehouse sql "select domain, linkedin, employees, jsonb_array_length(people) as people, github_repos from tech.v_companies"
 ```
 
 ## Running it often: `quick` and `watch`
@@ -212,7 +212,7 @@ Typed views make SQL easy: `v_candidates`, `v_qualifications`, `v_registrations`
 The dashboard reads while stages run. For example:
 
 ```bash
-uv run python -m warehouse pg "select category, count(*) from tech.v_qualifications where status='qualified' group by 1"
+uv run python -m warehouse sql "select category, count(*) from tech.v_qualifications where status='qualified' group by 1"
 ```
 
 Older `.jsonl` files in `data/techintel/` are imported automatically and renamed to `*.jsonl.imported`.

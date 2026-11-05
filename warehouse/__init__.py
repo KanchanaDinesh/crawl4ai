@@ -1,53 +1,31 @@
-"""DuckDB databases for all the tools, kept inside the project folder.
+"""The project's database: PostgreSQL, database `crawl4ai`, one schema per tool (see postgres.py).
 
-    data/worldnews/worldnews.duckdb    headlines, runs, sources (worldnews)
-    data/techintel/techintel.duckdb    candidates, qualifications, profiles, changes, ... (techintel)
-    data/scrapers/scrapers.duckdb      every scraper output (Sri Lankan news, products, CSE, IMDb)
-    data/vehicles/vehicles.duckdb      vehicle ads over time, price changes (vehicles)
-    data/markets/markets.duckdb        stock, index, metal, FX and crypto prices over time (markets)
-    data/companies/companies.duckdb    company directory: names, websites, countries, website facts (companies)
+    news        world news headlines, runs, sources (worldnews)
+    tech        candidates, qualifications, profiles, changes, companies, ... (techintel)
+    markets     stock, index, metal, FX and crypto prices over time (markets)
+    vehicles    vehicle ads over time, price changes (vehicles)
+    companies   company directory: names, websites, countries, website facts (companies)
+    scrapers    every output of the older scrapers (Sri Lankan news, products, CSE, IMDb)
 
-One file per tool, because DuckDB allows one writer per file: the tools can run at
-the same time without blocking each other. `python -m warehouse sql` opens them all
-together (read-only) so you can query across them.
+Until 2026-11-06 each tool had its own DuckDB file in data/<tool>/, which let only one program use it at a time;
+those files are kept in data/archive/duckdb-2026-11/ (docs/postgres-migration.md).
+
+DATA_DIRS are the folders for the files a tool keeps next to the database (run snapshots, raw page text,
+downloads waiting to be imported).
 """
 
 import os
-import time
 from pathlib import Path
-
-import duckdb
 
 import project_paths
 
 project_paths.apply_local_env()
 
-DB_FILES = {
-    "news": Path(os.environ.get("WORLDNEWS_DATA_DIR", project_paths.DATA_DIR / "worldnews")) / "worldnews.duckdb",
-    "tech": Path(os.environ.get("TECHINTEL_DATA_DIR", project_paths.DATA_DIR / "techintel")) / "techintel.duckdb",
-    "scrapers": project_paths.DATA_DIR / "scrapers" / "scrapers.duckdb",
-    "markets": Path(os.environ.get("MARKETS_DATA_DIR", project_paths.DATA_DIR / "markets")) / "markets.duckdb",
-    "vehicles": Path(os.environ.get("VEHICLES_DATA_DIR", project_paths.DATA_DIR / "vehicles")) / "vehicles.duckdb",
-    "companies": Path(os.environ.get("COMPANIES_DATA_DIR", project_paths.DATA_DIR / "companies")) / "companies.duckdb",
+DATA_DIRS = {
+    "news": Path(os.environ.get("WORLDNEWS_DATA_DIR", project_paths.DATA_DIR / "worldnews")),
+    "tech": Path(os.environ.get("TECHINTEL_DATA_DIR", project_paths.DATA_DIR / "techintel")),
+    "scrapers": project_paths.DATA_DIR / "scrapers",
+    "markets": Path(os.environ.get("MARKETS_DATA_DIR", project_paths.DATA_DIR / "markets")),
+    "vehicles": Path(os.environ.get("VEHICLES_DATA_DIR", project_paths.DATA_DIR / "vehicles")),
+    "companies": Path(os.environ.get("COMPANIES_DATA_DIR", project_paths.DATA_DIR / "companies")),
 }
-
-# Tools whose data has moved to PostgreSQL (docs/postgres-migration.md, step 3): their DuckDB file above is only
-# the old copy (kept until step 4, used by `copy-from-duckdb`); the tool, the dashboard and `warehouse pg` use
-# PostgreSQL, and `warehouse sql` / `info` no longer open their DuckDB file.
-PG_TOOLS = {"companies", "news", "markets", "vehicles", "tech", "scrapers"}
-
-
-def connect(path, read_only: bool = False, wait_seconds: float = 60) -> duckdb.DuckDBPyConnection:
-    """Open a DuckDB file. If another process is writing to it, wait up to `wait_seconds`."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        try:
-            return duckdb.connect(str(path), read_only=read_only)
-        except duckdb.IOException as e:
-            if "lock" not in str(e).lower():
-                raise
-            if time.monotonic() > deadline:
-                raise RuntimeError(f"{path.name} is in use by another program (another run still going?). {e}") from e
-            time.sleep(1)

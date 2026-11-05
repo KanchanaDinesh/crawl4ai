@@ -150,7 +150,7 @@ def main() -> None:
         print(f"  {name}={os.environ.get(name, '(not set)')}")
     print()
     line(OK, "Python", f"{sys.version.split()[0]} on {platform.system()} {platform.machine()}")
-    for pkg in ("crawl4ai", "playwright", "duckdb", "psycopg"):
+    for pkg in ("crawl4ai", "playwright", "psycopg"):
         try:
             line(OK, pkg, metadata.version(pkg))
         except metadata.PackageNotFoundError:

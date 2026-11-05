@@ -1,5 +1,5 @@
-"""SQL behind the dashboard. Each function takes an open read-only connection: PostgreSQL (psycopg, %s placeholders)
-for the tools already moved there (warehouse.PG_TOOLS: news, tech, markets, vehicles, companies), DuckDB (? placeholders) for the rest.
+"""SQL behind the dashboard. Each function takes an open read-only PostgreSQL connection (psycopg, %s placeholders;
+table names with their schema: news., tech., markets., vehicles., companies.).
 
 Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
 """
@@ -20,13 +20,8 @@ def one(con, sql: str, params=None) -> dict:
     return found[0] if found else {}
 
 
-def _ts(col: str) -> str:
-    """DuckDB: a timestamp as "2026-11-02T08:15:00Z"."""
-    return f"strftime({col}, '{UTC}')"
-
-
 def _pg_ts(col: str) -> str:
-    """A timestamptz as "2026-11-02T08:15:00Z" (what the browser expects, like _ts for DuckDB)."""
+    """A timestamptz as "2026-11-02T08:15:00Z" (what the browser expects)."""
     return f"""to_char({col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')"""
 
 

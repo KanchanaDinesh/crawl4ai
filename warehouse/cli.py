@@ -10,8 +10,7 @@
     setup                create or repair the logins, database, schemas and grants (safe to run again)
     pg-check             check that everything the tools need is there
     migrate              create the tables, indexes and views (warehouse/schema/*.sql; safe to run again)
-    copy-from-duckdb     copy the old DuckDB files in, with a check per table (used for the move in 2026-11)
-                         [--tool companies] [--replace: copy again] [--check: only compare]
+    backup [--keep 7]    a full copy of the database (pg_dump) in data/backups/; keeps the newest N
 
 All data is in PostgreSQL, database crawl4ai (docs/postgres-migration.md). Prefix tables with the schema:
 news.*  tech.*  markets.*  vehicles.*  companies.*  scrapers.*
@@ -56,8 +55,8 @@ def init() -> None:
     from techintel.store import TechStore
     from vehicles.store import VehicleStore
     from worldnews.store import NewsStore
-    from . import DB_FILES, postgres
-    for store in (NewsStore(DB_FILES["news"].parent), TechStore(DB_FILES["tech"].parent), MarketStore(),
+    from . import DATA_DIRS, postgres
+    for store in (NewsStore(DATA_DIRS["news"]), TechStore(DATA_DIRS["tech"]), MarketStore(),
                   VehicleStore(), CompanyStore()):
         store.close()
     postgres.migrate(schemas=("scrapers",))
@@ -165,20 +164,16 @@ def pg_migrate() -> None:
     print(f"Tables and indexes updated for: {', '.join(done)}." if done else "Tables and indexes are up to date.")
 
 
-def pg_copy(tools: list[str] | None, replace: bool, check_only: bool) -> bool:
-    from .copy_duckdb import copy_all, report
-    from .postgres import SCHEMAS, DatabaseError
-    unknown = [t for t in tools or [] if t not in SCHEMAS]
-    if unknown:
-        sys.exit(f"Unknown tool {', '.join(unknown)}. Choose from: {', '.join(SCHEMAS)}")
+def pg_backup(keep: int, folder: str | None) -> None:
+    from pathlib import Path
+    from .backup import BackupError, backup
     try:
-        results = copy_all(tools, replace, check_only)
-    except DatabaseError as e:
-        sys.exit(f"Copy failed: {e}")
-    print(report(results, check_only))
-    bad = [r.schema for r in results if not r.ok and r.error != "no DuckDB file (nothing to copy)"]
-    print(f"\n{'All good.' if not bad else 'Problems in: ' + ', '.join(bad)}")
-    return not bad
+        path, removed = backup(Path(folder) if folder else None, keep)
+    except BackupError as e:
+        sys.exit(f"Backup failed: {e}")
+    print(f"Backup: {path}  ({path.stat().st_size / 1e6:.1f} MB)"
+          + (f"; removed {len(removed)} older one(s), keeping the newest {keep}" if removed else ""))
+    print(f"Restore it with:  pg_restore --clean --if-exists -d crawl4ai \"{path}\"")
 
 
 def pg_check() -> bool:
@@ -205,11 +200,9 @@ def main(argv=None) -> None:
     sub.add_parser("setup", help="create or repair the logins, database, schemas and grants")
     sub.add_parser("pg-check", help="check that everything the tools need is there")
     sub.add_parser("migrate", help="create the tables, indexes and views (safe to run again)")
-    c = sub.add_parser("copy-from-duckdb", help="copy the old DuckDB files in, with a check per table")
-    c.add_argument("--tool", action="append", help="Only this tool (news, tech, markets, vehicles, companies, "
-                   "scrapers); repeatable")
-    c.add_argument("--replace", action="store_true", help="Copy again: empties the PostgreSQL tables first")
-    c.add_argument("--check", action="store_true", help="Only compare DuckDB and PostgreSQL, copy nothing")
+    b = sub.add_parser("backup", help="a full copy of the database (pg_dump) in data/backups/")
+    b.add_argument("--keep", type=int, default=7, help="How many backups to keep (newest first; default 7)")
+    b.add_argument("--dir", help="Another folder for the backups")
     args = p.parse_args(argv)
     if args.command in ("sql", "pg"):
         if args.query:
@@ -218,8 +211,8 @@ def main(argv=None) -> None:
             repl()
     elif args.command == "migrate":
         pg_migrate()
-    elif args.command == "copy-from-duckdb":
-        sys.exit(0 if pg_copy(args.tool, args.replace, args.check) else 1)
+    elif args.command == "backup":
+        pg_backup(args.keep, args.dir)
     elif args.command == "setup":
         pg_setup()
     elif args.command == "pg-check":

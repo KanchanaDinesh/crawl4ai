@@ -113,8 +113,7 @@ The dashboard's World News tab shows the same analysis live, for the period and 
 ## Data
 
 Stored in PostgreSQL, database `crawl4ai`, schema `news` (since 2026-11-06; tables in `warehouse/schema/news.sql`).
-The dashboard and `analyze` read while a run is saving. The old DuckDB file `data/worldnews/worldnews.duckdb` is no
-longer used (kept as a backup until the move is finished).
+The dashboard and `analyze` read while a run is saving. The old DuckDB file is kept in `data/archive/duckdb-2026-11/` as a backup.
 
 | Table | Contents |
 |---|---|
@@ -125,7 +124,7 @@ longer used (kept as a backup until the move is finished).
 | `feed_cache` | Feeds found by auto-discovery |
 
 Each run is also saved as a JSON file in `data/worldnews/runs/`. Query the database with
-`uv run python -m warehouse pg "..."`, prefixing tables with `news.` (e.g. `news.news_items`).
+`uv run python -m warehouse sql "..."`, prefixing tables with `news.` (e.g. `news.news_items`).
 `check` reads the history (to mark new headlines) but saves nothing; its snapshot goes to `data/worldnews/_check/`.
 
 Only headlines, summaries, dates and links are stored, not full article text.

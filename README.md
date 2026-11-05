@@ -33,7 +33,7 @@ Everything lives inside the project folder, so it can sit on an external drive s
 |---|---|
 | `.venv/` | Python packages (crawl4ai, psycopg, ...) |
 | `.local/` | uv's download cache, the Chromium browser, crawl4ai's cache, and Python if uv downloads one |
-| `data/` | Collected files (raw pages, run snapshots, downloads) and the old DuckDB files; the data itself is in PostgreSQL |
+| `data/` | Collected files (raw pages, run snapshots, downloads), `backups/` (daily database copies) and `archive/` (the old DuckDB files); the data itself is in PostgreSQL |
 | `output/` | Reports and exported files |
 
 One-time setup (needs [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`):
@@ -196,8 +196,9 @@ dashboard running and press **Refresh** (or turn on auto-refresh) to see new dat
 
 Everything is in one PostgreSQL database, `crawl4ai` (on the Mac: Homebrew's PostgreSQL 18), with one schema per
 tool. Collectors write and the dashboard and anyone else read at the same time; nobody waits. (Until 2026-11-06
-each tool had its own DuckDB file in `data/`, which allowed only one program at a time: see
-`docs/postgres-migration.md`.) Tables, indexes and views are in `warehouse/schema/<schema>.sql`.
+each tool had its own DuckDB file, which allowed only one program at a time; those files are kept in
+`data/archive/duckdb-2026-11/`. See `docs/postgres-migration.md`.) Tables, indexes and views are in
+`warehouse/schema/<schema>.sql`.
 
 | Schema | Contents |
 |---|---|
@@ -219,6 +220,11 @@ uv run python -m warehouse sql "select published_at, source, title from news.new
 uv run python -m warehouse sql "select * from vehicles.v_vehicle_price_changes" --csv price_changes.csv
 uv run python -m warehouse sql                     # interactive prompt
 ```
+
+**Backups:** the `backup` step (last in the default `./run_all.sh` steps) saves a full copy with `pg_dump` in
+`data/backups/crawl4ai-<date>-<time>.dump` and keeps the newest 7 (`BACKUP_ARGS` in automation.conf). By hand:
+`uv run python -m warehouse backup`. To restore one (it replaces what's in the database):
+`pg_restore --clean --if-exists -d crawl4ai data/backups/crawl4ai-<date>-<time>.dump`
 
 Scraper output files (`output/*.json`, `.csv`) are still written as before; each save is also added to the
 database, so results build up into a history (for example vehicle price changes). Data saved by older
