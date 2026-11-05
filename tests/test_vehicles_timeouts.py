@@ -42,11 +42,11 @@ def site(name):
 
 
 @pytest.fixture(autouse=True)
-def fake_browser(monkeypatch, tmp_path):
-    import warehouse
+def fake_browser(monkeypatch, tmp_path, pg_env):
+    from warehouse import postgres
+    postgres.setup()                                 # ads are saved in the test PostgreSQL
     monkeypatch.setattr(vehicles, "AsyncWebCrawler", FakeCrawler)
     monkeypatch.setattr(common, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setitem(warehouse.DB_FILES, "vehicles", tmp_path / "vehicles.duckdb")
     FakeCrawler.started, FakeCrawler.start_delay = 0, 0.0
 
 
@@ -56,11 +56,11 @@ def test_stuck_site_gives_up_and_next_site_still_runs():
     assert not slow["success"] and "gave up after" in slow["error"] and slow["seconds"] < 5
     assert fast["success"] and fast["count"] == 3
     assert FakeCrawler.started == 2                  # a fresh browser after the stuck page
-    import duckdb
-    con = duckdb.connect(str(common.OUTPUT_DIR / "vehicles.duckdb"), read_only=True)
-    assert con.execute("select site, success, ads from runs order by site").fetchall() == [("fast", True, 3), ("slow", False, 0)]
-    assert con.execute("select count(*) from v_vehicle_ads").fetchone()[0] == 3
-    con.close()
+    from warehouse import postgres
+    with postgres.connect("reader") as con:
+        assert con.execute("select site, success, ads from vehicles.runs order by site").fetchall() == \
+            [("fast", True, 3), ("slow", False, 0)]
+        assert con.execute("select count(*) from vehicles.v_vehicle_ads").fetchone()[0] == 3
 
 
 def test_browser_that_never_starts_fails_fast(monkeypatch):

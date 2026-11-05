@@ -98,9 +98,9 @@ def _tech(con) -> dict:
 def _vehicles(con) -> dict:
     # The make is the first word of the title; prices under Rs 50,000 are rents or monthly payments
     makes = con.execute("""select lower(split_part(trim(title), ' ', 1)) as make, count(*),
-            median(price_lkr) filter (where price_lkr >= 50000)
-        from v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 4""").fetchall()
-    ads = con.execute("select count(*) from v_vehicle_ads_latest").fetchone()[0]
+            percentile_cont(0.5) within group (order by price_lkr) filter (where price_lkr >= 50000)
+        from vehicles.v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 4""").fetchall()
+    ads = con.execute("select count(*) from vehicles.v_vehicle_ads_latest").fetchone()[0]
     return {"ads": ads, "makes": [[m.capitalize() if len(m) > 3 else m.upper(), n, p] for m, n, p in makes]}
 
 

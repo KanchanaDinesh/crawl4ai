@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 136 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 137 tests pass.
 
 ## Parts and how to run them
 
@@ -25,7 +25,7 @@ Run every command from the project folder, after `source env.sh`.
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. **PostgreSQL** (schema `markets`, since 2026-11-06) |
-| Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
+| Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
@@ -307,6 +307,20 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       the summary + performance table were read (all answered, ~0.2 s); 7,608 + 446 = 8,054 saved. `show`,
       `history ASPI`, the briefing and every Markets API answered; the tab showed it, no browser errors.
     - **Next: step 3d, vehicles** (then tech intel, scrapers, briefing).
+41. **PostgreSQL step 3d: vehicles switched (2026-11-06).** `vehicles/store.py` saves each site's run to schema
+    `vehicles` in one transaction; the three views are in `warehouse/schema/vehicles.sql` (window functions in
+    subqueries instead of DuckDB's `qualify`; `median` became `percentile_cont`). The Vehicles tab, `vehicles
+    show/changes` and the briefing read with the read-only login. The one-time copy of ads from scrapers.duckdb was
+    dropped from the store: that history came over with the DuckDB copy.
+    - **Tests can't reach the real PostgreSQL any more:** `tests/conftest.py` points every `CRAWL4AI_*_URL` at a
+      dead address unless a test takes `pg_env`. It caught the doctor tests reading the real database (now a
+      stand-in, plus a test of the PostgreSQL check on the throwaway server).
+    - Checked on the Mac: fresh copy (3 tables match), then a real `vehicles run` (ikman 10 ads in 4.9s,
+      riyasewana 10 in 2.8s) while the tab's queries were read every 3 s: each answered (0.2-0.3 s), and showed
+      ikman's ads arriving before riyasewana's. 545 + 20 = 565 ads; 344 unique, 0 price changes, the same as
+      DuckDB (334 + 10 new). CLI, briefing and the tab work, no browser errors.
+    - **Next: step 3e, tech intel** (the biggest: JSON records, typed views, the live listener; then scrapers,
+      briefing).
 
 ## Open issues and things to watch
 

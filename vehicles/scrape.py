@@ -22,7 +22,7 @@ The browser is a plain headless Chromium: no stealth settings and no "magic" mod
 hide automation from bot detection, which this project doesn't do). Both sites' robots.txt allow
 these pages.
 
-Each site is written to output/vehicles_<site>.json and kept in data/vehicles/vehicles.duckdb
+Each site is written to output/vehicles_<site>.json and kept in PostgreSQL (schema vehicles)
 (history, price changes: see store.py). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
 selectors can be fixed with `python -m scrapers.inspect_site <dump file> --base "<selector>"`.
 """
@@ -262,7 +262,7 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
             logger.info("%s: %d ads in %.1fs", site["name"], report["count"], report["seconds"])
             path = save_output(report, site["output_file"])
             saved = store.save_report(report)
-            logger.info("Saved %s (+%d ads in %s)", path, saved, store.db_path().name)
+            logger.info("Saved %s (+%d ads in the vehicles database)", path, saved)
             if not quiet:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             reports.append(report)

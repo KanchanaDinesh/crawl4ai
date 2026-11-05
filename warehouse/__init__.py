@@ -34,7 +34,7 @@ DB_FILES = {
 # Tools whose data has moved to PostgreSQL (docs/postgres-migration.md, step 3): their DuckDB file above is only
 # the old copy (kept until step 4, used by `copy-from-duckdb`); the tool, the dashboard and `warehouse pg` use
 # PostgreSQL, and `warehouse sql` / `info` no longer open their DuckDB file.
-PG_TOOLS = {"companies", "news", "markets"}
+PG_TOOLS = {"companies", "news", "markets", "vehicles"}
 
 
 def connect(path, read_only: bool = False, wait_seconds: float = 60) -> duckdb.DuckDBPyConnection:

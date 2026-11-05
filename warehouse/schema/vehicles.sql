@@ -1,4 +1,4 @@
--- vehicles: vehicle ads over time (vehicles/). Same tables and columns as data/vehicles/vehicles.duckdb.
+-- vehicles: vehicle ads over time (vehicles/). Moved from data/vehicles/vehicles.duckdb on 2026-11-06.
 
 create table if not exists vehicles.ads (
     saved_at   timestamptz,
@@ -34,3 +34,26 @@ create table if not exists vehicles.meta (
     key    text primary key,
     value  text
 );
+
+-- every ad seen, per run
+create or replace view vehicles.v_vehicle_ads as
+    select saved_at, site, title, url, price, price_lkr, location, year, mileage, posted, image, rank, details
+    from vehicles.ads;
+
+-- one row per ad: its latest details, when it was first seen and how many runs saw it
+create or replace view vehicles.v_vehicle_ads_latest as
+    select saved_at, site, title, url, price, price_lkr, location, year, mileage, posted, image, rank, details,
+           first_seen, times_seen
+    from (select *, min(saved_at) over (partition by url) as first_seen,
+                 count(*) over (partition by url) as times_seen,
+                 row_number() over (partition by url order by saved_at desc) as rn
+          from vehicles.v_vehicle_ads) a
+    where rn = 1;
+
+-- ads whose price changed between two runs
+create or replace view vehicles.v_vehicle_price_changes as
+    select url, site, title, saved_at, price_lkr, previous_price_lkr
+    from (select url, site, title, saved_at, price_lkr,
+                 lag(price_lkr) over (partition by url order by saved_at) as previous_price_lkr
+          from vehicles.v_vehicle_ads) a
+    where previous_price_lkr is not null and previous_price_lkr <> price_lkr;

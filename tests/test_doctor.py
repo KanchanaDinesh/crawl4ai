@@ -48,6 +48,7 @@ def test_doctor_advice(fs, links, expect, monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(doctor, "try_playwright", browser_ok)
     monkeypatch.setattr(doctor, "try_crawl4ai", crawl_ok)
     monkeypatch.setattr(doctor, "try_graphics_page", lambda args: browser_ok())
+    monkeypatch.setattr(doctor, "check_postgres", lambda: False)      # the PostgreSQL part has its own tests
     if links:
         doctor.main()
     else:
@@ -90,6 +91,7 @@ def test_doctor_graphics_page(with_flags, plain, expect, monkeypatch, capsys, tm
     monkeypatch.setattr(doctor, "try_playwright", ok)
     monkeypatch.setattr(doctor, "try_crawl4ai", ok)
     monkeypatch.setattr(doctor, "try_graphics_page", graphics)
+    monkeypatch.setattr(doctor, "check_postgres", lambda: False)
     if with_flags:
         with pytest.raises(SystemExit):
             doctor.main()
@@ -105,3 +107,15 @@ def test_symlink_and_filesystem_probes(tmp_path):
     import doctor
     assert doctor.supports_symlinks(tmp_path) is True
     assert isinstance(doctor.filesystem_of(tmp_path), str)
+
+
+def test_doctor_checks_postgres(pg_env, capsys):
+    import doctor
+    from warehouse import postgres
+    assert doctor.check_postgres() is True                 # no database yet: a failure, with what to do
+    assert "warehouse setup" in capsys.readouterr().out
+    postgres.setup()
+    postgres.migrate()
+    assert doctor.check_postgres() is False
+    out = capsys.readouterr().out
+    assert "[OK  ] Schemas" in out and "Reader login is read-only" in out

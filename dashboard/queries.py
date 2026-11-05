@@ -1,5 +1,5 @@
 """SQL behind the dashboard. Each function takes an open read-only connection: PostgreSQL (psycopg, %s placeholders)
-for the tools already moved there (warehouse.PG_TOOLS: news, markets, companies), DuckDB (? placeholders) for the rest.
+for the tools already moved there (warehouse.PG_TOOLS: news, markets, vehicles, companies), DuckDB (? placeholders) for the rest.
 
 Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
 """
@@ -415,67 +415,72 @@ def markets_performance(con) -> list[dict]:
     return out
 
 
-# ── vehicles (vehicles.duckdb) ────────────────────────────────────────────
+# ── vehicles: PostgreSQL, schema vehicles ─────────────────────────────────
 VEHICLE_BASE = """
-    with site_last as (select site, max(saved_at) as last_saved from v_vehicle_ads group by site),
-         changes as (select url, price_lkr as new_price, previous_price_lkr, saved_at as changed_at
-                     from v_vehicle_price_changes qualify row_number() over (partition by url order by saved_at desc) = 1)
+    with site_last as (select site, max(saved_at) as last_saved from vehicles.v_vehicle_ads group by site),
+         changes as (select distinct on (url) url, price_lkr as new_price, previous_price_lkr, saved_at as changed_at
+                     from vehicles.v_vehicle_price_changes order by url, saved_at desc)
     select l.*, l.first_seen >= s.last_saved as is_new, c.previous_price_lkr, c.changed_at
-    from v_vehicle_ads_latest l join site_last s using (site) left join changes c using (url)
+    from vehicles.v_vehicle_ads_latest l join site_last s using (site) left join changes c using (url)
 """
 
 
+def _median(col: str, where: str = "") -> str:
+    """Median as a whole number (DuckDB's median())."""
+    filt = f" filter (where {where})" if where else ""
+    return f"round(percentile_cont(0.5) within group (order by {col}){filt})::bigint"
+
+
 def vehicles_summary(con, days: int = 7) -> dict:
-    d = int(days)
     counts = one(con, f"""select count(*) as ads,
             count(*) filter (where is_new) as new_last_run,
-            count(*) filter (where first_seen >= now() - interval 1 day) as new_24h,
+            count(*) filter (where first_seen >= {_since(1)}) as new_24h,
             count(*) filter (where previous_price_lkr is not null and price_lkr < previous_price_lkr
-                             and changed_at >= now() - interval {d} day) as price_drops,
-            round(median(price_lkr)) as median_price
-        from ({VEHICLE_BASE})""")
+                             and changed_at >= {_since(days)}) as price_drops,
+            {_median('price_lkr')} as median_price
+        from ({VEHICLE_BASE}) b""")
     sites = rows(con, f"""select site, count(*) as ads, count(*) filter (where is_new) as new_last_run,
-            {_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) group by site order by site""")
-    per_day = rows(con, """select strftime(date_trunc('day', first_seen), '%Y-%m-%d') as day, count(*) as n
-        from v_vehicle_ads_latest where first_seen >= now() - interval 14 day group by 1 order by 1""")
+            {_pg_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) b group by site order by site""")
+    per_day = rows(con, f"""select {_day('first_seen')} as day, count(*) as n
+        from vehicles.v_vehicle_ads_latest where first_seen >= {_since(14)} group by 1 order by 1""")
     price_ranges = rows(con, """select case
                 when price_lkr < 1000000 then 'under 1M' when price_lkr < 3000000 then '1M - 3M'
                 when price_lkr < 6000000 then '3M - 6M' when price_lkr < 10000000 then '6M - 10M'
                 when price_lkr < 20000000 then '10M - 20M' else '20M and more' end as range,
             min(price_lkr) as lo, count(*) as n
-        from v_vehicle_ads_latest where price_lkr >= 50000 group by 1 order by lo""")
+        from vehicles.v_vehicle_ads_latest where price_lkr >= 50000 group by 1 order by lo""")
     # The make is the first word of the title ("Toyota Axio 2016" -> Toyota); prices above 50,000 only
     # (smaller numbers are rents or monthly payments)
-    makes = rows(con, """select lower(split_part(trim(title), ' ', 1)) as make, count(*) as n,
-            round(median(price_lkr) filter (where price_lkr >= 50000)) as median_price
-        from v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 12""")
+    makes = rows(con, f"""select lower(split_part(trim(title), ' ', 1)) as make, count(*) as n,
+            {_median('price_lkr', 'price_lkr >= 50000')} as median_price
+        from vehicles.v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 12""")
     for r in makes:
         r["make"] = r["make"].capitalize() if r["make"] and r["make"].isalpha() and len(r["make"]) > 3 else (r["make"] or "").upper()
     return {"counts": counts, "sites": sites, "by_day": per_day, "price_ranges": price_ranges, "makes": makes}
 
 
 def vehicle_ads(con, *, site=None, q=None, new=False, days=30, limit=100, offset=0) -> dict:
-    where, params = [f"first_seen >= now() - interval {int(days)} day"], []
+    where, params = [f"first_seen >= {_since(days)}"], []
     if site:
-        where.append("site = ?"); params.append(site)
+        where.append("site = %s"); params.append(site)
     if new:
         where.append("is_new")
     if q:
-        where.append("(title ilike ? or coalesce(location, '') ilike ?)"); params += [f"%{q}%"] * 2
+        where.append("(title ilike %s or coalesce(location, '') ilike %s)"); params += [_like(q)] * 2
     cond = " and ".join(where)
-    total = con.execute(f"select count(*) from ({VEHICLE_BASE}) where {cond}", params).fetchone()[0]
+    total = con.execute(f"select count(*) from ({VEHICLE_BASE}) b where {cond}", params).fetchone()[0]
     items = rows(con, f"""select site, title, url, price, price_lkr, previous_price_lkr, location, year, mileage, posted,
-            image, times_seen, is_new, {_ts('first_seen')} as first_seen, {_ts('saved_at')} as last_seen,
-            {_ts('changed_at')} as changed_at
-        from ({VEHICLE_BASE}) b where {cond} order by b.first_seen desc, b.rank nulls last
+            image, times_seen, is_new, {_pg_ts('first_seen')} as first_seen, {_pg_ts('saved_at')} as last_seen,
+            {_pg_ts('changed_at')} as changed_at
+        from ({VEHICLE_BASE}) b where {cond} order by b.first_seen desc, b.rank nulls last, b.url
         limit {int(limit)} offset {int(offset)}""", params)
     return {"total": total, "items": items}
 
 
 def vehicle_price_changes(con, days: int = 30, limit: int = 30) -> list[dict]:
-    return rows(con, f"""select site, title, url, previous_price_lkr, price_lkr, {_ts('saved_at')} as changed_at
-        from v_vehicle_price_changes where saved_at >= now() - interval {int(days)} day
-        order by saved_at desc limit {int(limit)}""")
+    return rows(con, f"""select site, title, url, previous_price_lkr, price_lkr, {_pg_ts('saved_at')} as changed_at
+        from vehicles.v_vehicle_price_changes where saved_at >= {_since(days)}
+        order by v_vehicle_price_changes.saved_at desc limit {int(limit)}""")
 
 
 # ── companies (python -m companies): PostgreSQL, schema companies ────────────

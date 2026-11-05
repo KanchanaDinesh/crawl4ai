@@ -14,6 +14,10 @@ os.environ["SCRAPERS_OUTPUT_DIR"] = str(_TMP / "output")
 # crawl4ai keeps a robots.txt cache by host:port. Test sites run on 127.0.0.1 with random ports, and one that
 # says "Disallow: /" was cached for days, so a later test that got the same port was refused. Own folder per run.
 os.environ["CRAWL4_AI_BASE_DIRECTORY"] = str(_TMP / "crawl4ai")
+# Nor the real PostgreSQL: unless a test asks for the throwaway one (the pg_env fixture), every database address
+# points nowhere, so a test that forgets it fails ("Can't reach PostgreSQL") instead of writing to real data.
+for _name in ("CRAWL4AI_DATABASE_URL", "CRAWL4AI_READER_URL", "CRAWL4AI_ADMIN_URL"):
+    os.environ[_name] = "postgresql://tests-use-pg_env@127.0.0.1:1/none"
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))

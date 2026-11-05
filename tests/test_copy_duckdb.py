@@ -43,7 +43,17 @@ create table runs (run_at timestamptz primary key, finished_at timestamptz, quot
 create table source_runs (run_at timestamptz, source varchar, grp varchar, ok boolean, count integer,
     error varchar, seconds double);
 """
-OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB, "markets": OLD_MARKETS_DUCKDB}
+# and vehicles (vehicles/store.py before 2026-11-06)
+OLD_VEHICLES_DUCKDB = """
+create table ads (saved_at timestamptz, site varchar, rank integer, title varchar, url varchar, price varchar,
+    price_lkr bigint, location varchar, year varchar, mileage varchar, posted varchar, details varchar, image varchar,
+    extra json);
+create table runs (saved_at timestamptz, site varchar, source_url varchar, success boolean, ads integer,
+    seconds double, error varchar);
+create table meta (key varchar primary key, value varchar);
+"""
+OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB, "markets": OLD_MARKETS_DUCKDB,
+              "vehicles": OLD_VEHICLES_DUCKDB}
 
 
 @pytest.fixture

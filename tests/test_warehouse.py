@@ -24,37 +24,30 @@ def test_scrapers_outputs_build_history(tmp_path, monkeypatch):
     con.close()
 
 
-def test_vehicles_have_their_own_database_and_old_history_is_copied(tmp_path, monkeypatch):
-    """Vehicle ads saved in scrapers.duckdb before vehicles.duckdb existed are copied over once."""
-    monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
-    monkeypatch.delenv("SCRAPERS_NO_DB", raising=False)
-    import project_paths
-    import warehouse
-    import warehouse.scrapers_db as sdb
-    import scrapers.common as common
-    for mod in (project_paths, warehouse, sdb, common):
-        importlib.reload(mod)
-    for price in (5_000_000, 4_750_000):                 # the old way: rows in scraper_rows
-        sdb.record_output("vehicles_ikman", {"site": "ikman", "ads": [
-            {"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": price},
-            {"rank": 2, "title": "Honda Fit", "url": "https://ikman.lk/2", "price_lkr": 3_000_000}]})
-
+def test_vehicles_history_latest_ads_and_price_changes(pg_env):
+    """Vehicle ads in PostgreSQL (schema vehicles): every run kept, the latest per ad, and price changes."""
+    from warehouse import postgres
+    postgres.setup()
     from vehicles.store import VehicleStore
     store = VehicleStore()
-    assert store.path == tmp_path / "data" / "vehicles" / "vehicles.duckdb"
-    store.save_report({"site": "ikman", "success": True, "seconds": 3.2, "source_url": "https://ikman.lk", "ads": [
-        {"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": 4_600_000, "price": "Rs 4.6M"}]})
+    for n, price in enumerate((5_000_000, 4_750_000, 4_600_000)):
+        ads = [{"rank": 1, "title": "Toyota Axio", "url": "https://ikman.lk/1", "price_lkr": price, "price": "Rs x",
+                "photo_note": "kept in extra"}]
+        if n < 2:
+            ads.append({"rank": 2, "title": "Honda Fit", "url": "https://ikman.lk/2", "price_lkr": "3000000"})
+        store.save_report({"site": "ikman", "success": True, "seconds": 3.2, "ads": ads},
+                          saved_at=f"2026-11-0{n + 1}T10:00:00Z")
+    store.save_report({"site": "riyasewana", "success": False, "error": "gave up after 120s", "ads": []})
     store.close()
-    store = VehicleStore()                                # opening again does not copy twice
-    con = store.con
-    assert con.execute("select count(*) from ads").fetchone()[0] == 5
-    latest = con.execute("select title, price_lkr, times_seen from v_vehicle_ads_latest order by title").fetchall()
-    assert latest == [("Honda Fit", 3_000_000, 2), ("Toyota Axio", 4_600_000, 3)]
-    assert con.execute("select previous_price_lkr, price_lkr from v_vehicle_price_changes order by saved_at").fetchall() \
-        == [(5_000_000, 4_750_000), (4_750_000, 4_600_000)]
-    assert con.execute("select count(*), sum(ads) from runs").fetchone() == (3, 5)
-    store.close()
+    with postgres.connect("reader") as con:
+        assert con.execute("select count(*) from vehicles.ads").fetchone()[0] == 5
+        latest = con.execute("select title, price_lkr, times_seen from vehicles.v_vehicle_ads_latest "
+                             "order by title").fetchall()
+        assert latest == [("Honda Fit", 3_000_000, 2), ("Toyota Axio", 4_600_000, 3)]
+        assert con.execute("select previous_price_lkr, price_lkr from vehicles.v_vehicle_price_changes "
+                           "order by saved_at").fetchall() == [(5_000_000, 4_750_000), (4_750_000, 4_600_000)]
+        assert con.execute("select count(*), sum(ads) from vehicles.runs").fetchone() == (4, 5)
+        assert con.execute("select extra->>'photo_note' from vehicles.ads limit 1").fetchone()[0] == "kept in extra"
 
 
 def test_vehicle_save_never_breaks_a_scrape(monkeypatch):

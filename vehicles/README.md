@@ -34,10 +34,12 @@ site retried once. If the browser keeps failing, run `uv run python doctor.py`.
 |---|---|
 | `vehicles/config/sites.json` | the sites and their CSS selectors |
 | `output/vehicles_<site>.json` | the latest run, one file per site |
-| `data/vehicles/vehicles.duckdb` | **every run**: tables `ads`, `runs`; views `v_vehicle_ads`, `v_vehicle_ads_latest` (one row per ad: first seen, times seen), `v_vehicle_price_changes` |
+| PostgreSQL, schema `vehicles` | **every run**: tables `ads`, `runs`; views `v_vehicle_ads`, `v_vehicle_ads_latest` (one row per ad: first seen, times seen), `v_vehicle_price_changes` |
 
-Ads saved before vehicles had its own database (in `data/scrapers/scrapers.duckdb`) are copied in
-automatically the first time it runs, so the history carries on. The old rows stay where they were.
+Since 2026-11-06 the history is in PostgreSQL (database `crawl4ai`; tables and views in
+`warehouse/schema/vehicles.sql`), so the dashboard reads while a run is saving. It includes everything from the
+old `data/vehicles/vehicles.duckdb` (no longer used, kept as a backup until the move is finished), which in turn had
+the ads saved earlier in `data/scrapers/scrapers.duckdb`.
 
 The dashboard's **Vehicles** tab reads the same data. To run it on a schedule, use the `vehicles` step:
 `./run_all.sh vehicles`, or the `frequent` profile (`./schedule.sh every 15m --profile frequent`).
@@ -46,7 +48,7 @@ Options for scheduled runs go in `VEHICLES_ARGS` in `automation.conf`.
 SQL, for example the cheapest ads:
 
 ```bash
-uv run python -m warehouse sql "select site, title, price_lkr, url from vehicles.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20"
+uv run python -m warehouse pg "select site, title, price_lkr, url from vehicles.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20"
 ```
 
 ## Adding a site

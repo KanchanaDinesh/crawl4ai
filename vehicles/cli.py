@@ -8,7 +8,7 @@
     sites                                   list the configured sites
 
 Sites and selectors: vehicles/config/sites.json
-Output: output/vehicles_<site>.json (latest run), history in data/vehicles/vehicles.duckdb
+Output: output/vehicles_<site>.json (latest run), history in PostgreSQL (schema vehicles)
 """
 
 import argparse
@@ -65,11 +65,16 @@ def _short(error: str | None) -> str:
 
 
 def _db():
-    from warehouse import DB_FILES, connect
-    path = DB_FILES["vehicles"]
-    if not path.exists():
+    """PostgreSQL, read-only login (works while a run is saving)."""
+    from warehouse.postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        sys.exit(str(e))
+    con.execute("set timezone = 'UTC'")
+    if not con.execute("select to_regclass('vehicles.ads') is not null").fetchone()[0]:
         sys.exit("No vehicle ads saved yet. Run:  uv run python -m vehicles run")
-    return connect(path, read_only=True)
+    return con
 
 
 def _price(v) -> str:
