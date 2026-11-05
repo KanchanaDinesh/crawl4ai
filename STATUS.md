@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a local web dashboard. Collectors write while the
 dashboard and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 149 tests pass.
+All 152 tests pass.
 
 ## Parts and how to run them
 
@@ -387,8 +387,10 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     (arrows, Enter ticks, Esc cancels, Tab or clicking away saves), used by the Tags cell and the bulk edit bar.
     Our own because Tabulator's list editor can't search and multi-select together. The grid test has 30 test tags.
     Tabulator now follows the app's dark and light themes.
-    - Open question for Kanchana: may users add a new tag by typing it in the list? (Goes with real choice fields
-      in phase 5.)
+    - **Users can add new tags (Kanchana, 2026-11-06):** type a name that isn't in the list and choose "Add new tag"
+      (or press Enter). It's ticked at once and everyone can use it from then on; the same words in other capitals
+      count as one; at most 40 characters, no commas; each addition is in the audit log. Model `GridTestChoice`,
+      endpoint `/grid-test/api/choice/`, `DataGrid.addChoice`. Phase 5's real choice fields reuse this.
     - **Next: phase 2** (automatic catalog, every dataset in the grid, saved views, exports).
 
 ## Open issues and things to watch

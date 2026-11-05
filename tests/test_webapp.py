@@ -206,4 +206,46 @@ def test_grid_page_uses_tabulator_with_a_long_tag_list(admin_client, companies):
     config = json.loads(page.split('id="grid-config" type="application/json">')[1].split("</script>")[0])
     assert next(c for c in config["columns"] if c["field"] == "country")["choices"] == ["LK", "US"]
     tags = next(c for c in config["columns"] if c["field"] == "tags")
-    assert tags["type"] == "multi" and tags["noun"] == "tag" and len(tags["choices"]) > 20
+    assert tags["type"] == "multi" and tags["noun"] == "tag" and tags["allow_new"] and len(tags["choices"]) > 20
+
+
+def test_users_can_add_a_new_tag_and_everyone_can_use_it(admin_client, client, companies):
+    url = reverse("grid_test_choice")
+    post = lambda c, target, body: c.post(target, json.dumps(body), content_type="application/json")
+    res = post(admin_client, url, {"field": "tags", "value": "  Sri   Lankan brand "}).json()
+    assert res["value"] == "Sri Lankan brand" and "Sri Lankan brand" in res["choices"]
+    assert res["choices"] == sorted(res["choices"], key=str.casefold)
+    event = AuditEvent.objects.get(action="gridtest_choice_added")
+    assert "Sri Lankan brand" in event.summary and event.user.username == "ada"
+
+    again = post(admin_client, url, {"field": "tags", "value": "sri lankan BRAND"}).json()       # one, in any capitals
+    assert again["value"] == "Sri Lankan brand" and again["choices"] == res["choices"]
+    assert post(admin_client, url, {"field": "tags", "value": "priority"}).json()["value"] == "Priority"
+    assert AuditEvent.objects.filter(action="gridtest_choice_added").count() == 1
+
+    saved = post(admin_client, reverse("grid_test_edit"),
+                 {"id": "cse:JKH", "field": "tags", "value": ["Sri Lankan brand", "Priority"]}).json()
+    assert saved["value"] == ["Priority", "Sri Lankan brand"]
+    assert "Sri Lankan brand" in admin_client.get(reverse("grid_test")).content.decode()
+
+    other = make_user("eve", "Analyst")                                 # another user sees it and can use it
+    client.force_login(other)
+    assert post(client, reverse("grid_test_edit"), {"id": "gleif:L1", "field": "tags", "value": ["Sri Lankan brand"]}).json()["ok"]
+
+
+def test_a_new_tag_must_be_sensible(admin_client):
+    url = reverse("grid_test_choice")
+    post = lambda body: admin_client.post(url, json.dumps(body), content_type="application/json")
+    for bad in ("", "   ", "a, b", "x" * 41):
+        assert post({"field": "tags", "value": bad}).status_code == 400
+    assert post({"field": "industry", "value": "Mining"}).status_code == 400      # that list takes no new choices
+    assert post({"field": "nope", "value": "x"}).status_code == 400
+    res = admin_client.post(reverse("grid_test_edit"), json.dumps({"id": "x", "field": "tags", "value": ["Not added"]}),
+                            content_type="application/json")
+    assert res.status_code == 400 and "add it there first" in res.json()["error"]
+
+
+def test_adding_a_tag_needs_the_menu_right(viewer_client):
+    res = viewer_client.post(reverse("grid_test_choice"), json.dumps({"field": "tags", "value": "x"}),
+                             content_type="application/json")
+    assert res.status_code == 403

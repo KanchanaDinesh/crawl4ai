@@ -3,15 +3,18 @@
    the library can be changed by changing this file only.
 
    DataGrid.create(element, options)
-     columns     [{field, title, type: text|choice|multi|link|date, editable, choices, width}]
+     columns     [{field, title, type: text|choice|multi|link|date, editable, choices, allow_new, noun, width}]
      rowsUrl     GET ?start&limit&sort&dir&<filters> -> {total, rows:[{id, ...}], ms}
      editUrl     POST {id, field, value} -> {ok, value} | {error}
+     choiceUrl   POST {field, value} -> {ok, value, choices} | {error}   (columns with allow_new)
      filters()   returns the current filter values (object)
      onStatus(text), onSelection(count), onError(text)
    returns { reload(), selectedIds(), applyValue(ids, field, value), destroy() }
 
-   DataGrid.pick(anchor, {choices, value, noun, onDone(list), onCancel()})
-     the searchable multiple-choice list, also usable outside the grid (the bulk edit bar uses it).
+   DataGrid.pick(anchor, {choices, value, noun, onAdd(text), onDone(list), onCancel()})
+     the searchable multiple-choice list, also usable outside the grid (the bulk edit bar uses it). With onAdd
+     (async, returns the saved name) people can add a new choice by typing it.
+   DataGrid.addChoice(url, column, text): saves a new choice and updates column.choices (shared by every list).
 */
 (function () {
   "use strict";
@@ -48,6 +51,18 @@
     return data.value;
   }
 
+  async function addChoice(url, column, text) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify({ field: column.field, value: text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `Adding failed (HTTP ${res.status})`);
+    column.choices.splice(0, column.choices.length, ...data.choices);   // the same array every list reads
+    return data.value;
+  }
+
   function esc(s) {
     return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
@@ -63,7 +78,7 @@
   // ── The searchable multiple-choice list ──────────────────────────────────────────────────────────────────
   // Tabulator's own list editor can't search and select several at once (multiselect is off with autocomplete),
   // and long lists need both. Lives on <body>, so the grid's cell doesn't clip it.
-  function pick(anchor, { choices, value, noun = "item", onDone, onCancel }) {
+  function pick(anchor, { choices, value, noun = "item", onAdd, onDone, onCancel }) {
     const selected = new Set(value || []);
     const start = JSON.stringify([...selected].sort());
     const box = document.createElement("div");
@@ -73,11 +88,13 @@
     box.innerHTML = `<input type="search" class="picker-search" placeholder="Search ${esc(noun)}s" aria-label="Search ${esc(noun)}s" autocomplete="off">
       <div class="picker-chosen"></div>
       <div class="picker-list" role="listbox" aria-multiselectable="true"></div>
+      <div class="picker-error" role="alert" hidden></div>
       <div class="picker-foot"><button type="button" class="btn link picker-clear">Clear all</button><button type="button" class="btn primary picker-done">Done</button></div>`;
     document.body.appendChild(box);
     const search = box.querySelector(".picker-search"), listEl = box.querySelector(".picker-list"),
-      chosenEl = box.querySelector(".picker-chosen"), clearBtn = box.querySelector(".picker-clear");
-    let shown = [], active = 0, closed = false;
+      chosenEl = box.querySelector(".picker-chosen"), clearBtn = box.querySelector(".picker-clear"),
+      errorEl = box.querySelector(".picker-error");
+    let shown = [], active = 0, closed = false, adding = false, addText = "";
     const ordered = () => (choices || []).filter((c) => selected.has(c));
 
     function drawChosen() {
@@ -95,9 +112,11 @@
     function drawList() {
       const q = search.value.trim().toLowerCase();
       shown = (choices || []).filter((c) => c.toLowerCase().includes(q));
-      active = Math.min(active, Math.max(shown.length - 1, 0));
+      // a new choice can be added when what's typed isn't in the list yet (the same words in other capitals are)
+      addText = onAdd && q && !(choices || []).some((c) => c.toLowerCase() === q) ? search.value.trim().replace(/\s+/g, " ") : "";
+      active = Math.min(active, Math.max(shown.length + (addText ? 1 : 0) - 1, 0));
       listEl.innerHTML = "";
-      if (!shown.length) {
+      if (!shown.length && !addText) {
         const none = document.createElement("div");
         none.className = "picker-none"; none.textContent = `No ${noun} matches "${search.value.trim()}"`;
         listEl.appendChild(none);
@@ -116,6 +135,34 @@
         row.addEventListener("mouseenter", () => { active = i; mark(); });
         listEl.appendChild(row);
       });
+      if (addText) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "picker-row picker-add" + (active === shown.length ? " active" : "");
+        row.textContent = `Add new ${noun}: ${addText}`;
+        row.addEventListener("click", addNew);
+        row.addEventListener("mouseenter", () => { active = shown.length; mark(); });
+        listEl.appendChild(row);
+      }
+      errorEl.hidden = true;
+    }
+    async function addNew() {
+      if (adding || !addText) return;
+      adding = true;
+      try {
+        const saved = await onAdd(addText);
+        if (closed) return;
+        selected.add(saved);
+        search.value = "";
+        active = 0;
+        drawChosen(); drawList();
+        search.focus();
+      } catch (err) {
+        if (closed) return;
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        search.focus();
+      } finally { adding = false; }
     }
     function mark() {
       listEl.querySelectorAll(".picker-row").forEach((r, i) => {
@@ -132,7 +179,9 @@
       const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
       const below = r.bottom + 4 + h <= window.innerHeight;
       box.style.left = `${left}px`;
-      box.style.top = `${below ? r.bottom + 4 : Math.max(8, r.top - h - 4)}px`;
+      // opening upwards it hangs from its bottom edge, so it stays next to the cell when a search shortens it
+      box.style.top = below ? `${r.bottom + 4}px` : "auto";
+      box.style.bottom = below ? "auto" : `${Math.max(8, window.innerHeight - r.top + 4)}px`;
     }
     function close(save) {
       if (closed) return;
@@ -151,10 +200,14 @@
 
     search.addEventListener("input", () => { active = 0; drawList(); });
     search.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, shown.length - 1); mark(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, shown.length + (addText ? 1 : 0) - 1); mark(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); mark(); }
       else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); close(true); }
-      else if (e.key === "Enter") { e.preventDefault(); if (shown[active]) toggle(shown[active]); search.select(); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (shown[active]) { toggle(shown[active]); search.select(); }
+        else if (addText) addNew();
+      }
       else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(false); }
       else if (e.key === "Tab") { e.preventDefault(); close(true); }
     });
@@ -177,20 +230,22 @@
     el.className = "picker-cell";
     el.innerHTML = chipsHtml(cell.getValue());
     onRendered(() => pick(cell.getElement(), {
-      choices: params.choices, value: cell.getValue(), noun: params.noun || "item",
+      choices: params.choices, value: cell.getValue(), noun: params.noun || "item", onAdd: params.onAdd,
       onDone: (list) => success(list), onCancel: () => cancel(),
     }));
     return el;
   }
 
   // ── The grid ─────────────────────────────────────────────────────────────────────────────────────────────
-  function column(c) {
+  function column(c, opt) {
     const col = { field: c.field, title: c.title, width: c.width || 150, headerSort: true, resizable: true };
     if (c.editable) col.editor = c.type === "choice" ? "list" : "input";
     if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true, listOnEmpty: true };
     if (c.type === "multi") {
       col.editor = multiEditor;
-      col.editorParams = { choices: c.choices || [], noun: c.noun || "item" };
+      c.choices = c.choices || [];
+      col.editorParams = { choices: c.choices, noun: c.noun || "item",
+        onAdd: c.allow_new && opt.choiceUrl ? (text) => addChoice(opt.choiceUrl, c, text) : null };
       col.formatter = (cell) => chipsHtml(cell.getValue());
     }
     if (c.type === "link") col.formatter = (cell) => linkHtml(cell.getValue());
@@ -205,7 +260,7 @@
     const table = new window.Tabulator(el, {
       height: `${Math.round(height)}px`,
       layout: "fitData",
-      columns: opt.columns.map(column),
+      columns: opt.columns.map((c) => column(c, opt)),
       index: "id",
       // Spreadsheet-style cell blocks, with copy and paste (also from Excel)
       selectableRange: 1,
@@ -308,5 +363,5 @@
     };
   }
 
-  window.DataGrid = { create, pick };
+  window.DataGrid = { create, pick, addChoice };
 })();

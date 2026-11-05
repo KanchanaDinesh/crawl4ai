@@ -147,5 +147,7 @@ table.matrix .sec td { background: var(--surface-2); font-size: 12px; text-trans
 .picker-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; font-weight: 400; cursor: pointer; overflow-wrap: anywhere; }
 .picker-row.active { background: var(--surface-2); }
 .picker-none { color: var(--muted); padding: 8px 6px; }
+.picker-add { border: 0; background: none; font: inherit; text-align: left; color: var(--accent); font-weight: 500; width: 100%; }
+.picker-error { color: var(--bad); font-size: 12.5px; }
 .picker-foot { display: flex; justify-content: space-between; align-items: center; }
 .picker-cell { padding: 2px 4px; white-space: nowrap; overflow: hidden; }

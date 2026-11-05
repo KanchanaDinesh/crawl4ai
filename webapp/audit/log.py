@@ -9,6 +9,7 @@ ACTIONS = {
     "role_created": "Role created", "role_updated": "Role changed", "role_deleted": "Role deleted",
     "rights_changed": "Menu rights changed",
     "gridtest_edit": "Grid test: cell edited", "gridtest_bulk_edit": "Grid test: rows edited together",
+    "gridtest_choice_added": "Grid test: new choice added",
 }
 
 

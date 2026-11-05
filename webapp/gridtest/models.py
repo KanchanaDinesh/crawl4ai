@@ -3,6 +3,7 @@ rows, and each one is in the audit log. Phase 4 brings real editing (with histor
 
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class GridTestEdit(models.Model):
@@ -15,3 +16,14 @@ class GridTestEdit(models.Model):
 
     class Meta:
         ordering = ["at", "id"]
+
+
+class GridTestChoice(models.Model):
+    """A choice a user added by typing it in a multiple-choice list. Shared with everyone; "Tag" and "tag" are one."""
+    field = models.CharField(max_length=40)
+    value = models.CharField(max_length=40)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint("field", Lower("value"), name="gridtest_choice_once_per_field")]

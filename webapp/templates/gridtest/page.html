@@ -38,6 +38,7 @@
       <li>Scroll fast through all rows; sort by a column; search and filter.</li>
       <li>Double-click Industry, Country or Notes to edit; edited cells get an orange underline.</li>
       <li>Double-click Tags: type in the search box to narrow the list, tick several, press Done. Keyboard: arrows move, Enter ticks, Esc cancels.</li>
+      <li>Type a tag that isn't in the list and choose "Add new tag": it's ticked, and everyone can use it from then on.</li>
       <li>Select several rows and use "Apply to selected rows".</li>
       <li>Copy cells and paste a block, also from Excel.</li>
       <li>Undo an edit with Ctrl+Z (Cmd+Z on the Mac).</li>
@@ -56,11 +57,13 @@
   const config = JSON.parse(document.getElementById("grid-config").textContent);
   const $ = (id) => document.getElementById(id);
   let grid = null, timer = null, bulkTags = [];
+  const tagColumn = config.columns.find((c) => c.field === "tags");
   const status = (t, bad) => { $("status").textContent = t; $("status").style.color = bad ? "var(--bad)" : ""; };
   const filters = () => ({ q: $("q").value.trim(), country: $("country").value, source: $("source").value, site_status: $("site_status").value });
 
   grid = DataGrid.create($("grid"), {
     columns: config.columns, rowsUrl: "{% url 'grid_test_rows' %}", editUrl: "{% url 'grid_test_edit' %}",
+    choiceUrl: "{% url 'grid_test_choice' %}",
     filters, onStatus: (t) => status(t), onError: (t) => status(t, true),
     onSelection: (n) => ($("selcount").textContent = `${n} row${n === 1 ? "" : "s"} selected`),
   });
@@ -73,7 +76,8 @@
     $("bulkvalue").hidden = tags;
   });
   $("bulktags").addEventListener("click", () => DataGrid.pick($("bulktags"), {
-    choices: config.tags, value: bulkTags, noun: "tag",
+    choices: tagColumn.choices, value: bulkTags, noun: "tag",
+    onAdd: (text) => DataGrid.addChoice("{% url 'grid_test_choice' %}", tagColumn, text),
     onDone: (list) => { bulkTags = list; showBulkTags(); $("bulktags").focus(); },
     onCancel: () => $("bulktags").focus(),
   }));

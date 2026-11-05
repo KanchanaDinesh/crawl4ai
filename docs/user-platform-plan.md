@@ -76,6 +76,8 @@ edition. The table above is kept for the record; AG Grid is no longer in the pro
 **Searchable multiple-choice list:** `DataGrid.pick` in `datagrid.js`, our own because Tabulator's list editor can't
 search and multi-select at the same time. Search box on top, ticks, chosen values as removable chips, keyboard
 (arrows, Enter ticks, Esc cancels, Tab or clicking away saves). Every multiple-choice field and the bulk edit bar use it.
+**Users can add new choices** by typing them (Kanchana's decision): shared with everyone, one per name in any
+capitals, no commas, at most 40 characters, each addition in the audit log.
 
 **The grid sits behind our own small wrapper** (`webapp/static/js/datagrid.js`) with one interface:
 load a dataset by name, show its fields from the catalog, save an edit, bulk edit, save a view. The pages and
@@ -314,7 +316,6 @@ Each phase ends with tests passing, a real check on the Mac, an update to STATUS
 3. Log page views too, or only changes, exports and logins (suggested)?
 4. Build on the Mac first and move to the server in phase 8 (suggested), or start on the server?
 5. AI assistant: may it see the column names of users' private tables, or only shared datasets?
-6. May users add a new choice by typing it in a multiple-choice list, or only administrators?
 
 ## Risks
 

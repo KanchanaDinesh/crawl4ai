@@ -7,7 +7,7 @@ GridTestEdit (never to the collected data) and the audit log, and are shown on t
 import json
 import time
 
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
@@ -15,9 +15,9 @@ from django.views.decorators.http import require_POST
 from webapp.accounts.rights import menu_required
 from webapp.audit.log import record
 
-from .models import GridTestEdit
+from .models import GridTestChoice, GridTestEdit
 
-TAGS = [   # long enough to need the search box in the list; real choice fields come in phase 5
+TAGS = [   # the starting list, long enough to need the search box; users add more (GridTestChoice)
     "Agriculture", "Banking", "Checked", "Competitor", "Construction", "Customer", "Duplicate", "Education",
     "Energy", "Export", "Family owned", "Follow up", "Government", "Healthcare", "Hospitality", "Insurance",
     "Listed on CSE", "Logistics", "Manufacturing", "Not a company", "Partner", "Priority", "Retail", "Startup",
@@ -29,7 +29,7 @@ COLUMNS = [   # what the grids show; in phase 2 this comes from the catalog
     {"field": "source", "title": "Source", "type": "text", "width": 100},
     {"field": "website", "title": "Website", "type": "link", "width": 220},
     {"field": "industry", "title": "Industry", "type": "text", "editable": True, "width": 220},
-    {"field": "tags", "title": "Tags (test field)", "type": "multi", "editable": True, "choices": TAGS, "noun": "tag",
+    {"field": "tags", "title": "Tags (test field)", "type": "multi", "editable": True, "allow_new": True, "noun": "tag",
      "width": 220},
     {"field": "notes", "title": "Notes (test field)", "type": "text", "editable": True, "width": 200},
     {"field": "site_status", "title": "Website read", "type": "text", "width": 110},
@@ -39,6 +39,13 @@ EDITABLE = {c["field"]: c for c in COLUMNS if c.get("editable")}
 SORTABLE = {"name", "country", "source", "website", "industry", "site_status", "first_seen"}
 FILTERS = {"country": "country", "source": "source", "site_status": "site_status"}
 MAX_LIMIT = 500
+MAX_CHOICE_LENGTH = 40
+
+
+def _choices(field: str) -> list[str]:
+    """The starting list plus what users added, in alphabetical order."""
+    added = GridTestChoice.objects.filter(field=field).values_list("value", flat=True)
+    return sorted({*TAGS, *added}, key=str.casefold)
 
 
 def _countries() -> list[str]:
@@ -53,13 +60,15 @@ def page(request):
     for c in columns:
         if c["field"] == "country":
             c["choices"] = _countries()
+        if c.get("allow_new"):
+            c["choices"] = _choices(c["field"])
     with connection.cursor() as cur:
         cur.execute("select distinct source from companies.companies order by 1")
         sources = [r[0] for r in cur.fetchall()]
         cur.execute("select distinct site_status from companies.v_companies order by 1")
         statuses = [r[0] for r in cur.fetchall()]
     return render(request, "gridtest/page.html", {
-        "config": {"columns": columns, "tags": TAGS},
+        "config": {"columns": columns},
         "countries": [c for c in columns if c["field"] == "country"][0]["choices"],
         "sources": sources, "statuses": statuses})
 
@@ -122,9 +131,13 @@ def _clean(field: str, value):
     if col["type"] == "multi":
         if isinstance(value, str):
             value = [v.strip() for v in value.split(",") if v.strip()]
-        if not isinstance(value, list) or any(v not in col["choices"] for v in value):
-            raise ValueError(f"Tags must be some of: {', '.join(col['choices'])}")
-        return sorted(set(value), key=col["choices"].index)
+        choices = _choices(field)
+        if not isinstance(value, list):
+            raise ValueError("Tags must be a list")
+        unknown = [v for v in value if v not in choices]
+        if unknown:
+            raise ValueError(f"{', '.join(map(str, unknown))} isn't in the list; add it there first")
+        return sorted(set(value), key=choices.index)
     value = "" if value is None else str(value).strip()
     if len(value) > 200:
         raise ValueError("At most 200 characters")
@@ -176,6 +189,42 @@ def bulk(request):
                target_type="company", detail={"field": field, "value": value, "ids": ids[:200], "count": len(ids),
                                               "engine": data.get("engine")})
     return JsonResponse({"ok": True, "count": len(ids), "value": value})
+
+
+def _clean_new_choice(text) -> str:
+    text = " ".join(str(text or "").split())
+    if not text:
+        raise ValueError("Type a name first")
+    if len(text) > MAX_CHOICE_LENGTH:
+        raise ValueError(f"At most {MAX_CHOICE_LENGTH} characters")
+    if "," in text:                 # copy and paste separates several values with commas
+        raise ValueError("A name can't contain a comma")
+    return text
+
+
+@require_POST
+@menu_required("grid_test")
+def add_choice(request):
+    """A user adds a new choice to a list. If it exists already (also in other capitals), that one is used."""
+    data = _body(request)
+    field = data.get("field", "")
+    if not EDITABLE.get(field, {}).get("allow_new"):
+        return JsonResponse({"error": "This list can't take new choices"}, status=400)
+    try:
+        text = _clean_new_choice(data.get("value"))
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    existing = next((c for c in _choices(field) if c.casefold() == text.casefold()), None)
+    if existing is None:
+        try:
+            with transaction.atomic():
+                GridTestChoice.objects.create(field=field, value=text, user=request.user)
+                record(request, "gridtest_choice_added", f"Grid test: new {field} choice {text!r} added",
+                       target_type="choice", target_id=field, detail={"field": field, "value": text})
+            existing = text
+        except IntegrityError:      # someone added it at the same moment
+            existing = GridTestChoice.objects.get(field=field, value__iexact=text).value
+    return JsonResponse({"ok": True, "value": existing, "choices": _choices(field)})
 
 
 @require_POST
