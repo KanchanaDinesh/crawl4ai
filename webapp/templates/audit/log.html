@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Audit log</h1><span class="muted">{{ page.paginator.count }} events</span></div>
+<form class="toolbar card" method="get">
+  <select name="user" aria-label="Person"><option value="">Everyone</option>{% for n in names %}<option {% if f.user == n %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  <select name="action" aria-label="Action"><option value="">Every action</option>{% for code, label in actions.items %}<option value="{{ code }}" {% if f.action == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  <label class="small">From <input type="date" name="from" value="{{ f.from }}"></label>
+  <label class="small">To <input type="date" name="to" value="{{ f.to }}"></label>
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Words in the description" aria-label="Words in the description">
+  <button class="btn" type="submit">Filter</button>
+</form>
+<div class="table-wrap"><table class="list">
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What happened</th><th>From</th></tr></thead>
+  <tbody>{% for e in page %}
+  <tr><td class="small">{{ e.at|date:"j M Y H:i:s" }}</td><td class="mono">{{ e.username|default:"—" }}</td>
+      <td><span class="pill {% if e.action == 'login_failed' or e.action == 'locked_out' %}bad{% endif %}">{{ e.action }}</span></td>
+      <td>{{ e.summary }}</td><td class="small muted">{{ e.ip|default:"" }}</td></tr>
+  {% empty %}<tr><td colspan="5" class="muted">Nothing matches these filters.</td></tr>{% endfor %}</tbody>
+</table></div>
+<div class="pager">
+  {% if page.has_previous %}<a class="btn" href="?{{ query }}&page={{ page.previous_page_number }}">Newer</a>{% endif %}
+  <span class="muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a class="btn" href="?{{ query }}&page={{ page.next_page_number }}">Older</a>{% endif %}
+</div>
+<p class="muted small">Entries can't be changed or removed, by anyone.</p>
+{% endblock %}

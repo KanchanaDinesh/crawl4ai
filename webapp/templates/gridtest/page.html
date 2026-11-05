@@ -1,0 +1,108 @@
+{% extends "base.html" %}{% load static assets %}{% block title %}Grid test{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{% static 'vendor/tabulator-6.7.1/tabulator.min.css' %}">
+<script src="{% static 'vendor/ag-grid-community-36.2.0/ag-grid-community.min.js' %}"></script>
+<script src="{% static 'vendor/tabulator-6.7.1/tabulator.min.js' %}"></script>
+<script src="{% asset 'js/datagrid.js' %}"></script>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Grid test</h1><p class="muted">The same companies in two grids, to choose one. Edits here are kept apart and never change the collected data.</p></div>
+  <button class="btn" type="button" id="reset">Remove my test edits</button>
+</div>
+
+<div class="tabs" role="tablist">
+  <button role="tab" id="tab-aggrid" aria-selected="true" data-engine="aggrid">AG Grid Community 36.2</button>
+  <button role="tab" id="tab-tabulator" aria-selected="false" data-engine="tabulator">Tabulator 6.7</button>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search name, website or industry" aria-label="Search">
+    <select id="country" aria-label="Country"><option value="">All countries</option>{% for c in countries %}<option>{{ c }}</option>{% endfor %}</select>
+    <select id="source" aria-label="Source"><option value="">All sources</option>{% for s in sources %}<option>{{ s }}</option>{% endfor %}</select>
+    <select id="site_status" aria-label="Website read"><option value="">Any website status</option>{% for s in statuses %}<option>{{ s }}</option>{% endfor %}</select>
+  </div>
+  <div class="toolbar">
+    <span id="selcount" class="pill">0 rows selected</span>
+    <label class="small" for="bulkfield">Set</label>
+    <select id="bulkfield" aria-label="Field to set"><option value="tags">Tags</option><option value="industry">Industry</option><option value="country">Country</option><option value="notes">Notes</option></select>
+    <label class="small" for="bulkvalue">to</label>
+    <input type="text" id="bulkvalue" placeholder="e.g. Priority, Partner" aria-label="New value">
+    <button class="btn primary" type="button" id="bulkapply">Apply to selected rows</button>
+    <span id="status" class="status" role="status"></span>
+  </div>
+  <div id="grid" class="gridbox"></div>
+  <p class="muted small" id="how"></p>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Try each grid</h2>
+    <ol class="checklist">
+      <li>Scroll fast through all rows; sort by a column; search and filter.</li>
+      <li>Double-click Industry, Country, Tags or Notes to edit; edited cells get an orange underline.</li>
+      <li>Select several rows and use "Apply to selected rows".</li>
+      <li>Copy cells and paste a block, also from Excel (Tabulator only: AG Grid's cell ranges are in its paid edition).</li>
+      <li>Undo an edit with Ctrl+Z (Cmd+Z on the Mac).</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>Licences</h2>
+    <p class="small">Both are MIT licensed and free for our use, including production. AG Grid's Enterprise edition (paid) adds cell ranges, copy/paste, fill handle, grouping and Excel export; Tabulator has ranges and copy/paste free.</p>
+  </div>
+</div>
+{{ config|json_script:"grid-config" }}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const config = JSON.parse(document.getElementById("grid-config").textContent);
+  const $ = (id) => document.getElementById(id);
+  const HOW = {
+    aggrid: "AG Grid: tick the boxes at the left to select rows (shift-click for a block). Double-click a cell to edit.",
+    tabulator: "Tabulator: click and drag (or shift-click) to select a block of cells; Ctrl/Cmd+C and V copy and paste. Double-click a cell to edit.",
+  };
+  let grid = null, timer = null;
+  const status = (t, bad) => { $("status").textContent = t; $("status").style.color = bad ? "var(--bad)" : ""; };
+  const filters = () => ({ q: $("q").value.trim(), country: $("country").value, source: $("source").value, site_status: $("site_status").value });
+
+  function start(engine) {
+    if (grid) grid.destroy();
+    $("grid").innerHTML = "";
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.engine === engine)));
+    $("how").textContent = HOW[engine];
+    $("selcount").textContent = "0 rows selected";
+    grid = DataGrid.create($("grid"), {
+      engine, columns: config.columns, rowsUrl: "{% url 'grid_test_rows' %}", editUrl: "{% url 'grid_test_edit' %}",
+      filters, onStatus: (t) => status(t), onError: (t) => status(t, true),
+      onSelection: (n) => ($("selcount").textContent = `${n} row${n === 1 ? "" : "s"} selected`),
+    });
+  }
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => start(b.dataset.engine)));
+  for (const id of ["country", "source", "site_status"]) $(id).addEventListener("change", () => grid.reload());
+  $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => grid.reload(), 300); });
+
+  $("bulkapply").addEventListener("click", async () => {
+    const ids = grid.selectedIds(), field = $("bulkfield").value;
+    let value = $("bulkvalue").value;
+    if (!ids.length) return status("Select some rows first.", true);
+    if (field === "tags") value = value.split(",").map((v) => v.trim()).filter(Boolean);
+    const res = await fetch("{% url 'grid_test_bulk' %}", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "" },
+      body: JSON.stringify({ ids, field, value, engine: grid.engine }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return status(data.error || "Saving failed.", true);
+    grid.applyValue(ids, field, data.value);
+    status(`Set ${field} on ${data.count} rows.`);
+  });
+  $("reset").addEventListener("click", async () => {
+    const res = await fetch("{% url 'grid_test_reset' %}", { method: "POST", headers: { "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "" } });
+    const data = await res.json().catch(() => ({}));
+    status(res.ok ? `Removed ${data.removed} test edits.` : "Couldn't remove them.", !res.ok);
+    grid.reload();
+  });
+  start("aggrid");
+})();
+</script>
+{% endblock %}

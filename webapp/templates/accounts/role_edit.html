@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}{% if group %}Role {{ group.name }}{% else %}Add a role{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{% if group %}Role {{ group.name }}{% else %}Add a role{% endif %}</h1><a href="{% url 'roles' %}">Back to roles</a></div>
+<form class="card form" method="post">{% csrf_token %}
+  {% include "accounts/_form_fields.html" %}
+  {% if profile.builtin %}<p class="muted small">Built-in roles keep their name.</p>{% endif %}
+  <div class="form-actions"><button class="btn primary" type="submit">Save</button><a class="btn" href="{% url 'roles' %}">Cancel</a></div>
+</form>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% load static assets %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Workspace{% endblock %} · crawl4ai</title>
+<link rel="stylesheet" href="{% asset 'css/app.css' %}">
+<script src="{% static 'vendor/htmx-2.0.11/htmx.min.js' %}" defer></script>
+{% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<div class="shell">
+  <aside class="side">
+    <div class="brand">crawl4ai <span>workspace</span></div>
+    {% for section in menu_sections %}
+    <section>
+      <h3>{{ section.title }}</h3>
+      <nav aria-label="{{ section.title }}">
+        {% for item in section.items %}
+        <a href="{{ item.href }}" class="{% if item.active %}active{% endif %}">{{ item.label }}{% if item.phase %}<span class="soon">phase {{ item.phase }}</span>{% endif %}</a>
+        {% endfor %}
+      </nav>
+    </section>
+    {% endfor %}
+  </aside>
+  <div class="main">
+    <header class="top">
+      <a href="{% url 'my_account' %}">{{ user.get_full_name|default:user.username }}</a>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn link" type="submit">Sign out</button></form>
+    </header>
+    <main class="content">
+      {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

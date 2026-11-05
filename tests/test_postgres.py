@@ -96,3 +96,18 @@ def test_database_env_file(tmp_path, monkeypatch):
     assert os.environ["CRAWL4AI_DATABASE_URL"] == "postgresql://u:pw@server/crawl4ai"
     assert os.environ["CRAWL4AI_READER_URL"] == "from-environment"
     monkeypatch.delenv("CRAWL4AI_DATABASE_URL")       # don't leak into other tests
+
+
+def test_the_web_app_login_owns_schema_app_and_the_reader_cant_see_it(pg_env):
+    postgres.setup()
+    postgres.migrate()
+    with postgres.connect("app", autocommit=True) as con:
+        con.execute("create table app.secrets (pw text)")                  # what Django will do for users
+        assert con.execute("select count(*) from companies.companies").fetchone() == (0,)   # reads the data
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            con.execute("insert into companies.cursors values ('x', 'y', '{}', now())")      # but can't write it
+    with postgres.connect("reader", autocommit=True) as con:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            con.execute("select * from app.secrets")
+    checks = {c.what: c for c in postgres.check()}
+    assert checks["Reader can't see the web app's tables"].ok and checks["PostgreSQL (web app login)"].ok

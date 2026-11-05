@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **planned, not started.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06)**; the grid choice waits for Kanchana to try both. Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -83,6 +83,46 @@ Community and with Tabulator, and judge:
 load a dataset by name, show its fields from the catalog, save an edit, bulk edit, save a view. The pages and
 the server never talk to the grid library directly, so switching grids later (or buying AG Grid Enterprise)
 changes one file.
+
+## Phase 1 results (2026-11-06)
+
+Built in `webapp/` (Django 5.2 LTS, django-htmx, django-axes, Argon2). Database: login `crawl4ai_app` owns schema
+`app` (19 tables after `python -m webapp migrate`) and can read, not write, the collected data; the reader login
+can't see `app`. Run it: `uv run python -m webapp runserver 8060` → http://localhost:8060.
+
+- **Sign-in:** Argon2 passwords (10+ characters, common ones refused), 12-hour sessions, CSRF on every form;
+  5 wrong passwords for a user name from one address lock it for 15 minutes (django-axes).
+- **Roles and menus:** built-in Administrator, Editor, Analyst, Viewer (descriptions in the app); the administrator
+  makes more and ticks which role may open which menu on one page. Menus of later phases already exist (marked
+  "phase N"), so rights can be set up front. Every page checks its right on the server; the Administrator role
+  always keeps the administration menus; an administrator can't deactivate themselves or drop their own role;
+  built-in roles and roles with members can't be deleted; users are deactivated, never deleted.
+- **Audit log:** sign-ins (and failures, lockouts), sign-outs, user and role changes, rights changes, grid test
+  edits; a database trigger refuses UPDATE, DELETE and TRUNCATE on it; screen with filters by person, action, date.
+- **First administrator:** `uv run python -m webapp createadmin` (asks for the password).
+- Tests: `tests/test_webapp.py` (16) on pytest-django + the throwaway PostgreSQL.
+
+### The grid test
+
+`/grid-test/`: the 132,742 companies in both grids, loaded 100 rows at a time from PostgreSQL (≈110–130 ms per
+page, almost all of it the row count; to be made faster in phase 2), with search, filters, sorting, inline
+editing, multi-row selection with bulk edit, and a multiple-choice "Tags" field shown as chips. Test edits go to
+their own table (never the collected data) and the audit log.
+
+| | AG Grid Community 36.2 | Tabulator 6.7 |
+|---|---|---|
+| Speed (132,742 rows, paged) | smooth | smooth |
+| Inline editing | yes | yes (double-click) |
+| Select rows for bulk edit | checkboxes, shift-click | select a block of cells; its rows count as selected |
+| **Select a block of cells, copy, paste (also from Excel)** | **no** (Enterprise only) | **yes, free**; pasting into read-only columns is undone, each pasted cell is saved and audited |
+| Multiple-choice editor | had to write our own (Rich Select is Enterprise) | built in (list with multiselect) |
+| Undo | yes | yes |
+| Dark mode | follows the system | its stylesheet is light only (to theme) |
+| Our code needed | less | more: paste handling, a fixed pixel height (found and fixed: "100%" made it load every page) |
+
+**Leaning:** Tabulator, because spreadsheet-style selection and copy/paste are central to an Airtable-like
+workspace and are free there; AG Grid has more polish but needs the paid edition for exactly those features.
+**Kanchana decides after trying both** (then `datagrid.js` keeps only the chosen engine).
 
 ## How it fits together
 
@@ -259,7 +299,7 @@ app runs next to it during the build (e.g. port 8060).
 
 | # | Phase | Done when |
 |---|---|---|
-| 1 | **Foundation + grid test:** Django project in `webapp/`, schema `app`, login, users, roles, menu rights, admin screens, audit log; the AG Grid vs Tabulator test; the `datagrid.js` wrapper | An admin creates a user and a role; the user signs in and sees only the menus granted; grid chosen with the test's results written down |
+| 1 ✅ | **Foundation + grid test:** Django project in `webapp/`, schema `app`, login, users, roles, menu rights, admin screens, audit log; the AG Grid vs Tabulator test; the `datagrid.js` wrapper | An admin creates a user and a role; the user signs in and sees only the menus granted; grid chosen with the test's results written down |
 | 2 | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
 | 3 | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
 | 4 | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |

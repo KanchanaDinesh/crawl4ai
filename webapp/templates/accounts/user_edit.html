@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}{% if creating %}Add a user{% else %}{{ subject.username }}{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{% if creating %}Add a user{% else %}User {{ subject.username }}{% endif %}</h1><a href="{% url 'users' %}">Back to users</a></div>
+<form class="card form" method="post" autocomplete="off">{% csrf_token %}
+  {% include "accounts/_form_fields.html" %}
+  <div class="form-actions"><button class="btn primary" type="submit">{% if creating %}Add user{% else %}Save{% endif %}</button><a class="btn" href="{% url 'users' %}">Cancel</a></div>
+</form>
+{% endblock %}

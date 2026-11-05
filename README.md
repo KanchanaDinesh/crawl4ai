@@ -260,6 +260,7 @@ run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); s
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               PostgreSQL: connections, setup and checks (postgres.py), tables (schema/), the `python -m warehouse` query tool
+webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids (docs/user-platform-plan.md)
 dashboard/               local web dashboard (python -m dashboard)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)

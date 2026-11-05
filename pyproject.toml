@@ -12,6 +12,10 @@ dependencies = [
     "feedparser>=6.0",
     "pytz>=2026.6",
     "psycopg[binary]>=3.2",
+    "django>=5.2.19,<5.3",
+    "django-htmx>=1.29,<2",
+    "django-axes>=8.3.1,<9",
+    "argon2-cffi>=25.1",
 ]
 
 [tool.uv]
@@ -21,9 +25,13 @@ package = false
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    "pytest-django>=4.14,<5",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "webapp.settings"   # the web app's tests (tests/test_webapp.py); others don't touch Django
+django_find_project = false
+pythonpath = ["."]
 # pytest keeps the temp folders of the last 3 runs on the Mac's own drive (~140 MB); that drive was nearly full
 tmp_path_retention_count = 1

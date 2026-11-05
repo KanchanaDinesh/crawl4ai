@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}{{ item.label }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ item.label }}</h1></div>
+<div class="card"><p>{{ item.description }}</p><p class="muted">This page comes in phase {{ item.phase }} of the plan (docs/user-platform-plan.md). Your role may already open it, so the rights are ready.</p></div>
+{% endblock %}

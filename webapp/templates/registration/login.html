@@ -1,0 +1,14 @@
+{% load static assets %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · crawl4ai</title><link rel="stylesheet" href="{% asset 'css/app.css' %}"></head>
+<body><div class="signin"><form class="card form" method="post">
+  {% csrf_token %}
+  <h1>Sign in</h1>
+  <p class="muted">crawl4ai workspace</p>
+  {% if form.errors %}<p class="errorlist" role="alert">That user name and password don't match. After 5 tries the account waits 15 minutes.</p>{% endif %}
+  <div class="field"><label for="id_username">User name</label><input type="text" name="username" id="id_username" autocomplete="username" required autofocus value="{{ form.username.value|default:'' }}"></div>
+  <div class="field"><label for="id_password">Password</label><input type="password" name="password" id="id_password" autocomplete="current-password" required></div>
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="form-actions"><button class="btn primary" type="submit">Sign in</button></div>
+  <p class="muted small">Forgot your password? Ask an administrator to set a new one.</p>
+</form></div></body></html>

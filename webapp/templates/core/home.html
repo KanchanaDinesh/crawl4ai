@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Home{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Welcome, {{ user.get_short_name|default:user.username }}</h1></div>
+<div class="grid-2">
+  <div class="card">
+    <h2>Your access</h2>
+    <p>Roles: {% for r in roles %}<span class="pill accent">{{ r }}</span> {% empty %}<span class="muted">none yet. Ask an administrator.</span>{% endfor %}{% if user.is_superuser %} <span class="pill ok">full access</span>{% endif %}</p>
+    <p class="muted small">The menu on the left shows only what your roles may open.</p>
+  </div>
+  <div class="card">
+    <h2>What's here now</h2>
+    <p>This is phase 1 of the plan: sign-in, users, roles and menu rights, the audit log, and the grid test. Menu items marked with a phase number come later.</p>
+  </div>
+</div>
+{% endblock %}

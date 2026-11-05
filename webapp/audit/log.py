@@ -1,0 +1,26 @@
+"""record(): write one audit event. Call it in the same transaction as the change it describes."""
+
+from .models import AuditEvent
+
+ACTIONS = {
+    "login": "Signed in", "login_failed": "Failed sign-in", "logout": "Signed out", "locked_out": "Locked out",
+    "user_created": "User created", "user_updated": "User changed", "user_deactivated": "User deactivated",
+    "user_activated": "User activated", "password_set": "Password set", "password_changed": "Own password changed",
+    "role_created": "Role created", "role_updated": "Role changed", "role_deleted": "Role deleted",
+    "rights_changed": "Menu rights changed",
+    "gridtest_edit": "Grid test: cell edited", "gridtest_bulk_edit": "Grid test: rows edited together",
+}
+
+
+def client_ip(request) -> str | None:
+    return request.META.get("REMOTE_ADDR") if request is not None else None
+
+
+def record(request, action: str, summary: str, *, target_type: str = "", target_id: str = "", detail=None,
+           user=None, username: str | None = None) -> AuditEvent:
+    who = user if user is not None else (request.user if request is not None and request.user.is_authenticated
+                                         else None)
+    return AuditEvent.objects.create(
+        user=who, username=username if username is not None else (who.get_username() if who else ""),
+        action=action, target_type=target_type, target_id=str(target_id), summary=summary[:300],
+        detail=detail or {}, ip=client_ip(request))

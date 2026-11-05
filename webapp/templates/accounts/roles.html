@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% block title %}Roles and menu rights{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Roles and menu rights</h1><a class="btn primary" href="{% url 'role_new' %}">Add a role</a></div>
+<div class="table-wrap"><table class="list">
+  <thead><tr><th>Role</th><th>What it's for</th><th>Members</th><th></th></tr></thead>
+  <tbody>{% for g in groups %}
+  <tr><td><strong>{{ g.name }}</strong>{% if g.profile.builtin %} <span class="pill">built in</span>{% endif %}</td>
+      <td>{{ g.profile.description }}</td><td>{{ g.members }}</td>
+      <td><a href="{% url 'role_edit' g.pk %}">Edit</a>
+      {% if not g.profile.builtin and not g.members %}<form method="post" action="{% url 'role_delete' g.pk %}" style="display:inline">{% csrf_token %} · <button class="btn link danger" type="submit">Delete</button></form>{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+
+<form method="post" action="{% url 'rights_save' %}" class="card">{% csrf_token %}
+  <h2>Which role may open which menu</h2>
+  <p class="muted small">Tick a box to let a role open that menu. A user's rights add up over all their roles. The Administrator role always keeps the administration menus.</p>
+  <div class="table-wrap"><table class="list matrix">
+    <thead><tr><th>Menu</th>{% for g in groups %}<th>{{ g.name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% regroup matrix by menu.section as sections %}
+    {% for s in sections %}
+      <tr class="sec"><td colspan="{{ groups|length|add:1 }}">{% if s.grouper == "admin" %}Administration{% else %}Work{% endif %}</td></tr>
+      {% for row in s.list %}
+      <tr><td>{{ row.menu.label }}{% if row.menu.phase %} <span class="muted small">(phase {{ row.menu.phase }})</span>{% endif %}</td>
+        {% for c in row.cells %}<td><input type="checkbox" name="r_{{ row.menu.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may open {{ row.menu.label }}" {% if c.on %}checked{% endif %}{% if row.menu.section == "admin" and c.group.name == "Administrator" %} disabled checked{% endif %}></td>{% endfor %}
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="form-actions"><button class="btn primary" type="submit">Save menu rights</button></div>
+</form>
+{% endblock %}

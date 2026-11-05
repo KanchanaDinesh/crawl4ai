@@ -1,0 +1,8 @@
+{% load static assets %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account locked · crawl4ai</title><link rel="stylesheet" href="{% asset 'css/app.css' %}"></head>
+<body><div class="signin"><div class="card">
+  <h1>Too many tries</h1>
+  <p>This account is locked for 15 minutes after 5 wrong passwords. Try again later, or ask an administrator to set a new password.</p>
+  <p><a href="{% url 'login' %}">Back to sign in</a></p>
+</div></div></body></html>

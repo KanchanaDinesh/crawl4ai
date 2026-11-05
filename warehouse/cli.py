@@ -148,7 +148,8 @@ def pg_setup() -> None:
         sys.exit(f"Setup failed: {e}")
     n = names()
     print("\n".join(f"  {d}" for d in done) if done else "  Everything was already there (grants re-applied).")
-    print(f"Database {n['database']}: writer login {n['writer']}, read-only login {n['reader']}.")
+    print(f"Database {n['database']}: writer login {n['writer']}, read-only login {n['reader']}, "
+          f"web app login {n['app']}.")
     pg_migrate()
     print()
     if not pg_check():

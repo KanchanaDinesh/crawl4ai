@@ -4,15 +4,18 @@ Why: DuckDB allows one writer per file, and while a run writes nobody else can r
 analysis had to wait for runs. In PostgreSQL collectors write and many people read at the same time.
 
 One database (`crawl4ai`), one schema per tool, named like the prefixes `warehouse sql` already uses:
-news, tech, markets, vehicles, companies, scrapers. Two logins:
+news, tech, markets, vehicles, companies, scrapers; plus `app` for the web app's own tables (users, roles, menus,
+audit log: docs/user-platform-plan.md). Three logins:
 
-    crawl4ai           collectors and setup: create tables, read, write (owns the database and the schemas)
+    crawl4ai           collectors and setup: create tables, read, write (owns the database and the data schemas)
     crawl4ai_reader    dashboard, analysis, other users: read only, and a query stops after 30 s
+    crawl4ai_app       the web app (webapp/, Django): owns schema `app`, reads the data schemas
 
 Where to connect (environment, or KEY=value lines in .local/database.env, which git ignores):
 
     CRAWL4AI_DATABASE_URL   writer   default postgresql://crawl4ai@localhost:5432/crawl4ai
     CRAWL4AI_READER_URL     reader   default postgresql://crawl4ai_reader@localhost:5432/crawl4ai
+    CRAWL4AI_APP_URL        web app  default postgresql://crawl4ai_app@localhost:5432/crawl4ai
     CRAWL4AI_ADMIN_URL      setup    default postgresql://localhost:5432/postgres  (your own login; it creates
                                      the logins and the database, so it must be allowed to)
 
@@ -33,6 +36,7 @@ import project_paths
 project_paths.apply_local_env()
 
 SCHEMAS = ("news", "tech", "markets", "vehicles", "companies", "scrapers")
+APP_SCHEMA = "app"                         # the web app's own tables; never readable by the reader login
 EXTENSIONS = ("pg_trgm", "unaccent")      # pg_trgm: fast "name contains" search; unaccent: search ignoring accents
 READER_STATEMENT_TIMEOUT = "30s"
 LOW_DISK_GB = 2.0
@@ -41,8 +45,10 @@ DEFAULT_URLS = {
     "writer": "postgresql://crawl4ai@localhost:5432/crawl4ai",
     "reader": "postgresql://crawl4ai_reader@localhost:5432/crawl4ai",
     "admin": "postgresql://localhost:5432/postgres",
+    "app": "postgresql://crawl4ai_app@localhost:5432/crawl4ai",
 }
-ENV_NAMES = {"writer": "CRAWL4AI_DATABASE_URL", "reader": "CRAWL4AI_READER_URL", "admin": "CRAWL4AI_ADMIN_URL"}
+ENV_NAMES = {"writer": "CRAWL4AI_DATABASE_URL", "reader": "CRAWL4AI_READER_URL", "admin": "CRAWL4AI_ADMIN_URL",
+             "app": "CRAWL4AI_APP_URL"}
 
 
 class DatabaseError(RuntimeError):
@@ -65,11 +71,12 @@ def _where(conninfo: str) -> str:
 
 
 def names() -> dict:
-    """The database and login names, taken from the writer and reader URLs."""
-    w, r = _parts(url("writer")), _parts(url("reader"))
+    """The database and login names, taken from the writer, reader and app URLs."""
+    w, r, a = _parts(url("writer")), _parts(url("reader")), _parts(url("app"))
     return {"database": w.get("dbname") or "crawl4ai", "writer": w.get("user") or "crawl4ai",
-            "reader": r.get("user") or "crawl4ai_reader",
-            "writer_password": w.get("password"), "reader_password": r.get("password")}
+            "reader": r.get("user") or "crawl4ai_reader", "app": a.get("user") or "crawl4ai_app",
+            "writer_password": w.get("password"), "reader_password": r.get("password"),
+            "app_password": a.get("password")}
 
 
 def connect(role: str = "writer", conninfo: str | None = None, **kwargs):
@@ -104,7 +111,7 @@ def setup(admin_url: str | None = None) -> list[str]:
     admin = admin_url or url("admin")
     done: list[str] = []
     with connect(conninfo=admin, autocommit=True) as con:
-        for key in ("writer", "reader"):
+        for key in ("writer", "reader", "app"):
             role = n[key]
             if not con.execute("select 1 from pg_roles where rolname = %s", [role]).fetchone():
                 con.execute(sql.SQL("create role {} login").format(sql.Identifier(role)))
@@ -120,6 +127,7 @@ def setup(admin_url: str | None = None) -> list[str]:
     db_admin = _with_dbname(admin, n["database"])
     with connect(conninfo=db_admin, autocommit=True) as con:
         W, R, D = sql.Identifier(n["writer"]), sql.Identifier(n["reader"]), sql.Identifier(n["database"])
+        A = sql.Identifier(n["app"])
         for ext in EXTENSIONS:
             if not con.execute("select 1 from pg_extension where extname = %s", [ext]).fetchone():
                 con.execute(sql.SQL("create extension {}").format(sql.Identifier(ext)))
@@ -134,7 +142,19 @@ def setup(admin_url: str | None = None) -> list[str]:
             # tables the writer makes later are readable too, without running setup again
             con.execute(sql.SQL("alter default privileges for role {} in schema {} grant select on tables to {}")
                         .format(W, S, R))
+            # the web app reads every dataset too (editing rights come per column, later: user-platform plan)
+            con.execute(sql.SQL("grant usage on schema {} to {}").format(S, A))
+            con.execute(sql.SQL("grant select on all tables in schema {} to {}").format(S, A))
+            con.execute(sql.SQL("alter default privileges for role {} in schema {} grant select on tables to {}")
+                        .format(W, S, A))
+        # the web app's own schema: users, roles, menus, audit log (Django creates the tables in it)
+        if not con.execute("select 1 from pg_namespace where nspname = %s", [APP_SCHEMA]).fetchone():
+            con.execute(sql.SQL("create schema {} authorization {}").format(sql.Identifier(APP_SCHEMA), A))
+            done.append(f"created schema {APP_SCHEMA} (owner {n['app']})")
+        con.execute(sql.SQL("alter role {} in database {} set search_path = {}, public").format(
+            A, D, sql.Identifier(APP_SCHEMA)))
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, R))
+        con.execute(sql.SQL("grant connect on database {} to {}").format(D, A))
         con.execute(sql.SQL("revoke create on schema public from public"))
         # the reader can never change anything, and a heavy query can't keep the server busy for long
         con.execute(sql.SQL("alter role {} in database {} set default_transaction_read_only = on").format(R, D))
@@ -199,7 +219,29 @@ def check() -> list[Check]:
         except psycopg.Error as e:          # e.g. no permission: also can't write, but say what happened
             rcon.rollback()
             out.append(Check(True, "Reader login is read-only", f"{n['reader']} ({type(e).__name__})"))
-    return out + _disk_check()
+        # the web app's tables (users, password hashes) are never readable by the reader login
+        app_readable = rcon.execute("""select coalesce((select has_schema_privilege(current_user, oid, 'usage')
+                                       from pg_namespace where nspname = %s), false)""", [APP_SCHEMA]).fetchone()[0]
+        out.append(Check(not app_readable, "Reader can't see the web app's tables",
+                         "ok" if not app_readable else f"{n['reader']} can use schema {APP_SCHEMA}: remove that grant"))
+    return out + _app_check(n) + _disk_check()
+
+
+def _app_check(n: dict) -> list[Check]:
+    """The web app's login: connects, owns schema `app`, can read the data."""
+    try:
+        acon = connect("app", autocommit=True)
+    except DatabaseError as e:
+        return [Check(False, "PostgreSQL (web app login)", str(e))]
+    with acon:
+        owner = acon.execute("select pg_get_userbyid(nspowner) from pg_namespace where nspname = %s",
+                             [APP_SCHEMA]).fetchone()
+        if not owner or owner[0] != n["app"]:
+            return [Check(False, "PostgreSQL (web app login)", f"schema {APP_SCHEMA} missing or not owned by "
+                          f"{n['app']} (run: uv run python -m warehouse setup)")]
+        tables = acon.execute("select count(*) from pg_tables where schemaname = %s", [APP_SCHEMA]).fetchone()[0]
+        return [Check(True, "PostgreSQL (web app login)", f"{n['app']} owns schema {APP_SCHEMA} ({tables} tables"
+                      + ("" if tables else "; create them: uv run python -m webapp migrate") + ")")]
 
 
 def _disk_check() -> list[Check]:

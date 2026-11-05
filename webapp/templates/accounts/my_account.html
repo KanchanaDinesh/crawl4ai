@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}My account{% endblock %}
+{% block content %}
+<div class="page-head"><h1>My account</h1></div>
+<div class="grid-2">
+  <div class="card">
+    <h2>{{ user.get_full_name|default:user.username }}</h2>
+    <p class="muted">User name <span class="mono">{{ user.username }}</span>{% if user.email %} · {{ user.email }}{% endif %}</p>
+    <p>Roles: {% for g in user.groups.all %}<span class="pill accent">{{ g.name }}</span> {% empty %}<span class="muted">none</span>{% endfor %}</p>
+  </div>
+  <form class="card form" method="post">{% csrf_token %}
+    <h2>Change my password</h2>
+    {% include "accounts/_form_fields.html" %}
+    <div class="form-actions"><button class="btn primary" type="submit">Change password</button></div>
+  </form>
+</div>
+{% endblock %}

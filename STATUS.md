@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a local web dashboard. Collectors write while the
 dashboard and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 132 tests pass.
+All 149 tests pass.
 
 ## Parts and how to run them
 
@@ -30,6 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060 | Phase 1 of the user platform: sign-in, users, roles, menu rights, audit log, grid test. Django; schema `app`. The dashboard below stays until phase 3 |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -366,6 +367,20 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     main tables with history and **rule A** (the newest change wins: the collector overwrites a correction only
     when the source itself changed). Collectors stay as they are. 8 phases; phase 1 = Django foundation (login,
     users, roles, menu rights, admin, audit) + the grid test.
+46. **User platform phase 1 built (2026-11-06)** in `webapp/` (Django 5.2 LTS + django-htmx + django-axes + Argon2;
+    pinned AG Grid Community 36.2.0, Tabulator 6.7.1, HTMX 2.0.11 in `webapp/static/vendor/`, MIT/0BSD).
+    - `warehouse setup` now also makes login `crawl4ai_app` (CRAWL4AI_APP_URL), which owns schema `app` and reads the
+      data schemas; the reader can't see `app` (pg-check says so). `python -m webapp migrate` made 19 tables.
+    - Roles Administrator / Editor / Analyst / Viewer, menu rights on one page, lockout after 5 wrong passwords,
+      append-only audit log (database trigger), `python -m webapp createadmin`. Details and safety rules:
+      `docs/user-platform-plan.md` → "Phase 1 results".
+    - Grid test at `/grid-test/` (132,742 companies, both grids). Found and fixed on the way: Tabulator's height
+      "100%" made it load every page; its paste needed our own handling. Leaning to **Tabulator** (free cell ranges
+      and copy/paste); **Kanchana to try both and decide**.
+    - Two test accounts (`test-admin`, `test-viewer`) were made for the browser check; their passwords are in
+      `.local/webapp-test-accounts.txt` (git-ignored). Deactivate them on the Users page once Kanchana has his own.
+    - Tests: 16 web app tests (pytest-django on the throwaway PostgreSQL) + 1 database test; 149 in all.
+    - **Next:** Kanchana runs `createadmin`, tries the grid test and picks the grid; then phase 2 (catalog + explore).
 
 ## Open issues and things to watch
 

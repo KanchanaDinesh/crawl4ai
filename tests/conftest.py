@@ -16,7 +16,7 @@ os.environ["SCRAPERS_OUTPUT_DIR"] = str(_TMP / "output")
 os.environ["CRAWL4_AI_BASE_DIRECTORY"] = str(_TMP / "crawl4ai")
 # Nor the real PostgreSQL: unless a test asks for the throwaway one (the pg_env fixture), every database address
 # points nowhere, so a test that forgets it fails ("Can't reach PostgreSQL") instead of writing to real data.
-for _name in ("CRAWL4AI_DATABASE_URL", "CRAWL4AI_READER_URL", "CRAWL4AI_ADMIN_URL"):
+for _name in ("CRAWL4AI_DATABASE_URL", "CRAWL4AI_READER_URL", "CRAWL4AI_ADMIN_URL", "CRAWL4AI_APP_URL"):
     os.environ[_name] = "postgresql://tests-use-pg_env@127.0.0.1:1/none"
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -135,14 +135,34 @@ def pg_env(pg_server, monkeypatch):
         "admin": pg_server,
         "writer": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"w_{tag}"),
         "reader": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"r_{tag}"),
+        "app": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"a_{tag}"),
     }
     monkeypatch.setenv("CRAWL4AI_ADMIN_URL", urls["admin"])
     monkeypatch.setenv("CRAWL4AI_DATABASE_URL", urls["writer"])
     monkeypatch.setenv("CRAWL4AI_READER_URL", urls["reader"])
+    monkeypatch.setenv("CRAWL4AI_APP_URL", urls["app"])
     yield urls
     import psycopg
     from psycopg import sql
     with psycopg.connect(pg_server, autocommit=True) as con:      # a database per test adds up: drop it again
         con.execute(sql.SQL("drop database if exists {} with (force)").format(sql.Identifier(f"c4_{tag}")))
-        for role in (f"w_{tag}", f"r_{tag}"):
+        for role in (f"w_{tag}", f"r_{tag}", f"a_{tag}"):
             con.execute(sql.SQL("drop role if exists {}").format(sql.Identifier(role)))
+
+
+# --- Django (the web app, webapp/) -----------------------------------------------------------------------------
+# pytest-django makes its own test database from these settings: the throwaway server, as its superuser. New
+# databases there are copied from template1, so template1 gets what the app expects to find: schema `app` (its
+# tables) and the pg_trgm extension (used by the data schemas the grid test reads).
+
+@pytest.fixture(scope="session")
+def django_db_modify_db_settings(pg_server):
+    import psycopg
+    from django.conf import settings
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    base = conninfo_to_dict(pg_server)
+    with psycopg.connect(make_conninfo(pg_server, dbname="template1"), autocommit=True) as con:
+        con.execute("create schema if not exists app")
+        con.execute("create extension if not exists pg_trgm")
+    settings.DATABASES["default"].update({"NAME": "crawl4ai_django", "USER": base["user"], "PASSWORD": "",
+                                          "HOST": base["host"], "PORT": str(base["port"])})

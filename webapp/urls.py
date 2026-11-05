@@ -1,0 +1,24 @@
+"""All pages of the web app. Each page checks its own menu right (webapp/accounts/rights.py)."""
+
+from django.contrib import admin
+from django.urls import include, path
+
+from webapp.core import views as core
+
+urlpatterns = [
+    path("", core.home, name="home"),
+    path("", include("webapp.accounts.urls")),
+    path("admin/audit/", include("webapp.audit.urls")),
+    path("grid-test/", include("webapp.gridtest.urls")),
+    # pages of later phases: the menu items exist now, so rights can be set up front
+    path("datasets/", core.coming("datasets"), name="datasets"),
+    path("dashboard/", core.coming("dashboard"), name="dashboard"),
+    path("my-tables/", core.coming("my_tables"), name="my_tables"),
+    path("charts/", core.coming("charts"), name="charts"),
+    path("reports/", core.coming("reports"), name="reports"),
+    path("assistant/", core.coming("assistant"), name="assistant"),
+    path("django-admin/", admin.site.urls),
+]
+
+handler403 = "webapp.core.views.forbidden"
+handler404 = "webapp.core.views.not_found"
