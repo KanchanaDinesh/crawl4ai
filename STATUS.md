@@ -257,8 +257,20 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       1.5 min = 535 websites read (414 ok; most with social links), 51 refusals kept out of the results. update takes
       turns between countries (otherwise the US's 25,000 websites would keep Sri Lanka waiting).
 
+35. **Decision (2026-11-05): move from DuckDB to PostgreSQL, everything, no sync.** Kanchana's reason: while a run
+    writes to a DuckDB file nobody can read it, so the dashboard and analysis wait during runs, and only one person
+    can use the data. PostgreSQL lets collectors write and many users read at the same time. Plan, steps and
+    checks: **`docs/postgres-migration.md`** (not started). Order: 1) database `crawl4ai` on the Mac's PostgreSQL 18
+    (Homebrew, already running, has other projects' databases too); 2) copy all DuckDB data (~145,000 rows);
+    3) switch tool by tool (companies first) with its dashboard tab; 4) clean up. Later: a server with 100+ GB,
+    per-section schedules, the GLEIF full file (3.5M companies, downloads in ~35 s; no websites in it, only
+    ~21,600 get one through Wikidata's LEI links).
+
 ## Open issues and things to watch
 
+- **PostgreSQL migration planned (item 35).** Until it's done, DuckDB is still the live database for every tool.
+  The Mac's own drive had only 1.1 GB free (2026-11-05), where Homebrew keeps PostgreSQL's data: fine for today's
+  data, not for the GLEIF full file.
 
 - **Browser crashes in tech intel (2026-11-03), cause not known yet.** In Kanchana's `./run_all.sh` at 05:11 the
   browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the
