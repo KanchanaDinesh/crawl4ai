@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "webapp.gridtest",
     "webapp.catalog",
     "webapp.explore",
+    "webapp.insights",
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,2 @@
+{% load insights_ui %}{% for r in movers %}{% symbol_url r as href %}<div class="news-item click" tabindex="0" hx-get="{{ href }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']"><b>{{ r.symbol }}</b> {{ r.change_pct|pct }} <span class="muted small">{{ r.name|default:""|slice:":32" }} · {{ r.price|price:r.asset_class }}</span></div>
+{% empty %}<div class="muted small">No data.</div>{% endfor %}

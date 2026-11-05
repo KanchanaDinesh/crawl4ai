@@ -1,0 +1,2 @@
+{% load insights_ui %}{% if parts %}<div class="stack">{% for p in parts %}<i class="tone-{{ p.tone }}" style="width:{{ p.share|stringformat:".1f" }}%" title="{{ p.label }}: {{ p.n }}"></i>{% endfor %}</div>
+<div class="legend">{% for p in parts %}<span><i class="tone-{{ p.tone }}"></i>{{ p.label }} <b>{{ p.n|num }}</b> <span class="muted">{{ p.pct }}%</span></span>{% endfor %}</div>{% else %}<div class="muted small">No data yet.</div>{% endif %}

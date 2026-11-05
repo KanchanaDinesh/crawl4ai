@@ -1,0 +1,10 @@
+{% load insights_ui %}{% for r in rows %}<tr class="click" tabindex="0" hx-get="{% url 'insights_company' r.id %}" hx-target="#drawer-body" hx-trigger="click[!target.closest('a')], keyup[key=='Enter'&&!target.closest('a')]">
+  <td class="num muted">{{ r.n }}</td>
+  <td class="site"><div class="nm">{{ r.name }}</div>{% if r.website %}<div>{% outlink r.website r.domain|default:r.website %}</div>{% endif %}</td>
+  <td class="nowrap" title="{{ r.country_name|default:'' }}">{{ r.country|default:"–" }}</td>
+  <td class="small"><div class="ds" style="max-width:30ch" title="{{ r.industry|default:'' }}">{{ r.industry|default:"" }}</div></td>
+  <td>{{ r.status_label|pill }}</td>
+  <td class="nowrap small">{{ r.social|social_links }}{% if r.people %} <span title="people named on its site">👤{{ r.people }}</span>{% endif %}{% if r.employees %} <span class="muted" title="employees, as the site says">{{ r.employees|stringformat:"s"|slice:":18" }}</span>{% endif %}</td>
+  <td class="small nowrap">{{ r.source_label }}</td></tr>
+{% empty %}<tr><td colspan="7"><div class="empty">No companies match these filters.</div></td></tr>{% endfor %}
+{% if more %}<tr class="more-row" hx-get="{{ more }}" hx-trigger="click, loadmore" hx-swap="outerHTML" hx-sync="this:drop"><td colspan="7"><button class="btn" type="button">Load more</button></td></tr>{% endif %}

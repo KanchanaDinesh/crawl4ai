@@ -1,0 +1,1 @@
+<select name="days" data-reload="1" title="Period" aria-label="Period">{% for n, label in periods %}<option value="{{ n }}"{% if n == days %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>

@@ -1,0 +1,1 @@
+{% load insights_ui %}<span class="fchips"{% if chips_id %} id="{{ chips_id }}"{% endif %}>{% for c in chips %}<label class="fchip"><input type="radio" name="{{ name }}" value="{{ c.code }}"{% if c.code == value %} checked{% endif %}>{{ c.name }}{% if c.n != None %}<small>{{ c.n|num }}</small>{% endif %}</label>{% endfor %}</span>

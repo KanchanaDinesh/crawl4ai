@@ -329,17 +329,22 @@ def test_update_reads_websites_and_backs_off_on_refusals(store):
                              "where id = 'cse:ACME.N0000'").fetchone()[0] == "ok"
 
 
-# ── dashboard ───────────────────────────────────────────────────────────
-def test_dashboard_companies_tab(tmp_path, monkeypatch, pg_env):
+# ── dashboard ───────────────────────────────────────────────────────────────────
+@pytest.mark.django_db
+def test_dashboard_companies_tab(tmp_path, monkeypatch, pg_env, client):
+    import json
+    from django.contrib.auth.models import Group, User
+    from django.urls import reverse
     from warehouse import postgres
+    from webapp.insights import queries
+    from webapp.insights.common import Reader
     postgres.setup()
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("COMPANIES_DATA_DIR", raising=False)
     import importlib
     import project_paths
     import warehouse
-    import dashboard.server as server
-    for mod in (project_paths, warehouse, server):
+    for mod in (project_paths, warehouse):
         importlib.reload(mod)
     s = CompanyStore()
     s.upsert_companies([company("wikidata", "Q1", "Acme Inc", "US", "https://acme.com", "retail", type="company"),
@@ -352,23 +357,35 @@ def test_dashboard_companies_tab(tmp_path, monkeypatch, pg_env):
     s.set_cursor("gleif", "US", {"done_at": None})
     s.record_run("collect", "2026-11-05T00:00:00Z", 3.0, {"added": 4, "total": 4, "sources": {"gleif": {"refused": "GLEIF said 429"}}})
     s.close()
-    server._cache.clear()
-    from test_dashboard import call
-    summary, all_, lk, linkedin, search, detail, page_ = call(
-        server, "/api/companies/summary", "/api/companies/list", "/api/companies/list?country=lk",
-        "/api/companies/list?status=linkedin", "/api/companies/list?q=keells", "/api/companies/company/wikidata:Q1", "/")
-    c = summary["data"]["counts"]
+    with Reader() as db:
+        summary = db.get(queries.companies_summary)
+        all_ = db.get(queries.companies_list)
+        lk = db.get(queries.companies_list, country="LK")
+        linkedin = db.get(queries.companies_list, status="linkedin")
+        search = db.get(queries.companies_list, q="keells")
+        d = db.get(queries.company_detail, "wikidata:Q1")
+    c = summary["counts"]
     assert (c["companies"], c["with_website"], c["sites_ok"], c["countries"]) == (4, 3, 1, 2)
-    assert summary["data"]["by_country"][0]["name"] in ("United States", "Sri Lanka")
-    assert summary["data"]["social"] == [{"platform": "linkedin", "n": 1}]
-    assert summary["data"]["runs"][0]["problems"] == "gleif: GLEIF said 429"
-    assert all_["data"]["total"] == 4 and all_["data"]["items"][0]["site_status"] == "ok"   # websites read first
-    assert lk["data"]["total"] == 2 and linkedin["data"]["total"] == 2                    # both acme.com records
-    assert search["data"]["items"][0]["name"] == "JOHN KEELLS HOLDINGS PLC"
-    d = detail["data"]
+    assert summary["by_country"][0]["name"] in ("United States", "Sri Lanka")
+    assert summary["social"] == [{"platform": "linkedin", "n": 1}]
+    assert summary["runs"][0]["problems"] == "gleif: GLEIF said 429"
+    assert all_["total"] == 4 and all_["items"][0]["site_status"] == "ok"      # websites read first
+    assert lk["total"] == 2 and linkedin["total"] == 2                         # both acme.com records
+    assert search["items"][0]["name"] == "JOHN KEELLS HOLDINGS PLC"
     assert d["company"]["extra"] == {"type": "company"} and d["site"]["people"][0]["name"] == "A B"
     assert [x["id"] for x in d["same_website"]] == ["gleif:L1"]
-    assert 'data-view="companies"' in page_ and 'id="view-companies"' in page_
+
+    user = User.objects.create_user("ada", password="correct-horse-battery-9")
+    user.groups.set(Group.objects.filter(name="Administrator"))
+    client.force_login(user)
+    html = client.get(reverse("insights_companies")).content.decode()
+    assert "Acme Inc" in html and "United States" in html and "GLEIF said 429" in html and "4 · click a row for details" in html
+    rows = client.get(reverse("insights_company_rows"), {"country": "lk"})
+    assert rows.content.decode().count('<tr class="click"') == 2
+    assert json.loads(rows["HX-Trigger"])["listCount"].startswith("2 · ") and rows["HX-Push-Url"].endswith("?country=LK")
+    panel = client.get(reverse("insights_company", args=["wikidata:Q1"])).content.decode()
+    assert "Acme Inc" in panel and "A B" in panel and "Same website in other records" in panel and "Type (Wikidata)" in panel
+    assert "Not found." in client.get(reverse("insights_company", args=["nope"])).content.decode()
 
 
 def test_a_403_is_reported_as_http_403_not_as_a_timeout():
@@ -414,11 +431,3 @@ def test_cli_show_and_stats(tmp_path, monkeypatch, capsys, pg_env):
     assert "JOHN KEELLS" in out and "Acme" not in out and "1 of 1 companies" in out
     main(["stats"])
     assert "2 companies, 2 with a website" in capsys.readouterr().out
-
-
-def test_dashboard_says_what_to_do_when_postgres_is_down(monkeypatch):
-    import dashboard.server as server
-    from dashboard import queries
-    monkeypatch.setenv("CRAWL4AI_READER_URL", "postgresql://nobody@127.0.0.1:1/crawl4ai")
-    out = server._query("companies", queries.companies_summary, "test_down")
-    assert out["data"] is None and "Can't reach PostgreSQL" in out["error"] and "brew services start" in out["error"]

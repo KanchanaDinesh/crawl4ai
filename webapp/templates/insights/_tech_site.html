@@ -1,0 +1,22 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
+<h2>{{ name }}</h2>
+<div>{% outlink url %} {% if q.status %}{{ q.status|pill }}{% else %}{{ "not checked"|pill }}{% endif %}</div>
+{% if description %}<p>{{ description }}</p>{% endif %}
+<h4>Details</h4><div class="kv">
+  <div>Category</div><div>{{ q.category|default:"—" }}{% if q.score %} · score {{ q.score }}{% endif %}</div>
+  <div>Status reason</div><div>{{ q.reason|default:"—" }}</div>
+  <div>Seen online</div><div>{% if c.signal_at %}{{ c.signal_at|when }}{% else %}{{ c.discovered_at|when }}{% endif %}</div>
+  <div>Found by us</div><div>{{ c.discovered_at|when }}</div>
+  <div>Registered</div><div>{% if reg.registered_at %}{{ reg.registered_at|day }}{% if reg.registrar %} · {{ reg.registrar }}{% endif %}{% elif reg.error %}unknown ({{ reg.error }}){% else %}unknown{% endif %}</div>
+  <div>Source</div><div>{{ c.source|default:"" }}{% if detail.title %} · {% if detail.hn_url %}{% outlink detail.hn_url detail.title %}{% else %}{{ detail.title }}{% endif %}{% endif %}{% if detail.cert_name %} · cert {{ detail.cert_name }}{% endif %}</div>
+</div>
+{% if p %}
+<h4>Tech stack</h4><div>{% for t in p.tech_stack %}<span class="tag">{{ t }}</span>{% empty %}<span class="muted">none detected</span>{% endfor %}</div>
+<h4>Signals</h4><div>{% for t in signals %}<span class="tag">{{ t }}</span>{% empty %}<span class="muted">none</span>{% endfor %}</div>
+<h4>Key pages</h4><div>{% for k, u in key_pages %}<div>{{ k }}: {% outlink u %}</div>{% empty %}<span class="muted">none found</span>{% endfor %}</div>
+{% if p.keywords %}<h4>Keywords</h4><div>{% for k in p.keywords %}<span class="tag">{{ k }}</span>{% endfor %}</div>{% endif %}
+{% if social and not company %}<h4>Social</h4><div>{% for k, u in social %}{% outlink u k %}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+{% else %}<h4>Profile</h4><div class="muted">Not profiled yet{% if q.status == "qualified" %} (run the profile stage){% else %} (only qualified sites are profiled){% endif %}.</div>{% endif %}
+{% include "insights/_company_facts.html" with co=company %}
+<h4>Changes</h4>{% for x in changes %}<div>{{ x.detected_at|when }} · {{ x.text }}</div>{% empty %}<div class="muted">None detected.</div>{% endfor %}
+<h4>Check history</h4><table class="plain">{% for h in checks %}<tr><td class="nowrap">{{ h.checked_at|when }}</td><td>{{ h.status|pill }}</td><td class="small">{{ h.reason }}</td></tr>{% endfor %}</table>

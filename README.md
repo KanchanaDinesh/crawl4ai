@@ -18,8 +18,9 @@ The parts:
   See [companies/README.md](companies/README.md). Quick start: `uv run python -m companies collect --max-minutes 5`.
 - **`briefing/`**: the day's text summary and a 30-second video made from all the data, offline (no AI, no tokens).
   See [briefing/README.md](briefing/README.md). Quick start: `uv run python -m briefing run`.
-- **`dashboard/`**: a local web dashboard for World News, Tech Intel, Markets and Vehicles, reading live from the databases.
-  `uv run python -m dashboard --open` (see [Dashboard](#dashboard)).
+- **`webapp/`**: the web app (Django): sign-in, roles, every dataset in a grid, and the dashboard for World News, Tech Intel,
+  Markets, Vehicles and Companies, reading live from the database.
+  `uv run python -m webapp runserver 8060` (see [Dashboard](#dashboard)).
 
 All of them use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
@@ -105,7 +106,7 @@ Other schedule commands: `every 2h` (default steps), `daily 07:30 19:30 [--profi
 - **One lock per tool:** jobs can overlap safely. If a step's tool is still busy (say the hourly tech run is
   profiling when the 15-minute run starts), that step is skipped for this run, not failed, and the other steps run.
 - **Logs:** `logs/run-<date>-<time>-<profile>.log` (`logs/latest.log` is the newest), one summary line per run in
-  `logs/history.log`, listener output in `logs/watch.log`. The dashboard header shows the last run; hover for the
+  `logs/history.log`, listener output in `logs/watch.log`. The top of the dashboard shows the last run; hover for the
   history. Run logs older than 30 days are deleted.
 - **The listener never opens the database.** It queues new domains in `data/techintel/stream/pending.jsonl`, and
   the next `tech_quick` adds them. If the stream drops, it reconnects (waiting up to 10 minutes between attempts).
@@ -134,15 +135,19 @@ kept running by a cron check every 5 minutes and restarted at boot.
 ## Dashboard
 
 ```bash
-uv run python -m dashboard --open        # http://localhost:8050
+uv run python -m webapp runserver 8060   # then open http://localhost:8060/dashboard/ and sign in
 ```
 
-- **Full screen:** the page uses the whole width of the window; the **⛶** button (or the **F** key) switches the
-  browser to real full-screen mode. Charts are plain SVG drawn by the page (no library, works offline); hover
-  a line chart to see the values.
+The dashboard is a part of the web app (`webapp/insights/`): one page per tab, on the **Dashboard** menu. A role opens
+a tab when it has that menu and the right to see the tab's main dataset (Catalog → Dataset rights).
+
+- **Filters are in the address:** a filtered page can be reloaded, bookmarked and sent to a colleague.
+- **Full screen:** the **⛶** button (or the **F** key) switches to real full-screen mode, without the side menu. Charts
+  over time are Plotly (pinned in `webapp/static/vendor/`, works offline): hover to see the values, drag a line
+  chart to zoom, double-click to zoom back. Ranked lists stay simple bars, and clicking one of them can filter the list.
 - **World News:** headlines newest first with NEW and tech badges; filters for period, country/group, source,
   tech only, new in the last run, and search. Side panels show headlines per day, **topics per day** (tech,
-  crypto, markets), **when news is published** (by hour, your time), per country, top sources, **source health**
+  crypto, markets), **when news is published** (by hour, Sri Lanka time), per country, top sources, **source health**
   (which sites failed, and how many runs in a row) and recent runs.
 - **Markets:** cards with sparklines; **Compare**: any instruments on one chart as % change over 1 week, 1 month
   or 3 months, with quick picks (world indices, Sri Lanka, gold/silver/oil, safe havens vs risk, crypto);
@@ -167,10 +172,11 @@ uv run python -m dashboard --open        # http://localhost:8050
   period, status, category, source and search. **Click a row** for the full profile: tech stack, signals, key
   pages, changes and check history. Side panels show tech stack, sources, recent changes and the pipeline's runs.
 - Website links open in a new tab. Optional auto-refresh every minute. After an update the page always loads the
-  new script (no stale browser cache), but the server itself must be restarted.
-- The databases are opened only for each query, so the dashboard never blocks a collection run. While a run
-  is writing, it shows the last loaded data with a notice.
-- It listens on `127.0.0.1` (this computer only). Use `--port` to change the port.
+  new script (no stale browser cache).
+- Pages read with the read-only login, so they never wait for a collection run and never block one. While a run is
+  saving, they show what was saved before it.
+- `runserver 8060` listens on this computer only. **The server restarts by itself after a code change**, except
+  with `--noreload`.
 
 ## Testing everything
 
@@ -185,12 +191,12 @@ uv run python -m techintel collect                  # 3. find and store new tech
 uv run python -m techintel update --limit 30         #    profile them and re-check known ones (browser)
 uv run python -m markets run                         #    stocks, indices, gold/silver, FX, crypto top 100
 uv run python -m warehouse info                      # 4. check the databases filled up
-uv run python -m dashboard --open                    # 5. look at it all in the browser
+uv run python -m webapp runserver 8060               # 5. look at it all: http://localhost:8060/dashboard/
 ```
 
 Or run steps 2–3 (and markets) together with `./run_all.sh`. They can also run in separate Terminal windows
 at the same time. Leave the
-dashboard running and press **Refresh** (or turn on auto-refresh) to see new data as runs finish.
+web app running and press **Refresh** (or turn on auto-refresh) to see new data as runs finish.
 
 ## Database (PostgreSQL)
 
@@ -263,8 +269,7 @@ run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); s
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               PostgreSQL: connections, setup and checks (postgres.py), tables (schema/), the `python -m warehouse` query tool
-webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids (docs/user-platform-plan.md)
-dashboard/               local web dashboard (python -m dashboard)
+webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids, the dashboard (docs/user-platform-plan.md)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)

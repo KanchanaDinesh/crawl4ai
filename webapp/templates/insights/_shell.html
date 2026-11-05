@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static assets insights_ui %}
+{% block title %}Dashboard{% endblock %}
+{% block head %}
+<meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
+<link rel="stylesheet" href="{% asset 'css/insights.css' %}">
+<script src="{% static 'vendor/plotly-basic-4.1.2/plotly-basic.min.js' %}" defer></script>
+<script src="{% asset 'js/insights.js' %}" defer></script>
+{% endblock %}
+{% block content %}
+<div class="ins-head">
+  <nav class="ins-tabs" aria-label="Dashboard tabs">
+    {% for t in tabs %}<a href="{% url t.url_name %}"{% if t.code == tab %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>{% endfor %}
+  </nav>
+  <div class="ins-tools">
+    {% if last_run %}<span title="{{ runs_title }}">Last collection run: {{ last_run.when|slice:"5:16" }} {% if last_run.ok %}{{ "ok"|pill }}{% else %}{{ "failed"|pill }}{% endif %}</span>{% endif %}
+    <span>Updated {{ updated|date:"Y-m-d H:i" }}</span>
+    <label class="tog"><input type="checkbox" id="auto"> Auto-refresh (1 min)</label>
+    <button class="btn" id="refresh" type="button">Refresh</button>
+    <button class="btn" id="fs" type="button" title="Full screen (F)" aria-label="Full screen">⛶</button>
+  </div>
+</div>
+<div id="banner" class="banner" role="status"{% if not banner %} hidden{% endif %}>{{ banner }}</div>
+{% block tab %}{% endblock %}
+<div class="drawer-bg" id="drawer-bg"></div>
+<aside class="drawer" id="drawer" aria-label="Details">
+  <button class="btn close" id="drawer-close" type="button">Close</button>
+  <div id="drawer-body"></div>
+</aside>
+{% endblock %}

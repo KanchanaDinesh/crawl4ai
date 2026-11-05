@@ -1,0 +1,49 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block tab %}
+{% if not s %}
+<div class="panel"><div class="empty">No news collected yet.<br>Run <code>uv run python -m worldnews run</code>, then refresh this page.</div></div>
+{% else %}
+{% include "insights/_kpis.html" %}
+<form class="filters" id="filters" method="get" action="{% url 'insights_news' %}" hx-get="{% url 'insights_news_items' %}" hx-target="#list" hx-sync="this:replace"
+      hx-trigger="change[target.type!=='search'&&!target.dataset.reload], input[target.type==='search'] delay:300ms">
+  {% include "insights/_period.html" with days=f.days %}
+  {% include "insights/_chips.html" with name="group" value=f.group chips_id="news-groups" %}
+  <select name="source" aria-label="Source"><option value="">All sources</option>{% for n in source_names %}<option{% if n == f.source %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  <select name="topic" title="Topic" aria-label="Topic"><option value="">All topics</option>
+    <option value="tech"{% if f.topic == "tech" %} selected{% endif %}>Technology</option>
+    <option value="crypto"{% if f.topic == "crypto" %} selected{% endif %}>Crypto</option>
+    <option value="markets"{% if f.topic == "markets" %} selected{% endif %}>Markets</option></select>
+  <label class="tog"><input type="checkbox" name="new" value="1"{% if f.new %} checked{% endif %}> New in last run</label>
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search headlines, summaries, sources…" aria-label="Search headlines">
+</form>
+<div id="analysis" class="chartgrid analysis" hx-get="{% url 'insights_news_analysis' %}" hx-trigger="load, change from:#news-groups" hx-include="#filters [name=days], #filters [name=group]" hx-sync="this:replace">
+  <div class="panel span2"><h3>Biggest stories</h3><div class="muted small">Working out the analysis…</div></div>
+</div>
+<div class="ins-layout">
+  <div>
+    <div class="panel">
+      <h3>Headlines <small data-count>{{ count }}</small></h3>
+      <div id="list">{% include "insights/_news_items.html" %}</div>
+    </div>
+  </div>
+  <aside>
+    <div class="panel"><h3>Headlines per day <small>14 days</small></h3>{% chart day_chart "Headlines per day, last 14 days" %}</div>
+    <div class="panel"><h3>Topics per day <small>14 days</small></h3>{% chart topics_chart "Tech, crypto and markets headlines per day" %}</div>
+    <div class="panel"><h3>When news is published <small>Sri Lanka time, by hour</small></h3>{% chart hours_chart "Headlines by hour of the day" %}</div>
+    <div class="panel"><h3>By country / group <small>{{ period }}</small></h3>{% include "insights/_bars.html" with rows=by_group %}</div>
+    <div class="panel"><h3>Top sources</h3>{% include "insights/_bars.html" with rows=top_sources %}</div>
+    <div class="panel"><h3>Source health <small>last run</small></h3><div class="scroll">
+      {% if health %}<table class="plain"><tr><th>Source</th><th>Status</th><th>Via</th><th class="num">N</th></tr>
+      {% for r in health %}<tr title="{{ r.error|default:'' }}"><td>{{ r.source }}<div class="muted small">{{ r.group_name }}{% if r.error %} · {{ r.error|truncatechars:90 }}{% endif %}</div></td>
+        <td>{{ r.status|pill }}{% if r.failed_streak > 1 %}<div class="muted small">{{ r.failed_streak }} runs in a row</div>{% endif %}</td>
+        <td class="small muted">{{ r.via|default:"" }}</td><td class="num">{{ r.headlines }}</td></tr>{% endfor %}</table>
+      {% else %}<div class="muted small">No runs yet.</div>{% endif %}</div></div>
+    <div class="panel"><h3>Recent runs</h3><div class="scroll">
+      {% if runs %}<table class="plain"><tr><th>When</th><th class="num">OK</th><th class="num">Headlines</th><th class="num">New</th></tr>
+      {% for r in runs %}<tr><td class="nowrap">{{ r.run_at|when }}<div class="muted small">{{ r.seconds|default_if_none:"?" }}s · limit {{ r.item_limit }}</div></td>
+        <td class="num">{{ r.sources_ok }}/{{ r.sources }}</td><td class="num">{{ r.headlines }}</td><td class="num">{{ r.new_headlines }}</td></tr>{% endfor %}</table>{% endif %}</div></div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

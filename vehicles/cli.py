@@ -82,7 +82,7 @@ def _price(v) -> str:
 
 
 def cmd_show(args) -> None:
-    from dashboard import queries
+    from webapp.insights import queries
     con = _db()
     try:
         data = queries.vehicle_ads(con, site=args.site, q=args.search, new=args.new, days=args.days, limit=args.limit)
@@ -101,7 +101,7 @@ def cmd_show(args) -> None:
 
 
 def cmd_changes(args) -> None:
-    from dashboard import queries
+    from webapp.insights import queries
     con = _db()
     try:
         items = queries.vehicle_price_changes(con, days=args.days, limit=args.limit)

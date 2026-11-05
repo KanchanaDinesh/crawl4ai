@@ -1,0 +1,8 @@
+{% load insights_ui %}{% if f.mode %}<div class="heat">{% for r in tiles %}{% symbol_url r as href %}<button class="tile" type="button" style="flex:{{ r.grow }} 1 {{ r.basis }}px;background:{{ r.tone }}" hx-get="{{ href }}" hx-target="#drawer-body" title="{{ r.title }}: {{ r.change_pct|floatformat:2 }}%"><b>{{ r|short_symbol }}</b>{% if r.change_pct > 0 %}+{% endif %}{{ r.change_pct|floatformat:2 }}%</button>{% empty %}<div class="muted small">No day changes to show for this market.</div>{% endfor %}</div>
+{% else %}<div class="scroll">{% if rows %}<table class="dense"><thead><tr>{% for col in columns %}<th class="sort{% if col.sorted %} sorted{% endif %}{% if col.numeric %} num{% endif %}" hx-get="{{ col.url }}" hx-target="#prices" hx-trigger="click, keyup[key=='Enter']" tabindex="0">{{ col.label }}{% if col.arrow %} {{ col.arrow }}{% endif %}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in rows %}{% symbol_url r as href %}<tr class="click" tabindex="0" hx-get="{{ href }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">{% for col in columns %}{% quote_cell r col.key %}{% endfor %}</tr>{% endfor %}</tbody></table>
+  {% else %}<div class="empty">No prices for this market yet.</div>{% endif %}</div>{% endif %}
+<div class="muted small">{{ note }}</div>
+{% if oob %}<span id="mk-title" hx-swap-oob="true">{{ title }}</span><small id="mk-movers-label" hx-swap-oob="true">{{ title }}</small>
+<div id="mk-gainers" hx-swap-oob="true">{% include "insights/_mk_movers.html" with movers=gainers %}</div>
+<div id="mk-losers" hx-swap-oob="true">{% include "insights/_mk_movers.html" with movers=losers %}</div>{% endif %}

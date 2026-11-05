@@ -1,0 +1,43 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block tab %}
+{% if not s %}
+<div class="panel"><div class="empty">No tech-intel data yet.<br>Run <code>uv run python -m techintel run --limit 30</code>, then refresh this page.</div></div>
+{% else %}
+{% include "insights/_kpis.html" %}
+<form class="filters" id="filters" method="get" action="{% url 'insights_tech' %}" hx-get="{% url 'insights_tech_rows' %}" hx-target="#list" hx-sync="this:replace"
+      hx-trigger="change[target.type!=='search'&&!target.dataset.reload], input[target.type==='search'] delay:300ms">
+  {% include "insights/_period.html" with days=f.days %}
+  {% include "insights/_chips.html" with name="status" value=f.status %}
+  <select name="category" aria-label="Category"><option value="">All categories</option>{% for r in categories %}<option value="{{ r.category }}"{% if r.category == f.category %} selected{% endif %}>{{ r.category }} ({{ r.n }})</option>{% endfor %}</select>
+  <select name="source" aria-label="Source"><option value="">All sources</option>{% for r in sources %}<option value="{{ r.source }}"{% if r.source == f.source %} selected{% endif %}>{{ r.source }} ({{ r.n }})</option>{% endfor %}</select>
+  <select name="company" title="Company facts (techintel company)" aria-label="Company facts"><option value="">Any company info</option>
+    <option value="any"{% if f.company == "any" %} selected{% endif %}>Has social links</option><option value="linkedin"{% if f.company == "linkedin" %} selected{% endif %}>Has LinkedIn</option>
+    <option value="people"{% if f.company == "people" %} selected{% endif %}>Names its people</option><option value="employees"{% if f.company == "employees" %} selected{% endif %}>Gives employees</option></select>
+  <select name="sort" title="Sort" aria-label="Sort"><option value="">Latest seen</option>
+    <option value="score"{% if f.sort == "score" %} selected{% endif %}>Highest score</option><option value="registered"{% if f.sort == "registered" %} selected{% endif %}>Newest domain</option>
+    <option value="name"{% if f.sort == "name" %} selected{% endif %}>Name</option></select>
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search domain, name, description, reason…" aria-label="Search sites">
+</form>
+<div class="chartgrid">
+  <div class="panel"><h3>Found per day <small>14 days</small></h3>{% chart day_chart "Domains found per day, last 14 days" %}</div>
+  <div class="panel"><h3>How new are the qualified sites? <small>domain registered</small></h3>{% include "insights/_bars.html" with rows=age %}</div>
+  <div class="panel"><h3>Qualified by category</h3>{% include "insights/_bars.html" with rows=by_category %}</div>
+  <div class="panel"><h3>Status <small>{{ period }}</small></h3>{% include "insights/_stack.html" with parts=status_parts %}</div>
+</div>
+<div class="ins-layout">
+  <div><div class="panel"><h3>Discovered sites <small data-count>{{ count }}</small></h3>
+    <div class="tablewrap"><table class="dense"><thead><tr><th>#</th><th>Seen</th><th>Site</th><th>Status</th><th>Category</th><th class="num">Score</th><th>Domain age</th><th>Company</th><th>Source</th></tr></thead>
+      <tbody id="list">{% include "insights/_tech_rows.html" %}</tbody></table></div></div></div>
+  <aside>
+    <div class="panel"><h3>Social accounts <small>{{ companies|num }} companies read</small></h3>{% if social %}{% include "insights/_bars.html" with rows=social %}{% else %}<div class="muted small">Not collected yet. Run <code>uv run python -m techintel company</code>.</div>{% endif %}</div>
+    <div class="panel"><h3>Tech stack <small>profiled sites</small></h3>{% include "insights/_bars.html" with rows=stack %}</div>
+    <div class="panel"><h3>Discovered by source</h3>{% include "insights/_bars.html" with rows=by_source %}</div>
+    <div class="panel"><h3>Recent changes</h3>{% for x in changes %}<div class="news-item"><div><b>{{ x.domain }}</b> {{ x.text }}</div><div class="meta">{{ x.detected_at|when }} · {{ x.detected_at|ago }}</div></div>{% empty %}<div class="muted small">No changes detected yet.</div>{% endfor %}</div>
+    <div class="panel"><h3>Pipeline <small>last run per stage</small></h3><div class="scroll">
+      {% if runs %}<table class="plain"><tr><th>Stage</th><th>Status</th><th>Finished</th><th class="num">Took</th></tr>{% for r in runs %}<tr title="{{ r.summary|default:'' }}"><td>{{ r.stage }}</td><td>{{ r.status|pill }}</td><td class="nowrap">{{ r.finished_at|when }}</td><td class="num nowrap">{{ r.took }}</td></tr>{% endfor %}</table>
+      {% else %}<div class="muted small">No runs yet.</div>{% endif %}</div></div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

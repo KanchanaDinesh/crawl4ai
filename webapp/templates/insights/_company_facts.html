@@ -1,0 +1,14 @@
+{% load insights_ui %}{% if not co %}<h4>Company</h4><div class="muted">Not read yet. Run <code>uv run python -m techintel company</code>.</div>{% else %}
+<h4>Company <small class="muted">from its own {{ word|default:"site" }}, {{ co.checked_at|day }}</small></h4>
+<div class="kv">
+  {% if co.legal_name %}<div>Legal name</div><div>{{ co.legal_name }}</div>{% endif %}
+  {% if co.founded %}<div>Founded</div><div>{{ co.founded }}</div>{% endif %}
+  {% if co.employees %}<div>Employees</div><div>{{ co.employees }} <span class="muted small">(schema.org)</span></div>{% elif co.employees_hint %}<div>Employees</div><div>"{{ co.employees_hint }}" <span class="muted small">(as the site says)</span></div>{% endif %}
+  {% if co.address %}<div>Address</div><div>{{ co.address }}</div>{% endif %}
+  {% if co.emails %}<div>Email</div><div>{% for e in co.emails %}<a href="mailto:{{ e|urlencode }}">{{ e }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+  {% if co.phones %}<div>Phone</div><div>{% for t in co.phones %}<a href="tel:{{ t|urlencode }}">{{ t }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+  {% if co.github and not co.github.error %}<div>GitHub</div><div>{% outlink co.github.html_url co.github.login %} · {{ co.github.public_repos|num }} repos · {{ co.github.followers|num }} followers{% if co.github.created_at %} · since {{ co.github.created_at|slice:":4" }}{% endif %}</div>{% endif %}
+</div>
+<h4>People</h4>{% if co.people %}<div class="people-list">{% for x in co.people %}<div><b>{{ x.name }}</b> · {{ x.role }}</div>{% endfor %}</div>{% else %}<div class="muted">None named on its about/team pages.</div>{% endif %}
+{% if co.linkedin_people %}<div class="small">LinkedIn pages linked from its team page: {% for u in co.linkedin_people %}{% outlink u forloop.counter %}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+<h4>Social accounts</h4><div>{% for k, u in co.social.items %}{% outlink u k|social_name %}{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">none found</span>{% endfor %}</div>{% endif %}

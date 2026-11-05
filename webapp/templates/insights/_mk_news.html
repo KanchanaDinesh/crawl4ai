@@ -1,0 +1,2 @@
+{% load insights_ui %}{% for i in items %}<div class="news-item"><div>{% outlink i.url i.title %}</div><div class="meta">{% if i.published_at %}{{ i.published_at|ago }}{% else %}{{ i.first_seen_at|ago }}{% endif %} · {{ i.source }}</div></div>
+{% empty %}<div class="muted small">No {{ word }} news yet. Run <code>uv run python -m worldnews run --group MARKETS --group CRYPTO</code>.</div>{% endfor %}

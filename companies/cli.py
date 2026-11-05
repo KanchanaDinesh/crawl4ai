@@ -78,7 +78,7 @@ def _db():
 
 
 def cmd_show(args, settings) -> None:
-    from dashboard import queries
+    from webapp.insights import queries
     con = _db()
     try:
         country = (_countries([args.country] if args.country else None) or [None])[0]
@@ -93,7 +93,7 @@ def cmd_show(args, settings) -> None:
 
 
 def cmd_stats(args, settings) -> None:
-    from dashboard import queries
+    from webapp.insights import queries
     con = _db()
     try:
         s = queries.companies_summary(con)

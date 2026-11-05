@@ -1,0 +1,14 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
+<h2>{{ name }}</h2><div class="muted">{{ symbol }} · {{ q.asset_class|default:cls }} · {{ q.source|default:"" }}</div>
+<p class="sym-price">{{ q.price|price:cls }} <small class="muted">{{ q.currency|default:"" }}</small> {{ q.change_pct|pct }}</p>
+<div class="seg">{% for r in ranges %}{% symbol_url row r.days as href %}<button type="button" class="{% if r.on %}active{% endif %}" hx-get="{{ href }}" hx-target="#drawer-body">{{ r.label }}</button>{% endfor %}</div>
+{% chart figure "Price history" %}
+{% if stats %}<div class="muted small">{{ stats.points }} points · high {{ stats.high|price:cls }} · low {{ stats.low|price:cls }} · change {{ stats.change|pct }}</div>{% endif %}
+<h4>Details</h4><div class="kv">
+  <div>Previous close</div><div>{{ q.prev_close|price:cls }}</div><div>Change</div><div>{{ q.change|price:cls }}</div>
+  {% if q.high %}<div>Day high / low</div><div>{{ q.high|price:cls }} / {{ q.low|price:cls }}</div>{% endif %}
+  {% if q.volume %}<div>Volume</div><div>{{ q.volume|big }}</div>{% endif %}{% if q.market_cap %}<div>Market cap</div><div>{{ q.market_cap|big }}</div>{% endif %}
+  {% if q.rank %}<div>Rank</div><div>#{{ q.rank }}</div>{% endif %}{% if q.pct_7d != None %}<div>7 days</div><div>{{ q.pct_7d|pct }}</div>{% endif %}
+  <div>Price time</div><div>{{ q.as_of|when }}</div><div>Collected</div><div>{{ q.run_at|when }}</div>
+  {% if q.note %}<div>Note</div><div>{{ q.note }}</div>{% endif %}
+</div>

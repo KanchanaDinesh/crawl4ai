@@ -1,0 +1,43 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block tab %}
+{% if not s %}
+<div class="panel"><div class="empty">No market data yet.<br>Run <code>uv run python -m markets run</code>, then refresh this page.</div></div>
+{% else %}
+<div class="mk-cards">{% for c in cards %}{% symbol_url c as href %}<div class="mk-card" role="button" tabindex="0" hx-get="{{ href }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">
+  <div class="nm" title="{{ c.name }}">{{ c.name }}</div>
+  <div class="px">{{ c.price|price:c.asset_class }} <small class="muted">{% if c.currency != "USD" %}{{ c.currency|default:"" }}{% endif %}</small></div>
+  <div class="ch">{{ c.change_pct|pct }}</div>{{ c.spark|spark }}</div>{% endfor %}</div>
+<div class="ins-layout">
+  <div>
+    <div class="panel" id="compare">{% include "insights/_mk_compare.html" %}</div>
+    <div class="panel"><h3><span>Performance <small>click a row for its chart</small></span><small>history: saved runs + Yahoo daily closes</small></h3>
+      <div class="scroll">{% if perf %}<table class="dense"><thead><tr><th>Name</th><th>Type</th><th class="num">Price</th><th class="num">1 day</th><th class="num">1 week</th><th class="num">1 month</th><th class="num">3 months</th><th style="width:150px">3 months</th></tr></thead>
+        <tbody>{% for r in perf %}{% symbol_url r as href %}<tr class="click" tabindex="0" hx-get="{{ href }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">
+          <td><b>{{ r.short }}</b> <span class="muted small">{{ r.symbol }}</span></td><td class="muted small">{{ r.class_label }}</td>
+          <td class="num nowrap">{{ r.price|price:r.asset_class }} <span class="muted small">{% if r.currency != "USD" %}{{ r.currency|default:"" }}{% endif %}</span></td>
+          {{ r.1d|pct_cell }}{{ r.1w|pct_cell }}{{ r.1m|pct_cell }}{{ r.3m|pct_cell }}<td>{{ r.spark|spark }}</td></tr>{% endfor %}</tbody></table>
+        {% else %}<div class="empty">No market data yet.</div>{% endif %}</div></div>
+    <form class="filters" id="filters" method="get" action="{% url 'insights_markets' %}" hx-get="{% url 'insights_prices' %}" hx-target="#prices" hx-sync="this:replace"
+          hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+      {% include "insights/_chips.html" with name="cls" value=f.cls %}
+      <input type="search" name="q" value="{{ f.q }}" placeholder="Search symbol or name…" aria-label="Search prices">
+      <span class="fchips seg"><label class="fchip"><input type="radio" name="mode" value=""{% if not f.mode %} checked{% endif %}>Table</label><label class="fchip"><input type="radio" name="mode" value="map"{% if f.mode %} checked{% endif %}>Map</label></span>
+      <span class="muted small">{{ asof }}</span>
+    </form>
+    <div class="panel"><h3><span><span id="mk-title">{{ title }}</span> <small data-count>{{ count }}</small></span></h3>
+      <div id="prices">{% include "insights/_mk_prices.html" %}</div></div>
+  </div>
+  <aside>
+    <div class="panel"><h3>Top gainers <small id="mk-movers-label">{{ title }}</small></h3><div id="mk-gainers">{% include "insights/_mk_movers.html" with movers=gainers %}</div></div>
+    <div class="panel"><h3>Top losers</h3><div id="mk-losers">{% include "insights/_mk_movers.html" with movers=losers %}</div></div>
+    {% if show_news %}
+    <div class="panel"><h3>Market news <small><a href="{% url 'insights_news' %}?group=MARKETS">more</a></small></h3>{% include "insights/_mk_news.html" with items=market_news word="market" %}</div>
+    <div class="panel"><h3>Crypto news</h3>{% include "insights/_mk_news.html" with items=crypto_news word="crypto" %}</div>
+    {% endif %}
+    <div class="panel"><h3>Data sources <small>last run</small></h3><div class="scroll">{% if sources %}<div class="small muted">{{ ok_sources }}/{{ sources|length }} OK</div>
+      {% if bad_sources %}<table class="plain">{% for x in bad_sources %}<tr><td>{{ x.source }}</td><td>{{ "failed"|pill }}<div class="muted small">{{ x.error|default:""|truncatechars:100 }}</div></td></tr>{% endfor %}</table>{% else %}<div class="muted small">All sources returned data.</div>{% endif %}{% endif %}</div></div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

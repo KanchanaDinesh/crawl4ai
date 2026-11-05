@@ -1,7 +1,8 @@
-"""SQL behind the dashboard. Each function takes an open read-only PostgreSQL connection (psycopg, %s placeholders;
-table names with their schema: news., tech., markets., vehicles., companies.).
+"""SQL behind the dashboard tabs and the tools' `show` commands. No Django here, so the command-line tools can use it
+too. Each function takes an open read-only PostgreSQL connection (psycopg, %s placeholders; table names with their
+schema: news., tech., markets., vehicles., companies.).
 
-Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
+Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the pages show them in local time.
 """
 
 import json

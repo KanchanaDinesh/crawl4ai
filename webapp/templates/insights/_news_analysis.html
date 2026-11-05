@@ -1,0 +1,19 @@
+{% load insights_ui %}{% if not a %}
+<div class="panel span2"><h3>Biggest stories</h3><div class="muted small">{{ banner|default:"No headlines in this period yet." }}</div></div>
+{% else %}
+<div class="panel span2"><h3><span>Biggest stories <small>the same story from several sources</small></span><small>{{ label }}</small></h3>
+  {% for s in stories %}<div class="story"><span class="n" title="{{ s.all_sources }}">{{ s.sources|length }}</span>{% outlink s.url s.headline %}
+    <details><summary>{{ s.first_sources }}{% if s.more_sources %} +{{ s.more_sources }}{% endif %} · {{ s.count }} headlines</summary>
+      {% for h in s.headlines %}<div>{% outlink h.url h.title %} <span class="muted">· {{ h.source|default:"" }}</span></div>{% endfor %}</details></div>
+  {% empty %}<div class="muted small">No story was told by several sources in this period.</div>{% endfor %}</div>
+<div class="panel"><h3>Topics <small>share of headlines</small></h3>{% include "insights/_bars.html" with rows=topics %}</div>
+<div class="panel"><h3>Names and places <small>click to search</small></h3>{% include "insights/_bars.html" with rows=names clickable=True %}</div>
+<div class="panel"><h3>Countries mentioned <small>click to search</small></h3>{% include "insights/_bars.html" with rows=countries clickable=True %}</div>
+<div class="panel"><h3>Tone <small>overall {{ a.tone.label }} · word-based, rough</small></h3>
+  {% for t in tones %}<div class="tone-row"><span>{{ t.label }}</span><div class="stack" title="{{ t.title }}"><i style="width:{{ t.negative|stringformat:".1f" }}%;background:var(--bad)"></i><i style="width:{{ t.neutral|stringformat:".1f" }}%;background:transparent"></i><i style="width:{{ t.positive|stringformat:".1f" }}%;background:var(--ok)"></i></div><em>{{ t.tone }}</em></div>{% endfor %}
+  <div class="muted small" style="margin-top:6px">red: words like killed, crisis · green: wins, record</div></div>
+<div class="panel"><h3>What each country's news is about</h3><table class="plain">{% for g in by_group %}<tr><td class="nowrap">{{ g.name }}</td><td class="small">{% for t in g.top %}{{ t.name }} <span class="muted">{{ t.n }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</td></tr>{% endfor %}</table></div>
+<div class="panel"><h3>Rising words <small>before → now, click to search</small></h3>
+  {% for w in rising %}<span class="tag click" data-search="{{ w.word }}" role="button" tabindex="0">{{ w.word }} <span class="muted">{{ w.before }}→{{ w.now }}</span></span>
+  {% empty %}<div class="muted small">Needs an earlier period to compare with: shows up after another {% if days == 1 %}day{% else %}period{% endif %} of collecting.</div>{% endfor %}</div>
+{% endif %}

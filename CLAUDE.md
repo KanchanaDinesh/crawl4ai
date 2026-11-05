@@ -13,8 +13,8 @@ the current state of every part, open issues and next steps. Read it before doin
 - **Commit and push straight to `main`** when a change is done and tested. This is Kanchana's standing
   instruction ("just push the changes to the main branch"). No pull requests unless asked.
 - Before pushing, run the tests: `uv run --frozen pytest -q` (about 20 seconds, needs no internet).
-- After a change, tell Kanchana exactly what to run, e.g. `git pull origin main`, and to restart the
-  dashboard if it's running.
+- After a change, tell Kanchana exactly what to run, e.g. `git pull origin main`, and `uv run python -m webapp migrate`
+  if there's a migration (the web app's server restarts by itself).
 - **Update STATUS.md** whenever something meaningful changes: what was done, new issues, next steps.
   Then the next session can continue without anything being explained again.
 - Never get around bot protection: no browser impersonation (curl_cffi was refused and removed), no CAPTCHA
@@ -40,8 +40,8 @@ techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, 
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
 warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse
 webapp/          the user platform (Django + HTMX): python -m webapp runserver 8060; its tables in schema `app`.
-                 catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them
-dashboard/       local web dashboard (aiohttp + plain JS, no build step): python -m dashboard --open (until phase 3)
+                 catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them;
+                 insights/ = the dashboard's five tabs (queries.py is the SQL, also used by the tools' `show` commands)
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
 automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Open issues")
@@ -55,7 +55,7 @@ data/  output/  logs/  .local/  .venv/       git-ignored
   markets, vehicles, companies, scrapers. Logins `crawl4ai` (writer) and `crawl4ai_reader` (read-only, 30 s query
   limit); settings `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` / `CRAWL4AI_ADMIN_URL` or `.local/database.env`.
   Each store opens a writer connection, runs `postgres.migrate` for its schema (only when the .sql file changed)
-  and saves in short transactions; the dashboard and CLIs read with the reader login. Placeholders are `%s`,
+  and saves in short transactions; the dashboard tabs and CLIs read with the reader login. Placeholders are `%s`,
   table names always with the schema, text through `postgres.clean_text`/`json_text` (no NUL). New tables or
   views go in `warehouse/schema/<schema>.sql` (keep every statement safe to repeat). History of the move and
   what's left (step 4, clean up): `docs/postgres-migration.md`.

@@ -1,0 +1,18 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
+{% if not c %}<div class="muted">Not found.</div>{% else %}
+<h2>{{ c.name }}</h2>
+<div>{% if c.website %}{% outlink c.website %}{% endif %} {{ status|pill }}</div>
+<h4>Details</h4><div class="kv">
+  <div>Country</div><div>{{ c.country_name|default:c.country|default:"—" }}</div>
+  {% if c.industry %}<div>Industry</div><div>{{ c.industry }}</div>{% endif %}
+  <div>Source</div><div>{{ source }} · {{ c.source_id }}</div>
+  {% for k, v in facts %}<div>{{ k }}</div><div>{{ v|link_or_text }}</div>{% endfor %}
+  <div>First seen</div><div>{{ c.first_seen|when }}</div>
+</div>
+{% if not c.website %}<h4>Website</h4><div class="muted">This source gives no website for it.</div>
+{% elif not site %}<h4>Website</h4><div class="muted">{% if c.refusal %}The site refused us ({{ c.refusal.error }}, {{ c.refusal.refused_at|day }}); it is tried again later.{% else %}Not read yet. Run <code>uv run python -m companies update</code>.{% endif %}</div>
+{% elif site.status != "ok" %}<h4>Website</h4><div>{{ site_status|pill }} <span class="muted small">{{ site.error|default:"" }} · {{ site.checked_at|day }}</span></div>
+{% else %}{% include "insights/_company_facts.html" with co=site word="website" %}
+<div class="muted small" style="margin-top:6px">Pages read: {% for u, path in pages %}{% outlink u path %}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+{% if same %}<h4>Same website in other records</h4>{% for x in same %}<div><a href="#" hx-get="{% url 'insights_company' x.id %}" hx-target="#drawer-body">{{ x.name }}</a> <span class="muted small">{{ x.source_label }} · {{ x.country|default:"" }}</span></div>{% endfor %}{% endif %}
+{% endif %}

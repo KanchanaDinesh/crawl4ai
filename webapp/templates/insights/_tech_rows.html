@@ -1,0 +1,11 @@
+{% load insights_ui %}{% for r in rows %}<tr class="click" tabindex="0" hx-get="{% url 'insights_tech_site' r.domain %}" hx-target="#drawer-body" hx-trigger="click[!target.closest('a')], keyup[key=='Enter'&&!target.closest('a')]">
+  <td class="num muted">{{ r.n }}</td><td class="nowrap" title="{{ r.seen_at|when }}">{{ r.seen_at|ago }}</td>
+  <td class="site"><div class="nm">{{ r.name|default:r.domain }} <a href="{% if r.url|safe_url %}{{ r.url|safe_url }}{% else %}https://{{ r.domain }}/{% endif %}" target="_blank" rel="noopener noreferrer">{{ r.domain }}</a></div>
+    {% with text=r.description|default:r.reason|default:"" %}<div class="ds" title="{{ text }}">{{ text }}</div>{% endwith %}</td>
+  <td>{{ r.status|pill }}</td><td class="nowrap">{{ r.category|default:"" }}</td>
+  <td class="num">{% if r.score != None %}<span class="scorebar">{{ r.score|floatformat:0 }}<i style="width:{{ r.bar }}px"></i></span>{% endif %}</td>
+  <td class="nowrap" title="{% if r.registered_at %}registered {{ r.registered_at|day }}{% else %}registration date unknown{% endif %}">{{ r.registered_at|domain_age }}</td>
+  <td class="nowrap small">{{ r.social|social_links }}{% if r.people %} <span title="people named on its site">👤{{ r.people }}</span>{% endif %}{% if r.employees %} <span class="muted" title="employees, as the site says">{{ r.employees|stringformat:"s"|slice:":18" }}</span>{% endif %}</td>
+  <td class="small nowrap" title="{{ r.source_title|default:'' }}">{{ r.source|default:"" }}</td></tr>
+{% empty %}<tr><td colspan="9"><div class="empty">No domains match these filters.</div></td></tr>{% endfor %}
+{% if more %}<tr class="more-row" hx-get="{{ more }}" hx-trigger="click, loadmore" hx-swap="outerHTML" hx-sync="this:drop"><td colspan="9"><button class="btn" type="button">Load more</button></td></tr>{% endif %}

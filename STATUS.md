@@ -14,9 +14,9 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
-DuckDB files), backed up by the `backup` step, and shown in a local web dashboard. Collectors write while the
-dashboard and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 174 tests pass.
+DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
+while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
+All 187 tests pass.
 
 ## Parts and how to run them
 
@@ -30,8 +30,8 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-2: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel. Django; schema `app`. The dashboard below stays until phase 3 |
-| Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-3: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, and the dashboard. Django; schema `app`. The server restarts by itself after a code change |
+| Dashboard | In the web app: http://localhost:8060/dashboard/ (`webapp/insights/`) | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. Charts in Plotly. `python -m dashboard` (the old aiohttp page on port 8050) only says where it went |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
@@ -400,6 +400,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Found while checking in the browser: Tabulator read a key released on a filter as typing, which cleared tick-list
       filters; `[hidden]` didn't hide buttons; tables with no rows had no columns to show. All fixed.
     - **Next: phase 3** (today's dashboard tabs in Django, charts in Plotly; then the aiohttp dashboard retires).
+49. **User platform phase 3 built, old dashboard retired (2026-11-06):** the five tabs are Django pages in
+    `webapp/insights/` (`/dashboard/`), with Plotly charts, every filter in the address and rows swapped by HTMX. `queries.py`
+    moved there; the aiohttp server and `app.js` are gone. Details: `docs/user-platform-plan.md` → "Phase 3 results".
+    - Compared with the old API on the real data, per tab, with filters, sorting, paging and side panels: 291 checks
+      identical. Two more differ only by the first point of a chart, which falls just before the 100-day cut (the old
+      page cut it in the browser).
+    - New on purpose: a tab follows the rights of its main dataset (so the dashboard can't get around the catalog's
+      rights); links from collected pages must be http(s); a line keeps its colour when another is removed from Compare.
+    - **Next: phase 4** (editing: inline and bulk edit, history, rule A in the collectors).
 
 ## Open issues and things to watch
 
@@ -439,7 +448,6 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 - **`automation.conf` is tracked by git, but Kanchana edits it**, so `git pull` can fail with "Your local
   changes would be overwritten". For now: `git stash && git pull origin main && git stash pop`.
   - Offered, not built yet: an untracked `automation.local.conf` that overrides automation.conf.
-- **Dashboard after updates:** it must be restarted after `git pull` (Ctrl+C, then `uv run python -m dashboard --open`).
 - **Yahoo Finance** can rate-limit (401/429). Fallbacks cover it; don't add impersonation.
 
 - **Companies:** the directory has no cross-source matching yet: the same company from Wikidata and GLEIF is two
@@ -449,7 +457,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phases 1-2 are built; phase 3 is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-3 are built; phase 4 is next. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).

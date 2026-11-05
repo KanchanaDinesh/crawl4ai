@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 and 2 built (2026-11-06); grid: Tabulator; phase 3 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1, 2 and 3 built (2026-11-06); grid: Tabulator; phase 4 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -151,6 +151,38 @@ would run as a formula in Excel (starting with = + - @) is made plain text.
 Known limits, for later: paging uses offsets, so very deep pages over millions of rows will slow down (keyset paging
 when the GLEIF file comes); links between datasets aren't in the catalog yet (phase 5/7).
 
+## Phase 3 results (2026-11-06)
+
+**The dashboard is in Django** (`webapp/insights/`), at `/dashboard/news/`, `tech/`, `markets/`, `vehicles/`, `companies/`.
+The aiohttp server and its 1,061-line `app.js` are gone; `python -m dashboard` only says where it went. `queries.py`
+moved here unchanged (no Django in it, so the tools' `show` commands use it too).
+
+**How a page works:** Python shapes the data, templates draw it, and every filter is in the address. A changed filter
+asks HTMX for the rows only, and the address follows (`HX-Push-Url`); the count above a list comes in a header
+(`HX-Trigger`). The period reloads the page, because counts and charts change too. `static/js/insights.js` (about 140
+lines) does only what a page can't: draw charts, the side panel, clicks that set a filter, refresh, full screen.
+
+**Charts:** Plotly for everything over time (`charts.py` builds plain figure dicts, plotly.js 4.1.2 basic bundle draws
+them). **The plotly Python package isn't needed yet**, since a figure is just JSON; phase 6 can add it for the chart
+builder. Ranked lists stay plain bars (labels are readable, and a click can filter), and sparklines plain SVG (dozens per
+table). Colours follow the theme through `token:<name>`; the 8 series colours were checked with a palette validator in
+both themes, and a line keeps its colour when another is removed (the old page repainted them).
+
+**Same numbers:** compared with the old API on the real data, tab by tab with filters, sorting, paging and side panels:
+291 checks identical. Two more differ only by the first point of a chart, which falls just before the 100-day
+cut, the same point the old page cut in the browser.
+
+**What's different on purpose:**
+- **Rights:** a tab opens only if the role may see its main dataset (`common.TABS`). Otherwise the dashboard would be a
+  way around the catalog's rights. The Markets tab's news panels need the World News tab.
+- **Links from collected pages** must be http(s): 10 people read this, and a page's "website" could be `javascript:`.
+- **Compare choices** are kept per user in the session, not per browser. Times are Sri Lanka time (`TIME_ZONE`), not
+  each browser's: one setting for the team.
+- If PostgreSQL is down, a page says what to do but no longer shows the last data it had (sign-in needs the database anyway).
+
+Known limits: a tab's rights follow one dataset, not every table it reads. A role given only `news.news_items` also sees
+source health and run history on that tab.
+
 ## How it fits together
 
 ```
@@ -296,8 +328,8 @@ only vehicles"), both from the catalog.
 |---|---|
 | Collectors (`worldnews`, `techintel`, `markets`, `vehicles`, `companies`, `scrapers`), `run_all.sh`, schedules | **Unchanged.** They keep writing to PostgreSQL; only the shared rule-A helper is added |
 | `warehouse/postgres.py` (connections, setup, migrate, backup) | Kept; Django's settings read the same `CRAWL4AI_*` settings; Django's own tables in schema `app` |
-| `dashboard/queries.py` (the SQL behind each tab) | **Reused as-is** by Django views: the functions take a connection and return dicts |
-| `dashboard/server.py` (aiohttp) + `static/app.js` | Replaced by Django pages: templates + HTMX + Plotly; retired when every tab exists in Django |
+| `dashboard/queries.py` (the SQL behind each tab) | **Moved as-is** to `webapp/insights/queries.py`: the functions take a connection and return dicts |
+| `dashboard/server.py` (aiohttp) + `static/app.js` | **Retired (phase 3):** replaced by Django pages: templates + HTMX + Plotly |
 | `briefing` | Unchanged; its output can also be shown in the app |
 | Tests | Same suite; pytest-django added; the throwaway PostgreSQL fixture also serves Django |
 
@@ -318,8 +350,8 @@ webapp/                    the Django project (python -m webapp / manage.py)
   templates/, static/js/datagrid.js, static/vendor/ (pinned htmx, plotly, grid files)
 ```
 
-The current dashboard keeps running at http://localhost:8050 until the Django app has every tab; the Django
-app runs next to it during the build (e.g. port 8060).
+The old dashboard on http://localhost:8050 ran next to the Django app until every tab existed; since phase 3 there's
+only the web app (port 8060).
 
 ## Phases
 
@@ -327,7 +359,7 @@ app runs next to it during the build (e.g. port 8060).
 |---|---|---|
 | 1 ✅ | **Foundation + grid test:** Django project in `webapp/`, schema `app`, login, users, roles, menu rights, admin screens, audit log; the AG Grid vs Tabulator test; the `datagrid.js` wrapper | An admin creates a user and a role; the user signs in and sees only the menus granted; grid chosen with the test's results written down |
 | 2 ✅ | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
-| 3 | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
+| 3 ✅ | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
 | 4 | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
 | 5 | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
 | 6 | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |

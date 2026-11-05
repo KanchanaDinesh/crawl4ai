@@ -1,0 +1,6 @@
+{% load insights_ui %}{% for i in items %}<div class="news-item">
+  <div class="title">{% if i.is_new %}<span class="badge new">NEW</span>{% endif %}{% outlink i.url i.title %}{% for t in i.badges %} <span class="badge topic">{{ t }}</span>{% endfor %}</div>
+  <div class="meta">{{ i.when|when }} · {{ i.when|ago }}{% if not i.published_at %} (found){% endif %} · <b>{{ i.source }}</b> · {{ i.group_name }}{% if i.times_seen > 1 %} · seen in {{ i.times_seen }} runs{% endif %}</div>
+  {% if i.summary %}<div class="sum">{{ i.summary }}</div>{% endif %}
+</div>{% empty %}<div class="empty">No headlines match these filters.</div>{% endfor %}
+{% if more %}<button class="btn more" type="button" hx-get="{{ more }}" hx-target="this" hx-swap="outerHTML">Load more</button>{% endif %}
