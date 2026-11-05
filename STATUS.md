@@ -356,6 +356,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       run_all step `backup`, last in the default STEPS (`BACKUP_ARGS` in automation.conf). First real backup:
       8.6 MB in 2.5 s; **restored into a temporary database and every table's count matched**, then it was removed.
     - Kanchana's dashboard was still the old code (started before step 3a); it must be restarted.
+45. **Plan (2026-11-06): the user platform** (`docs/user-platform-plan.md`, not started). An internal web app for
+    ~10 people on top of the collected data: logins with role and menu-based access granted by an administrator,
+    an Airtable-like grid (inline and bulk edit, multi-choice, links between records, saved views, own tables),
+    charts and dashboards, CSV/Excel exports, PDF reports, and an AI assistant that sees only the catalog.
+    Decisions with Kanchana: **Python only (no React): Django + HTMX + Plotly + WeasyPrint**; grid **AG Grid
+    Community** (MIT), tested against **Tabulator** (MIT, has free range copy/paste) in phase 1, behind our own
+    wrapper so it can be swapped; PostgreSQL with JSONB for flexible fields and an automatic catalog; edits in the
+    main tables with history and **rule A** (the newest change wins: the collector overwrites a correction only
+    when the source itself changed). Collectors stay as they are. 8 phases; phase 1 = Django foundation (login,
+    users, roles, menu rights, admin, audit) + the grid test.
 
 ## Open issues and things to watch
 
@@ -404,6 +414,9 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
   by a few GB: wait for the server, see the disk note above).
 
 ## Ideas for next steps (not started)
+
+- **The user platform** (`docs/user-platform-plan.md`): start with phase 1 when Kanchana says go; open questions
+  are listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).
 - Alerts, e.g. a price drop on a watched car model, a new tech site in a chosen category, or a big market move.

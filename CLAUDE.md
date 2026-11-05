@@ -57,6 +57,9 @@ data/  output/  logs/  .local/  .venv/       git-ignored
   table names always with the schema, text through `postgres.clean_text`/`json_text` (no NUL). New tables or
   views go in `warehouse/schema/<schema>.sql` (keep every statement safe to repeat). History of the move and
   what's left (step 4, clean up): `docs/postgres-migration.md`.
+- **Next big piece: the user platform** (`docs/user-platform-plan.md`): Django + HTMX + Plotly + WeasyPrint, Python
+  only (Kanchana decided against React), AG Grid Community vs Tabulator behind `datagrid.js`, roles and menu
+  rights, edit history with rule A. Follow its phases and update it as decisions change.
 - **Vehicle ads** are in schema `vehicles` (`vehicles/store.py`): tables `ads` and `runs`, views
   `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
   Schema `scrapers` holds only the `scrapers/` tools' output (generic `scraper_rows`).
