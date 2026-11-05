@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-05. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-06. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -378,9 +378,18 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       "100%" made it load every page; its paste needed our own handling. Leaning to **Tabulator** (free cell ranges
       and copy/paste); **Kanchana to try both and decide**.
     - Two test accounts (`test-admin`, `test-viewer`) were made for the browser check; their passwords are in
-      `.local/webapp-test-accounts.txt` (git-ignored). Deactivate them on the Users page once Kanchana has his own.
+      `.local/webapp-test-accounts.txt` (git-ignored). Deactivate them on the Users page; Kanchana has their own `admin` account now.
     - Tests: 16 web app tests (pytest-django on the throwaway PostgreSQL) + 1 database test; 149 in all.
     - **Next:** Kanchana runs `createadmin`, tries the grid test and picks the grid; then phase 2 (catalog + explore).
+47. **Grid chosen: Tabulator (Kanchana, 2026-11-06)**, because selecting a block of cells is needed and is paid-only
+    in AG Grid. AG Grid is removed (`datagrid.js`, the page, `static/vendor/`). New: a **searchable multiple-choice
+    list** (`DataGrid.pick` in `datagrid.js`): search box on top, ticks, chosen tags as removable chips, keyboard
+    (arrows, Enter ticks, Esc cancels, Tab or clicking away saves), used by the Tags cell and the bulk edit bar.
+    Our own because Tabulator's list editor can't search and multi-select together. The grid test has 30 test tags.
+    Tabulator now follows the app's dark and light themes.
+    - Open question for Kanchana: may users add a new tag by typing it in the list? (Goes with real choice fields
+      in phase 5.)
+    - **Next: phase 2** (automatic catalog, every dataset in the grid, saved views, exports).
 
 ## Open issues and things to watch
 
@@ -430,8 +439,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): start with phase 1 when Kanchana says go; open questions
-  are listed at the end of the plan.
+- **The user platform** (`docs/user-platform-plan.md`): phase 1 is built; phase 2 is next. Open questions are
+  listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).
 - Alerts, e.g. a price drop on a watched car model, a new tech site in a chosen category, or a big market move.

@@ -1,16 +1,17 @@
-/* datagrid.js: the only file that talks to a grid library (docs/user-platform-plan.md, "The grid").
+/* datagrid.js: the only file that talks to the grid library, Tabulator (Kanchana's choice, 2026-11-06: cell blocks
+   with copy and paste are free there; docs/user-platform-plan.md, "The grid"). Pages use this small interface, so
+   the library can be changed by changing this file only.
 
-   Pages call DataGrid.create(element, options) and get back the same small interface whichever engine runs it,
-   so the grid library can be changed (or AG Grid Enterprise bought) by changing this file only.
-
-   options:
-     engine      "aggrid" | "tabulator"
+   DataGrid.create(element, options)
      columns     [{field, title, type: text|choice|multi|link|date, editable, choices, width}]
      rowsUrl     GET ?start&limit&sort&dir&<filters> -> {total, rows:[{id, ...}], ms}
-     editUrl     POST {id, field, value, engine} -> {ok, value} | {error}
+     editUrl     POST {id, field, value} -> {ok, value} | {error}
      filters()   returns the current filter values (object)
      onStatus(text), onSelection(count), onError(text)
-   returns { engine, reload(), selectedIds(), applyValue(ids, field, value), destroy() }
+   returns { reload(), selectedIds(), applyValue(ids, field, value), destroy() }
+
+   DataGrid.pick(anchor, {choices, value, noun, onDone(list), onCancel()})
+     the searchable multiple-choice list, also usable outside the grid (the bulk edit bar uses it).
 */
 (function () {
   "use strict";
@@ -40,7 +41,7 @@
     const res = await fetch(opt.editUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
-      body: JSON.stringify({ id, field, value, engine: opt.engine }),
+      body: JSON.stringify({ id, field, value, engine: "tabulator" }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `Saving failed (HTTP ${res.status})`);
@@ -59,112 +60,144 @@
     return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener">${esc(url.replace(/^https?:\/\//, ""))}</a>` : esc(url);
   }
 
-  // ── AG Grid Community ────────────────────────────────────────────────────────────────────────────────────
-  // A small multiple-choice editor: AG Grid Community has no multi-select editor (its Rich Select is Enterprise).
-  class TagEditor {
-    init(params) {
-      this.value = new Set(params.value || []);
-      this.el = document.createElement("div");
-      this.el.className = "tag-editor";
-      for (const choice of params.choices || []) {
-        const id = `tag-${Math.random().toString(36).slice(2)}`;
-        const row = document.createElement("label");
-        row.innerHTML = `<input type="checkbox" id="${id}"> ${esc(choice)}`;
-        const box = row.querySelector("input");
-        box.checked = this.value.has(choice);
-        box.addEventListener("change", () => (box.checked ? this.value.add(choice) : this.value.delete(choice)));
-        this.el.appendChild(row);
+  // ── The searchable multiple-choice list ──────────────────────────────────────────────────────────────────
+  // Tabulator's own list editor can't search and select several at once (multiselect is off with autocomplete),
+  // and long lists need both. Lives on <body>, so the grid's cell doesn't clip it.
+  function pick(anchor, { choices, value, noun = "item", onDone, onCancel }) {
+    const selected = new Set(value || []);
+    const start = JSON.stringify([...selected].sort());
+    const box = document.createElement("div");
+    box.className = "picker";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", `Choose ${noun}s`);
+    box.innerHTML = `<input type="search" class="picker-search" placeholder="Search ${esc(noun)}s" aria-label="Search ${esc(noun)}s" autocomplete="off">
+      <div class="picker-chosen"></div>
+      <div class="picker-list" role="listbox" aria-multiselectable="true"></div>
+      <div class="picker-foot"><button type="button" class="btn link picker-clear">Clear all</button><button type="button" class="btn primary picker-done">Done</button></div>`;
+    document.body.appendChild(box);
+    const search = box.querySelector(".picker-search"), listEl = box.querySelector(".picker-list"),
+      chosenEl = box.querySelector(".picker-chosen"), clearBtn = box.querySelector(".picker-clear");
+    let shown = [], active = 0, closed = false;
+    const ordered = () => (choices || []).filter((c) => selected.has(c));
+
+    function drawChosen() {
+      chosenEl.innerHTML = "";
+      for (const c of ordered()) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "chip chip-x"; b.textContent = c;
+        b.title = `Remove ${c}`; b.setAttribute("aria-label", `Remove ${c}`);
+        b.addEventListener("click", () => { selected.delete(c); drawChosen(); drawList(); search.focus(); });
+        chosenEl.appendChild(b);
       }
-      this.choices = params.choices || [];
+      chosenEl.hidden = !selected.size;
+      clearBtn.disabled = !selected.size;
     }
-    getGui() { return this.el; }
-    afterGuiAttached() { const b = this.el.querySelector("input"); b && b.focus(); }
-    getValue() { return this.choices.filter((c) => this.value.has(c)); }
-    isPopup() { return true; }
+    function drawList() {
+      const q = search.value.trim().toLowerCase();
+      shown = (choices || []).filter((c) => c.toLowerCase().includes(q));
+      active = Math.min(active, Math.max(shown.length - 1, 0));
+      listEl.innerHTML = "";
+      if (!shown.length) {
+        const none = document.createElement("div");
+        none.className = "picker-none"; none.textContent = `No ${noun} matches "${search.value.trim()}"`;
+        listEl.appendChild(none);
+      }
+      shown.forEach((c, i) => {
+        const row = document.createElement("label");
+        row.className = "picker-row" + (i === active ? " active" : "");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", String(selected.has(c)));
+        const box2 = document.createElement("input");
+        box2.type = "checkbox"; box2.checked = selected.has(c); box2.tabIndex = -1;
+        box2.addEventListener("change", () => { toggle(c); search.focus(); });
+        const text = document.createElement("span");
+        text.textContent = c;
+        row.append(box2, text);
+        row.addEventListener("mouseenter", () => { active = i; mark(); });
+        listEl.appendChild(row);
+      });
+    }
+    function mark() {
+      listEl.querySelectorAll(".picker-row").forEach((r, i) => {
+        r.classList.toggle("active", i === active);
+        if (i === active) r.scrollIntoView({ block: "nearest" });
+      });
+    }
+    function toggle(c) {
+      selected.has(c) ? selected.delete(c) : selected.add(c);
+      drawChosen(); drawList(); mark();
+    }
+    function place() {
+      const r = anchor.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+      const below = r.bottom + 4 + h <= window.innerHeight;
+      box.style.left = `${left}px`;
+      box.style.top = `${below ? r.bottom + 4 : Math.max(8, r.top - h - 4)}px`;
+    }
+    function close(save) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("mousedown", outside, true);
+      window.removeEventListener("scroll", scrolled, true);
+      window.removeEventListener("resize", done);
+      box.remove();
+      const result = ordered();
+      if (save && JSON.stringify([...result].sort()) !== start) onDone && onDone(result);
+      else onCancel && onCancel();
+    }
+    const done = () => close(true);
+    const outside = (e) => { if (!box.contains(e.target)) { e.stopPropagation(); close(true); } };
+    const scrolled = (e) => { if (!box.contains(e.target)) close(true); };
+
+    search.addEventListener("input", () => { active = 0; drawList(); });
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, shown.length - 1); mark(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); mark(); }
+      else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); close(true); }
+      else if (e.key === "Enter") { e.preventDefault(); if (shown[active]) toggle(shown[active]); search.select(); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(false); }
+      else if (e.key === "Tab") { e.preventDefault(); close(true); }
+    });
+    box.querySelector(".picker-done").addEventListener("click", done);
+    clearBtn.addEventListener("click", () => { selected.clear(); drawChosen(); drawList(); search.focus(); });
+    drawChosen(); drawList(); place();
+    search.focus();
+    // from the next moment on: opening can itself scroll the grid, or still be inside the click that opened it
+    setTimeout(() => {
+      if (closed) return;
+      document.addEventListener("mousedown", outside, true);
+      window.addEventListener("scroll", scrolled, true);
+      window.addEventListener("resize", done);
+    }, 150);
+    return { close };
   }
 
-  function agColumn(c) {
-    const col = { field: c.field, headerName: c.title, width: c.width || 150, sortable: true, editable: !!c.editable, resizable: true };
-    if (c.type === "choice") Object.assign(col, { cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["", ...(c.choices || [])] } });
-    if (c.type === "multi") Object.assign(col, { cellEditor: TagEditor, cellEditorParams: { choices: c.choices }, cellEditorPopup: true,
-      cellRenderer: (p) => chipsHtml(p.value) });
-    if (c.type === "link") col.cellRenderer = (p) => linkHtml(p.value);
-    col.cellClassRules = { edited: (p) => !!(p.data && p.data._edited && p.data._edited.includes(c.field)) };
-    return col;
+  function multiEditor(cell, onRendered, success, cancel, params) {
+    const el = document.createElement("div");
+    el.className = "picker-cell";
+    el.innerHTML = chipsHtml(cell.getValue());
+    onRendered(() => pick(cell.getElement(), {
+      choices: params.choices, value: cell.getValue(), noun: params.noun || "item",
+      onDone: (list) => success(list), onCancel: () => cancel(),
+    }));
+    return el;
   }
 
-  function createAgGrid(el, opt) {
-    const ag = window.agGrid;
-    if (ag.ModuleRegistry && ag.AllCommunityModule) ag.ModuleRegistry.registerModules([ag.AllCommunityModule]);
-    const dark = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
-    const theme = ag.themeQuartz && dark && ag.colorSchemeDark ? ag.themeQuartz.withPart(ag.colorSchemeDark) : ag.themeQuartz;
-    let api;
-    const datasource = {
-      getRows: async (p) => {
-        const s = (p.sortModel || [])[0];
-        try {
-          const data = await getRows(opt, p.startRow, p.endRow - p.startRow, s ? { field: s.colId, dir: s.sort } : null);
-          p.successCallback(data.rows, data.total);
-        } catch (e) { opt.onError && opt.onError(e.message); p.failCallback(); }
-      },
-    };
-    const options = {
-      theme,
-      columnDefs: opt.columns.map(agColumn),
-      rowModelType: "infinite",
-      cacheBlockSize: PAGE,
-      maxBlocksInCache: 50,
-      getRowId: (p) => String(p.data.id),
-      rowSelection: { mode: "multiRow", checkboxes: true, headerCheckbox: false, enableClickSelection: false },
-      singleClickEdit: false,
-      stopEditingWhenCellsLoseFocus: true,
-      undoRedoCellEditing: true,
-      datasource,
-      onSelectionChanged: () => opt.onSelection && opt.onSelection(api.getSelectedNodes().length),
-      onCellValueChanged: async (e) => {
-        if (e.oldValue === e.newValue) return;
-        try {
-          const saved = await saveEdit(opt, e.data.id, e.colDef.field, e.newValue);
-          e.data._edited = [...(e.data._edited || []), e.colDef.field];
-          e.node.setDataValue(e.colDef.field, saved);
-          opt.onStatus && opt.onStatus(`Saved ${e.colDef.headerName} of ${e.data.name}`);
-        } catch (err) {
-          opt.onError && opt.onError(err.message);
-          e.node.setDataValue(e.colDef.field, e.oldValue);
-        }
-      },
-    };
-    api = ag.createGrid(el, options);
-    return {
-      engine: "aggrid",
-      reload() { api.setGridOption("datasource", datasource); },
-      selectedIds() { return api.getSelectedNodes().map((n) => n.data && n.data.id).filter(Boolean); },
-      applyValue(ids, field, value) {
-        for (const id of ids) {
-          const node = api.getRowNode(String(id));
-          if (node && node.data) { node.data[field] = value; node.data._edited = [...(node.data._edited || []), field]; }
-        }
-        api.refreshCells({ force: true });
-      },
-      destroy() { api.destroy(); },
-    };
-  }
-
-  // ── Tabulator ────────────────────────────────────────────────────────────────────────────────────────────
-  function tabColumn(c) {
+  // ── The grid ─────────────────────────────────────────────────────────────────────────────────────────────
+  function column(c) {
     const col = { field: c.field, title: c.title, width: c.width || 150, headerSort: true, resizable: true };
-    if (c.editable) col.editor = c.type === "choice" || c.type === "multi" ? "list" : "input";
-    if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true };
+    if (c.editable) col.editor = c.type === "choice" ? "list" : "input";
+    if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true, listOnEmpty: true };
     if (c.type === "multi") {
-      col.editorParams = { values: c.choices || [], multiselect: true };
+      col.editor = multiEditor;
+      col.editorParams = { choices: c.choices || [], noun: c.noun || "item" };
       col.formatter = (cell) => chipsHtml(cell.getValue());
     }
     if (c.type === "link") col.formatter = (cell) => linkHtml(cell.getValue());
     return col;
   }
 
-  function createTabulator(el, opt) {
-    let busy = 0;
+  function create(el, opt) {
     const original = new Map();          // id -> the row as loaded (and as saved since)
     // Tabulator writes its height onto the element itself; "100%" of a box without a fixed height made the grid
     // grow to the full data and keep loading pages, so pass the box's height in pixels
@@ -172,9 +205,9 @@
     const table = new window.Tabulator(el, {
       height: `${Math.round(height)}px`,
       layout: "fitData",
-      columns: opt.columns.map(tabColumn),
+      columns: opt.columns.map(column),
       index: "id",
-      // Spreadsheet-style cell ranges, with copy and paste (also from Excel): free in Tabulator
+      // Spreadsheet-style cell blocks, with copy and paste (also from Excel)
       selectableRange: 1,
       selectableRangeColumns: true,
       selectableRangeRows: true,
@@ -243,12 +276,11 @@
     table.on("cellEdited", async (cell) => {
       const field = cell.getField(), col = opt.columns.find((c) => c.field === field);
       if (!col || !col.editable) return;
-      let value = cell.getValue();
-      if (col.type === "multi" && typeof value === "string") value = value.split(",").map((v) => v.trim()).filter(Boolean);
-      busy++;
+      const value = cell.getValue();
       try {
         const saved = await saveEdit(opt, cell.getRow().getData().id, field, value);
         const d = cell.getRow().getData();
+        (original.get(d.id) || {})[field] = saved;
         d._edited = [...(d._edited || []), field];
         cell.getElement().classList.add("edited");
         if (JSON.stringify(saved) !== JSON.stringify(value)) cell.setValue(saved, true);
@@ -256,26 +288,25 @@
       } catch (err) {
         opt.onError && opt.onError(err.message);
         cell.restoreOldValue();
-      } finally { busy--; }
+      }
     });
     return {
-      engine: "tabulator",
       reload() { table.setData(); },
       selectedIds() { return selectedRows().map((r) => r.getData().id); },
       applyValue(ids, field, value) {
         for (const id of ids) {
           const row = table.getRow(id);
-          if (row) { const d = row.getData(); d._edited = [...(d._edited || []), field]; row.update({ [field]: value }); row.reformat(); }
+          if (!row) continue;
+          const d = row.getData();
+          (original.get(id) || {})[field] = value;
+          d._edited = [...(d._edited || []), field];
+          row.update({ [field]: value });
+          row.reformat();
         }
       },
       destroy() { table.destroy(); },
     };
   }
 
-  window.DataGrid = {
-    create(el, opt) {
-      if (opt.engine === "tabulator") return createTabulator(el, opt);
-      return createAgGrid(el, opt);
-    },
-  };
+  window.DataGrid = { create, pick };
 })();

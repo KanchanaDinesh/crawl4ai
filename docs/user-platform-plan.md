@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06)**; the grid choice waits for Kanchana to try both. Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06); grid chosen: Tabulator; phase 2 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -24,7 +24,7 @@ The collectors keep running all the time; users always see new data as it arrive
 | Language | **Python only** (no React, no Node.js build) | One language and codebase; PDF reports and charts are Python anyway; ~10 internal users |
 | Web framework | **Django** | Logins, users, groups, permissions, sessions, CSRF, forms, admin, migrations built in; change history add-ons |
 | Interactivity | **HTMX** (+ small plain JS where a library needs it) | Filters, paging, forms update part of a page without React; logic stays in Python |
-| Grid | **AG Grid Community** (MIT) first; **Tabulator** (MIT) as the alternative, chosen by a test (see "The grid") | Airtable-like editing and selection; free for production use |
+| Grid | **Tabulator** (MIT), chosen by Kanchana after the grid test (see "The grid") | Airtable-like editing; selecting a block of cells and copy/paste are free |
 | Charts | **Plotly** (Python builds the figure, plotly.js draws it) | Rich interactive charts; the same figure exports to PNG/SVG for PDFs |
 | PDF reports | **WeasyPrint** (HTML + CSS → PDF) | Reports are templates like the screens; preview on screen, download as PDF |
 | Excel export | **openpyxl** on the server | No paid grid licence needed |
@@ -39,7 +39,7 @@ The collectors keep running all the time; users always see new data as it arrive
 |---|---|---|
 | Web app | Django (current LTS when we start) | BSD |
 | Partial page updates | HTMX, django-htmx | BSD / MIT |
-| Grid | AG Grid Community (v36.x when checked) or Tabulator (v6.5 when checked) | MIT |
+| Grid | Tabulator 6.7 | MIT |
 | Charts | Plotly (Python) + plotly.js | MIT |
 | PDF | WeasyPrint | BSD |
 | Excel | openpyxl | MIT |
@@ -70,19 +70,16 @@ We will use grids heavily, so the choice matters, and it should be easy to chang
 | jspreadsheet CE | MIT | Yes | Copy/paste yes | Yes | | More a spreadsheet than a data grid |
 | Handsontable | Commercial | **No** (non-commercial use only) | Yes | Yes | | Excluded |
 
-**Decision:** start with **AG Grid Community**, and settle it with a short test in phase 1: build the same grid
-(the companies list, 130,000 rows, with editing, multi-select, bulk edit, filters, saved views) with AG Grid
-Community and with Tabulator, and judge:
+**Decision (Kanchana, 2026-11-06): Tabulator.** Selecting a block of cells is needed, and in AG Grid it's in the paid
+edition. The table above is kept for the record; AG Grid is no longer in the project.
 
-1. speed with 100,000+ rows (server-side paging and scrolling);
-2. editing feel: inline edit, multi-select, bulk edit, and copy/paste from Excel (free in Tabulator only);
-3. custom cells: chips for tags and links, a record picker for links;
-4. how much of our own code each needs.
+**Searchable multiple-choice list:** `DataGrid.pick` in `datagrid.js`, our own because Tabulator's list editor can't
+search and multi-select at the same time. Search box on top, ticks, chosen values as removable chips, keyboard
+(arrows, Enter ticks, Esc cancels, Tab or clicking away saves). Every multiple-choice field and the bulk edit bar use it.
 
-**Whichever wins, it sits behind our own small wrapper** (`webapp/static/js/datagrid.js`) with one interface:
+**The grid sits behind our own small wrapper** (`webapp/static/js/datagrid.js`) with one interface:
 load a dataset by name, show its fields from the catalog, save an edit, bulk edit, save a view. The pages and
-the server never talk to the grid library directly, so switching grids later (or buying AG Grid Enterprise)
-changes one file.
+the server never talk to the grid library directly, so switching grids later changes one file.
 
 ## Phase 1 results (2026-11-06)
 
@@ -120,9 +117,8 @@ their own table (never the collected data) and the audit log.
 | Dark mode | follows the system | its stylesheet is light only (to theme) |
 | Our code needed | less | more: paste handling, a fixed pixel height (found and fixed: "100%" made it load every page) |
 
-**Leaning:** Tabulator, because spreadsheet-style selection and copy/paste are central to an Airtable-like
-workspace and are free there; AG Grid has more polish but needs the paid edition for exactly those features.
-**Kanchana decides after trying both** (then `datagrid.js` keeps only the chosen engine).
+**Chosen: Tabulator** (Kanchana, 2026-11-06). `datagrid.js` keeps only Tabulator, and it now follows the app's
+dark and light themes.
 
 ## How it fits together
 
@@ -130,7 +126,7 @@ workspace and are free there; AG Grid has more polish but needs the paid edition
  Collectors (Python, unchanged)              Django web app (Python)                      Browser
  news, tech, markets, vehicles,  ──writes──►  ┌─────────────────────────────┐  HTML+HTMX  ┌──────────────┐
  companies, scrapers                           │ accounts: users, roles, menus│ ──────────► │ pages, grid  │
-        │                                      │ catalog: datasets + fields   │ ◄────────── │ (AG Grid),   │
+        │                                      │ catalog: datasets + fields   │ ◄────────── │ (Tabulator),│
         ▼                                      │ data: rows, edits, history   │  edits,     │ Plotly charts│
  ┌─────────────────────────────────────┐      │ views, charts, dashboards    │  filters    └──────────────┘
  │ PostgreSQL database crawl4ai          │ ◄──► │ reports (WeasyPrint)         │
@@ -318,11 +314,10 @@ Each phase ends with tests passing, a real check on the Mac, an update to STATUS
 3. Log page views too, or only changes, exports and logins (suggested)?
 4. Build on the Mac first and move to the server in phase 8 (suggested), or start on the server?
 5. AI assistant: may it see the column names of users' private tables, or only shared datasets?
+6. May users add a new choice by typing it in a multiple-choice list, or only administrators?
 
 ## Risks
 
 - **The Mac's drive is almost full** (PostgreSQL keeps its data there): the server move matters for growth.
-- **Grid limits:** AG Grid Community lacks range copy/paste and Excel export; covered by Python export and bulk
-  edit, or by Tabulator if the test favours it.
 - **Rule A needs care in every collector**; the shared helper and tests keep it the same everywhere.
 - **AI cost** grows with use; per-user daily limits and measuring the first weeks.

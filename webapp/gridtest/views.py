@@ -1,4 +1,4 @@
-"""The grid test (plan phase 1): the same company list in AG Grid Community and in Tabulator, to choose the grid.
+"""The grid test (plan phase 1): the company list in the chosen grid, Tabulator, to try its editing and selection.
 
 Rows come from companies.v_companies (about 130,000), paged, sorted and filtered in PostgreSQL. Edits go to
 GridTestEdit (never to the collected data) and the audit log, and are shown on top of the real values.
@@ -17,14 +17,20 @@ from webapp.audit.log import record
 
 from .models import GridTestEdit
 
-TAGS = ["Priority", "Partner", "Follow up", "Checked", "Not a company"]
+TAGS = [   # long enough to need the search box in the list; real choice fields come in phase 5
+    "Agriculture", "Banking", "Checked", "Competitor", "Construction", "Customer", "Duplicate", "Education",
+    "Energy", "Export", "Family owned", "Follow up", "Government", "Healthcare", "Hospitality", "Insurance",
+    "Listed on CSE", "Logistics", "Manufacturing", "Not a company", "Partner", "Priority", "Retail", "Startup",
+    "Supplier", "Technology", "Telecom", "Tourism", "Verified", "Wholesale",
+]
 COLUMNS = [   # what the grids show; in phase 2 this comes from the catalog
     {"field": "name", "title": "Name", "type": "text", "width": 260},
     {"field": "country", "title": "Country", "type": "choice", "editable": True, "width": 90},
     {"field": "source", "title": "Source", "type": "text", "width": 100},
     {"field": "website", "title": "Website", "type": "link", "width": 220},
     {"field": "industry", "title": "Industry", "type": "text", "editable": True, "width": 220},
-    {"field": "tags", "title": "Tags (test field)", "type": "multi", "editable": True, "choices": TAGS, "width": 200},
+    {"field": "tags", "title": "Tags (test field)", "type": "multi", "editable": True, "choices": TAGS, "noun": "tag",
+     "width": 220},
     {"field": "notes", "title": "Notes (test field)", "type": "text", "editable": True, "width": 200},
     {"field": "site_status", "title": "Website read", "type": "text", "width": 110},
     {"field": "first_seen", "title": "First seen", "type": "date", "width": 120},

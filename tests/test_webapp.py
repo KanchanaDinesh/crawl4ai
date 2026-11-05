@@ -182,11 +182,11 @@ def test_grid_edits_are_kept_apart_and_audited(admin_client, companies):
     post = lambda url, body: admin_client.post(url, json.dumps(body), content_type="application/json")
     assert post(edit, {"id": "cse:JKH", "field": "tags", "value": ["Nope"]}).status_code == 400
     assert post(edit, {"id": "cse:JKH", "field": "name", "value": "X"}).status_code == 400   # not editable
-    assert post(edit, {"id": "cse:JKH", "field": "industry", "value": "Conglomerate", "engine": "aggrid"}).json()["ok"]
+    assert post(edit, {"id": "cse:JKH", "field": "industry", "value": "Conglomerate", "engine": "tabulator"}).json()["ok"]
     res = post(bulk, {"ids": ["cse:JKH", "gleif:L1"], "field": "tags", "value": ["Priority", "Partner"]}).json()
-    assert res["count"] == 2 and res["value"] == ["Priority", "Partner"]
+    assert res["count"] == 2 and res["value"] == ["Partner", "Priority"]      # in the list's order
     rows = {r["id"]: r for r in admin_client.get(reverse("grid_test_rows"), {"country": "LK"}).json()["rows"]}
-    assert rows["cse:JKH"]["industry"] == "Conglomerate" and rows["gleif:L1"]["tags"] == ["Priority", "Partner"]
+    assert rows["cse:JKH"]["industry"] == "Conglomerate" and rows["gleif:L1"]["tags"] == ["Partner", "Priority"]
     with connection.cursor() as cur:                                         # the collected data is untouched
         cur.execute("select industry from companies.companies where id = 'cse:JKH'")
         assert cur.fetchone()[0] == "Capital Goods"
@@ -200,8 +200,10 @@ def test_grid_endpoints_check_the_menu_right(viewer_client, companies):
     assert res.status_code == 403
 
 
-def test_grid_page_renders_both_engines(admin_client, companies):
+def test_grid_page_uses_tabulator_with_a_long_tag_list(admin_client, companies):
     page = admin_client.get(reverse("grid_test")).content.decode()
-    assert "ag-grid-community.min.js" in page and "tabulator.min.js" in page and "datagrid.js" in page
+    assert "tabulator.min.js" in page and "datagrid.js" in page and "ag-grid" not in page
     config = json.loads(page.split('id="grid-config" type="application/json">')[1].split("</script>")[0])
     assert next(c for c in config["columns"] if c["field"] == "country")["choices"] == ["LK", "US"]
+    tags = next(c for c in config["columns"] if c["field"] == "tags")
+    assert tags["type"] == "multi" and tags["noun"] == "tag" and len(tags["choices"]) > 20
