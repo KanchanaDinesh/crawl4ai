@@ -1,0 +1,107 @@
+{
+  "user_agent": "crawl4ai-companies/1.0 (personal research; https://github.com/KanchanaDinesh/crawl4ai)",
+  "priority_countries": ["US", "GB", "AU", "IN", "LK"],
+
+  "collect": {
+    "max_minutes": 5
+  },
+
+  "sources": {
+    "wikidata": {
+      "enabled": true,
+      "about": "Wikidata (CC0): companies with an official website (P856) and a country (P17). One query per country and company type.",
+      "endpoint": "https://query.wikidata.org/sparql",
+      "timeout_seconds": 70,
+      "min_wait_seconds": 5,
+      "refresh_days": 30,
+      "types": [
+        {"id": "Q783794", "name": "company"},
+        {"id": "Q891723", "name": "public company"},
+        {"id": "Q6881511", "name": "enterprise"},
+        {"id": "Q1589009", "name": "privately held company"},
+        {"id": "Q4830453", "name": "business"},
+        {"id": "Q658255", "name": "subsidiary"},
+        {"id": "Q167037", "name": "corporation"},
+        {"id": "Q13235160", "name": "manufacturer"},
+        {"id": "Q507619", "name": "retail chain"},
+        {"id": "Q22687", "name": "bank"},
+        {"id": "Q46970", "name": "airline"},
+        {"id": "Q4539", "name": "cooperative"},
+        {"id": "Q1631129", "name": "hotel chain"},
+        {"id": "Q740752", "name": "transport company"},
+        {"id": "Q1331793", "name": "media company"},
+        {"id": "Q2085381", "name": "publishing house"},
+        {"id": "Q1762059", "name": "film production company"},
+        {"id": "Q210167", "name": "video game developer"}
+      ]
+    },
+    "gleif": {
+      "enabled": true,
+      "about": "GLEIF LEI records (CC0): legal entities worldwide with name and country, no websites. 60 requests a minute allowed.",
+      "api": "https://api.gleif.org/api/v1",
+      "page_size": 200,
+      "delay_seconds": 1.1,
+      "category": "GENERAL",
+      "status": "ACTIVE",
+      "refresh_days": 30
+    },
+    "cse": {
+      "enabled": true,
+      "about": "Colombo Stock Exchange: every listed company, with website and sector from cse.lk's own API.",
+      "api": "https://www.cse.lk/api",
+      "delay_seconds": 1.0,
+      "per_batch": 10,
+      "refresh_days": 30
+    },
+    "companies_house": {
+      "enabled": false,
+      "about": "UK Companies House free bulk data (OGL): every UK company, no websites. 7 zip files of ~70 MB, downloaded one at a time to data/companies/downloads/ and deleted once imported.",
+      "index_url": "https://download.companieshouse.gov.uk/en_output.html",
+      "chunk_rows": 20000,
+      "active_only": true,
+      "refresh_days": 30
+    },
+    "asic": {
+      "enabled": false,
+      "about": "ASIC company dataset (Australia, CC BY 3.0 AU): every Australian company, no websites. data.gov.au's robots.txt says no robots, so download the 'Current CSV' yourself and put its path in 'file'.",
+      "file": "",
+      "dataset_page": "https://data.gov.au/data/dataset/asic-companies",
+      "chunk_bytes": 8000000,
+      "registered_only": true
+    },
+    "sec": {
+      "enabled": false,
+      "about": "SEC EDGAR company tickers (US listed companies, no websites). The SEC requires a contact email in the User-Agent: set contact_email to use it.",
+      "url": "https://www.sec.gov/files/company_tickers.json",
+      "contact_email": "",
+      "refresh_days": 30
+    }
+  },
+
+  "update": {
+    "concurrency": 8,
+    "max_minutes": 10,
+    "max_pages": 4,
+    "recheck_days": 30,
+    "retry_failed_days": 7,
+    "refused_wait_days": 14,
+    "key_pages": {
+      "about": ["about", "about-us", "company", "who-we-are", "our-story", "aboutus"],
+      "team": ["team", "our-team", "people", "leadership", "founders", "management", "board-of-directors"],
+      "contact": ["contact", "contact-us", "contactus"]
+    },
+    "skip_domains": [
+      "facebook.com", "linkedin.com", "twitter.com", "x.com", "instagram.com", "youtube.com", "wikipedia.org",
+      "wikidata.org", "blogspot.com", "wordpress.com", "github.com", "tiktok.com", "medium.com", "t.me", "wa.me",
+      "wixsite.com", "sites.google.com"
+    ]
+  },
+
+  "crawl": {
+    "concurrency": 8,
+    "delay_seconds": 1.0,
+    "page_timeout_ms": 20000,
+    "check_robots_txt": true,
+    "user_agent": "crawl4ai-companies/1.0 (personal research; https://github.com/KanchanaDinesh/crawl4ai)"
+  }
+}

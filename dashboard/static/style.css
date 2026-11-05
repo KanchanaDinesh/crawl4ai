@@ -51,7 +51,8 @@ tr.click{cursor:pointer}tr.click:hover td{background:var(--accent-soft)}
 td.nowrap,.nowrap{white-space:nowrap}td.num{text-align:right}
 .pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
 .p-qualified,.p-ok{background:var(--ok-bg);color:var(--ok)}.p-rejected,.p-failed{background:var(--bad-bg);color:var(--bad)}
-.p-watch,.p-interrupted{background:var(--warn-bg);color:var(--warn)}.p-not-checked{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.p-watch,.p-interrupted,.p-unreachable,.p-robots\.txt\:-no{background:var(--warn-bg);color:var(--warn)}.p-read{background:var(--ok-bg);color:var(--ok)}
+.p-not-read,.p-no-website,.p-not-checked{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
 .more{display:block;margin:10px auto 0}
 .empty{padding:30px 10px;text-align:center;color:var(--muted)}.empty code{background:var(--bg);padding:2px 6px;border-radius:5px}
 .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}.drawer-bg.open{display:block}

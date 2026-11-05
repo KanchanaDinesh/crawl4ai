@@ -1,4 +1,4 @@
-"""Local web dashboard for world news, tech intel, markets and vehicles, reading live from the DuckDB files.
+"""Local web dashboard for world news, tech intel, markets, vehicles and companies, reading live from the DuckDB files.
 
     python -m dashboard                 http://127.0.0.1:8050
     python -m dashboard --port 9000 --open
@@ -178,6 +178,25 @@ async def vehicle_changes(request):
     return web.json_response(_query("vehicles", lambda c: queries.vehicle_price_changes(c, days), f"veh_changes:{days}"))
 
 
+async def companies_summary(request):
+    return web.json_response(_query("companies", queries.companies_summary, "companies_summary"))
+
+
+async def companies_list(request):
+    q = request.query
+    args = dict(country=(q.get("country") or "").upper() or None, source=q.get("source") or None,
+                status=q.get("status") if q.get("status") in queries.COMPANY_FILTERS else None,
+                q=(q.get("q") or "").strip() or None,
+                sort=q.get("sort") if q.get("sort") in queries.COMPANY_SORT else "best",
+                limit=_int(request, "limit", 100, hi=1000), offset=_int(request, "offset", 0, lo=0))
+    return web.json_response(_query("companies", lambda c: queries.companies_list(c, **args), f"co_list:{sorted(args.items())}"))
+
+
+async def company_detail(request):
+    cid = request.match_info["id"]
+    return web.json_response(_query("companies", lambda c: queries.company_detail(c, cid), f"co:{cid}"))
+
+
 async def automation(request):
     """Last lines of logs/history.log written by run_all.sh (manual and scheduled runs)."""
     path = project_paths.REPO_ROOT / "logs" / "history.log"
@@ -221,6 +240,9 @@ def build_app() -> web.Application:
         web.get("/api/markets/history", markets_history),
         web.get("/api/markets/compare", markets_compare),
         web.get("/api/markets/performance", markets_performance),
+        web.get("/api/companies/summary", companies_summary),
+        web.get("/api/companies/list", companies_list),
+        web.get("/api/companies/company/{id}", company_detail),
         web.static("/static", STATIC),
     ])
     return app

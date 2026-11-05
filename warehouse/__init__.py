@@ -5,6 +5,7 @@
     data/scrapers/scrapers.duckdb      every scraper output (Sri Lankan news, products, CSE, IMDb)
     data/vehicles/vehicles.duckdb      vehicle ads over time, price changes (vehicles)
     data/markets/markets.duckdb        stock, index, metal, FX and crypto prices over time (markets)
+    data/companies/companies.duckdb    company directory: names, websites, countries, website facts (companies)
 
 One file per tool, because DuckDB allows one writer per file: the tools can run at
 the same time without blocking each other. `python -m warehouse sql` opens them all
@@ -27,6 +28,7 @@ DB_FILES = {
     "scrapers": project_paths.DATA_DIR / "scrapers" / "scrapers.duckdb",
     "markets": Path(os.environ.get("MARKETS_DATA_DIR", project_paths.DATA_DIR / "markets")) / "markets.duckdb",
     "vehicles": Path(os.environ.get("VEHICLES_DATA_DIR", project_paths.DATA_DIR / "vehicles")) / "vehicles.duckdb",
+    "companies": Path(os.environ.get("COMPANIES_DATA_DIR", project_paths.DATA_DIR / "companies")) / "companies.duckdb",
 }
 
 

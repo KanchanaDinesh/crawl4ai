@@ -13,6 +13,9 @@ The parts:
   with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
 - **`vehicles/`**: the latest ads from ikman.lk and riyasewana.com, with new-ad and price-change history.
   See [vehicles/README.md](vehicles/README.md). Quick start: `uv run python -m vehicles run`.
+- **`companies/`**: a directory of companies of every kind (US, UK, Australia, India, Sri Lanka first, then the
+  world) from open data (Wikidata, GLEIF, the CSE), and what each company's own website says about it.
+  See [companies/README.md](companies/README.md). Quick start: `uv run python -m companies collect --max-minutes 5`.
 - **`briefing/`**: the day's text summary and a 30-second video made from all the data, offline (no AI, no tokens).
   See [briefing/README.md](briefing/README.md). Quick start: `uv run python -m briefing run`.
 - **`dashboard/`**: a local web dashboard for World News, Tech Intel, Markets and Vehicles, reading live from the databases.
@@ -62,7 +65,9 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 **Steps:** `markets`, `news`, `news_analyze` (biggest stories, topics, names, countries and tone from the saved headlines), `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
 (company facts from each site's own pages: social links, people, employees, GitHub), `tech_update`
 (profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
-registration dates), `vehicles` (ikman.lk + riyasewana), `lknews`, `briefing` (summary + video, last). **Profiles** group steps that run at
+registration dates), `vehicles` (ikman.lk + riyasewana), `companies_collect` (add companies from open data, continues
+where the last run stopped), `companies_update` (read company websites: social links, people, employees), `lknews`,
+`briefing` (summary + video, last). **Profiles** group steps that run at
 the same speed; they're defined in `automation.conf`.
 
 ### Recommended schedule
@@ -150,6 +155,11 @@ uv run python -m dashboard --open        # http://localhost:8050
 - **Vehicles:** ikman.lk and riyasewana ads, newest first with photos and NEW badges; price drops ("was Rs …");
   filters for site, period, new in the last run and search; new ads per day, **price ranges**, **makes with their
   median price**, and when each site was last collected.
+- **Companies:** the company directory: counts per country and source, companies added per day, website status,
+  social accounts and industries; filters for country, source, website status (read, has LinkedIn, names its people,
+  ...) and search. The list scrolls inside its panel and loads more by itself; **click a row** for the company's
+  details from its source (registration number, sector, address, ...) and what its own website says (social
+  accounts, people, employees, emails, phones). Side panels show the sources, collection progress and recent runs.
 - **Tech Intel:** a compact list, one line per site (name, domain, description, status, category, score bar,
   **domain age** with a NEW badge for domains under 30 days old, source), sortable by latest seen, highest score,
   **newest domain** or name; it scrolls inside its panel with the headings kept in view. Charts on top: found and
@@ -192,9 +202,10 @@ Each tool stores its data in its own DuckDB file inside `data/`, so they can run
 | `data/techintel/techintel.duckdb` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` |
 | `data/markets/markets.duckdb` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
 | `data/vehicles/vehicles.duckdb` | `ads` (every ad from every run), `runs` (per site: ok?, ads, seconds, error), views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes` |
+| `data/companies/companies.duckdb` | `companies` (one row per company per source: name, country, website, industry), `sites` (what each company website says), `refusals`, `cursors` (where each source stopped), `runs`, view `v_companies` |
 | `data/scrapers/scrapers.duckdb` | `scraper_rows` (every output of the `scrapers/` tools, every run), views `v_news_headlines`, `v_products` |
 
-Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `markets.`, `vehicles.` or `scrapers.`:
+Query them together (read-only) with the `warehouse` command. Prefix tables with `news.`, `tech.`, `markets.`, `vehicles.`, `companies.` or `scrapers.`:
 
 ```bash
 uv run python -m warehouse info                    # sizes, tables, row counts
@@ -239,7 +250,7 @@ watch.sh                 the live tech-intel listener (normally via ./schedule.s
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               DuckDB helpers and the `python -m warehouse` query tool
 dashboard/               local web dashboard (python -m dashboard)
-techintel/ worldnews/ markets/ vehicles/   the other tools (python -m <name>), each with its own README
+techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)
 scrapers/

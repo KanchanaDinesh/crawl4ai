@@ -11,6 +11,9 @@ import pytest
 _TMP = Path(tempfile.mkdtemp(prefix="crawl4ai-tests-"))
 os.environ["PROJECT_DATA_DIR"] = str(_TMP / "data")
 os.environ["SCRAPERS_OUTPUT_DIR"] = str(_TMP / "output")
+# crawl4ai keeps a robots.txt cache by host:port. Test sites run on 127.0.0.1 with random ports, and one that
+# says "Disallow: /" was cached for days, so a later test that got the same port was refused. Own folder per run.
+os.environ["CRAWL4_AI_BASE_DIRECTORY"] = str(_TMP / "crawl4ai")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))

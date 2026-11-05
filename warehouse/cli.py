@@ -6,7 +6,7 @@
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
 
-In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  scrapers.*
+In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  companies.*  scrapers.*
 e.g.  select * from news.news_items order by published_at desc limit 20
 """
 
@@ -29,6 +29,8 @@ EXAMPLES = {
     "Market snapshot (key prices)": "select name, price, currency, round(change_pct, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
     "Top CSE gainers today": "select symbol, name, price, round(change_pct, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc limit 10",
     "Crypto top 20": "select rank, symbol, name, price, round(change_pct, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
+    "Companies per country": "select country, count(*) as companies, count(website) as with_website from companies.companies group by 1 order by 2 desc limit 20",
+    "Company websites with LinkedIn": "select name, country, website, linkedin, employees from companies.v_companies where linkedin is not null limit 20",
     "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from vehicles.v_vehicle_price_changes order by saved_at desc",
 }
 
@@ -46,6 +48,8 @@ def init() -> None:
     MarketStore(DB_FILES["markets"].parent).close()
     from vehicles.store import VehicleStore
     VehicleStore(DB_FILES["vehicles"]).close()
+    from companies.store import CompanyStore
+    CompanyStore(DB_FILES["companies"]).close()
     for name, path in DB_FILES.items():
         print(f"{name:<9} {path}")
 

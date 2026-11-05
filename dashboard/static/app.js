@@ -1,4 +1,4 @@
-// Intelligence Dashboard: World News, Tech Intel, Markets and Vehicles, reading from the local DuckDB-backed API.
+// Intelligence Dashboard: World News, Tech Intel, Markets, Vehicles and Companies, reading from the local DuckDB-backed API.
 // Charts are plain SVG drawn here (no library, works offline).
 "use strict";
 
@@ -860,6 +860,146 @@ $("vh-new").addEventListener("change", (e) => { vh.new = e.target.checked; loadV
 $("vh-q").addEventListener("input", debounce((e) => { vh.q = e.target.value.trim(); loadVehicleAds(true); }));
 $("vh-more").addEventListener("click", () => loadVehicleAds(false));
 
+// ───────────────────────────── COMPANIES ─────────────────────────────
+// python -m companies: collect (names, websites, countries from open data) and update (each website read)
+const co = { country: "", source: "", status: "", q: "", sort: "best", offset: 0, rows: [] };
+const SITE_STATUS = { ok: "read", "not read": "not read", "no website": "no website", unreachable: "unreachable",
+  not_allowed: "robots.txt: no" };
+const SOURCE_NAME = { wikidata: "Wikidata", gleif: "GLEIF (LEI)", cse: "CSE (Sri Lanka)", companies_house: "Companies House (UK)",
+  asic: "ASIC (Australia)", sec: "SEC EDGAR (US)" };
+
+async function loadCompanies() {
+  const summary = await api("/api/companies/summary");
+  setBanner([summary]);
+  const s = summary.data;
+  if (!s || !s.counts.companies) {
+    $("co-kpis").innerHTML = "";
+    $("co-table").innerHTML = `<div class="empty">No companies yet.<br>Run <code>uv run python -m companies collect --max-minutes 5</code>, then refresh this page.</div>`;
+    return;
+  }
+  const c = s.counts;
+  $("co-kpis").innerHTML = [[fmtNum(c.companies), "Companies"], [fmtNum(c.with_website), "With a website"],
+    [fmtNum(c.sites_ok), "Websites read"], [fmtNum(c.sites_with_social), "With social links"],
+    [fmtNum(c.countries), "Countries"], [fmtNum(c.new_24h), "Added in 24 hours"]]
+    .map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+  const sel = $("co-country");
+  sel.innerHTML = `<option value="">All countries (${fmtNum(c.companies)})</option>` + s.by_country.filter((r) => r.country)
+    .map((r) => `<option value="${esc(r.country)}">${esc(r.name)} · ${fmtNum(r.n)}</option>`).join("");
+  sel.value = co.country;
+  $("co-sources").innerHTML = [`<button class="chip ${co.source ? "" : "active"}" data-source="">All<small>${fmtNum(c.companies)}</small></button>`]
+    .concat(s.by_source.map((x) => `<button class="chip ${co.source === x.source ? "active" : ""}" data-source="${esc(x.source)}">${esc(SOURCE_NAME[x.source] || x.source)}<small>${fmtNum(x.n)}</small></button>`)).join(" ");
+  dayColumns($("co-days-chart"), s.by_day, "n", "with_website", "with a website");
+  const top = s.by_country.slice(0, 12), max = Math.max(1, ...top.map((r) => r.n));
+  $("co-by-country").innerHTML = top.map((r) => `<div class="row" data-country="${esc(r.country || "")}" title="${esc(r.name)}: ${fmtNum(r.n)} companies, ${fmtNum(r.with_website)} with a website, ${fmtNum(r.sites_ok)} read">
+    <span>${esc(r.name)}</span><i style="width:${Math.max(2, (100 * r.n) / max)}%"></i><span class="n">${fmtNum(r.n)}</span></div>`).join("");
+  bars($("co-by-status"), s.by_status, "status", "n", (r) => SITE_STATUS[r.status] || r.status);
+  bars($("co-social"), s.social.slice(0, 10), "platform", "n", (r) => (SOCIAL[r.platform] || [0, r.platform])[1]);
+  bars($("co-industries"), s.industries, "industry", "n");
+  $("co-source-table").innerHTML = `<table><tr><th>Source</th><th class="num">Companies</th><th class="num">Websites</th><th class="num">Countries</th></tr>${s.by_source.map((x) => `
+    <tr><td>${esc(SOURCE_NAME[x.source] || x.source)}<div class="muted small">last ${esc(ago(x.last_seen))}</div></td><td class="num">${fmtNum(x.n)}</td>
+    <td class="num">${fmtNum(x.with_website)}</td><td class="num">${x.countries}</td></tr>`).join("")}</table>`;
+  $("co-progress").innerHTML = s.progress.length ? `<table>${s.progress.map((p) => `<tr><td>${esc(SOURCE_NAME[p.source] || p.source)}</td>
+    <td class="num">${p.done} / ${p.parts} done</td></tr>`).join("")}</table><div class="muted small">Each run continues where the last one stopped.</div>`
+    : `<div class="muted small">No runs yet.</div>`;
+  $("co-runs").innerHTML = s.runs.length ? `<table>${s.runs.map((r) => `<tr><td class="nowrap">${esc(fmtTime(r.started_at))}</td>
+    <td>${esc(r.command)}</td><td class="small">${esc(r.text)}${r.problems ? `<div class="down">${esc(r.problems)}</div>` : ""}</td></tr>`).join("")}</table>` : "";
+  await loadCompanyRows(true);
+}
+
+let coReq = 0;
+async function loadCompanyRows(reset) {
+  const ticket = ++coReq;
+  const offset = reset ? 0 : co.offset;
+  const res = await api("/api/companies/list", { country: co.country, source: co.source, status: co.status, q: co.q,
+    sort: co.sort, limit: PAGE, offset });
+  if (ticket !== coReq) return;
+  if (reset) { co.offset = 0; co.rows = []; }
+  const d = res.data || { total: 0, items: [] };
+  co.rows = co.rows.concat(d.items);
+  $("co-count").textContent = shown(d.total, co.rows.length,
+    co.rows.length < d.total ? "scroll the list for more · click a row for details" : "click a row for details");
+  $("co-table").innerHTML = co.rows.length ? `<table class="dense"><thead><tr><th>#</th><th>Company</th><th>Country</th>
+    <th>Industry</th><th>Website</th><th>Social</th><th>Source</th></tr></thead><tbody>${co.rows.map((r, n) => `
+    <tr class="click" data-id="${esc(r.id)}"><td class="num muted">${n + 1}</td>
+    <td class="site"><div class="nm">${esc(r.name)}</div>${r.website ? `<div>${link(r.website, r.domain || r.website)}</div>` : ""}</td>
+    <td class="nowrap" title="${esc(r.country_name || "")}">${esc(r.country || "–")}</td>
+    <td class="small"><div class="ds" style="max-width:30ch" title="${esc(r.industry || "")}">${esc(r.industry || "")}</div></td>
+    <td>${pill(SITE_STATUS[r.site_status] || r.site_status)}</td>
+    <td class="nowrap small">${socialLinks(r.social)}${r.people ? ` <span title="people named on its site">👤${r.people}</span>` : ""}${r.employees
+      ? ` <span class="muted" title="employees, as the site says">${esc(String(r.employees).slice(0, 18))}</span>` : ""}</td>
+    <td class="small nowrap">${esc(SOURCE_NAME[r.source] || r.source)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty">No companies match these filters.</div>`;
+  co.offset += d.items.length;
+  $("co-more").hidden = co.offset >= d.total;
+}
+
+async function openCompany(id) {
+  $("drawer-body").innerHTML = `<div class="muted">Loading…</div>`;
+  $("drawer").classList.add("open"); $("drawer-bg").classList.add("open");
+  const d = (await api(`/api/companies/company/${encodeURIComponent(id)}`)).data || {};
+  const c = d.company;
+  if (!c) { $("drawer-body").innerHTML = `<div class="muted">Not found.</div>`; return; }
+  const ex = c.extra || {};
+  const LABEL = { type: "Type (Wikidata)", wikidata: "Wikidata", city: "City", legal_form: "Legal form", registered_as: "Registration no.",
+    jurisdiction: "Jurisdiction", created: "Created", symbol: "CSE symbol", established: "Established", board: "Board",
+    address: "Registered office", business: "Business", status: "Status", category: "Category", incorporated: "Incorporated",
+    town: "Town", postcode: "Postcode", companies_house: "Companies House", abn: "ABN", company_class: "Class",
+    registered: "Registered", state: "State", ticker: "Ticker", edgar: "SEC EDGAR" };
+  const facts = Object.entries(ex).map(([k, v]) => [LABEL[k] || k, /^https?:\/\//.test(String(v)) ? link(String(v)) : esc(v)]);
+  const site = d.site;
+  let siteHtml;
+  if (!c.website) siteHtml = `<h4>Website</h4><div class="muted">This source gives no website for it.</div>`;
+  else if (!site) siteHtml = `<h4>Website</h4><div class="muted">${c.refusal ? `The site refused us (${esc(c.refusal.error)}, ${esc(fmtDate(c.refusal.refused_at))}); it is tried again later.`
+    : "Not read yet. Run <code>uv run python -m companies update</code>."}</div>`;
+  else if (site.status !== "ok") siteHtml = `<h4>Website</h4><div>${pill(SITE_STATUS[site.status] || site.status)} <span class="muted small">${esc(site.error || "")} · ${esc(fmtDate(site.checked_at))}</span></div>`;
+  else siteHtml = companyHtml(site).replace("from its own site,", "from its own website,")
+    + `<div class="muted small" style="margin-top:6px">Pages read: ${(site.pages || []).map((u) => link(u, new URL(u).pathname || "/")).join(" · ")}</div>`;
+  $("drawer-body").innerHTML = `
+    <h2>${esc(c.name)}</h2>
+    <div>${c.website ? link(c.website) : ""} ${pill(SITE_STATUS[site ? site.status : c.website ? "not read" : "no website"] || "")}</div>
+    <h4>Details</h4><div class="kv">
+      <div>Country</div><div>${esc(c.country_name || c.country || "—")}</div>
+      ${c.industry ? `<div>Industry</div><div>${esc(c.industry)}</div>` : ""}
+      <div>Source</div><div>${esc(SOURCE_NAME[c.source] || c.source)} · ${esc(c.source_id)}</div>
+      ${facts.map(([k, v]) => `<div>${esc(k)}</div><div>${v}</div>`).join("")}
+      <div>First seen</div><div>${esc(fmtTime(c.first_seen))}</div>
+    </div>
+    ${siteHtml}
+    ${(d.same_website || []).length ? `<h4>Same website in other records</h4>${d.same_website.map((x) => `<div><a href="#" data-co="${esc(x.id)}">${esc(x.name)}</a> <span class="muted small">${esc(SOURCE_NAME[x.source] || x.source)} · ${esc(x.country || "")}</span></div>`).join("")}` : ""}`;
+}
+
+$("co-country").addEventListener("change", (e) => { co.country = e.target.value; loadCompanyRows(true); });
+$("co-status").addEventListener("change", (e) => { co.status = e.target.value; loadCompanyRows(true); });
+$("co-sort").addEventListener("change", (e) => { co.sort = e.target.value; $("co-table").scrollTop = 0; loadCompanyRows(true); });
+$("co-q").addEventListener("input", debounce((e) => { co.q = e.target.value.trim(); loadCompanyRows(true); }));
+$("co-more").addEventListener("click", () => loadCompanyRows(false));
+$("co-sources").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-source]"); if (!b) return;
+  co.source = b.dataset.source;
+  document.querySelectorAll("#co-sources .chip").forEach((x) => x.classList.toggle("active", x === b));
+  loadCompanyRows(true);
+});
+$("co-by-country").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-country]"); if (!row) return;
+  co.country = co.country === row.dataset.country ? "" : row.dataset.country;
+  $("co-country").value = co.country; loadCompanyRows(true);
+});
+let coLoading = false;
+$("co-table").addEventListener("scroll", async (e) => {
+  const t = e.target;
+  if (coLoading || $("co-more").hidden || t.scrollTop + t.clientHeight < t.scrollHeight - 300) return;
+  coLoading = true;
+  try { await loadCompanyRows(false); } finally { coLoading = false; }
+});
+$("co-table").addEventListener("click", (e) => {
+  if (e.target.closest("a")) return;
+  const tr = e.target.closest("tr[data-id]"); if (tr) openCompany(tr.dataset.id);
+});
+$("drawer-body").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-co]"); if (!a) return;
+  e.preventDefault(); openCompany(a.dataset.co);
+});
+
 // ───────────────────────────── shell ─────────────────────────────
 let view = "news";
 async function loadAutomation() {
@@ -876,7 +1016,7 @@ async function loadAutomation() {
 async function refresh() {
   loadAutomation();
   try {
-    await ({ news: loadNews, tech: loadTech, markets: loadMarkets, vehicles: loadVehicles })[view]();
+    await ({ news: loadNews, tech: loadTech, markets: loadMarkets, vehicles: loadVehicles, companies: loadCompanies })[view]();
     $("updated").textContent = `Updated ${fmtTime(new Date().toISOString())}`;
   } catch (err) {
     showLoadError(err);
@@ -890,10 +1030,11 @@ function showLoadError(err) {
       + "then run: uv run python -m dashboard --open"
     : `Could not load data: ${err.message}. Is the dashboard server still running?` }]);
 }
+const VIEWS = ["news", "tech", "markets", "vehicles", "companies"];
 function show(v) {
-  view = ["news", "tech", "markets", "vehicles"].includes(v) ? v : "news";
+  view = VIEWS.includes(v) ? v : "news";
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
-  ["news", "tech", "markets", "vehicles"].forEach((n) => { $(`view-${n}`).hidden = view !== n; });
+  VIEWS.forEach((n) => { $(`view-${n}`).hidden = view !== n; });
   if (location.hash !== `#${view}`) history.replaceState(null, "", `#${view}`);
   refresh();
 }

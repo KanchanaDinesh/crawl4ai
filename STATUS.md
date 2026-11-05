@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-03. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-05. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -10,9 +10,11 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 - **World news:** the latest headlines from about 80 news sites.
 - **Markets:** CSE and US stocks, indices, gold and silver, FX, and the crypto top 100.
 - **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
+- **Companies:** a directory of companies of every kind (US, UK, AU, IN, LK first, then the world) from open data,
+  plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 109 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 121 tests pass.
 
 ## Parts and how to run them
 
@@ -24,9 +26,10 @@ Run every command from the project folder, after `source env.sh`.
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
+| Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). Own database `data/companies/companies.duckdb`. run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles. **Restart it after every `git pull`** |
-| Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.` |
+| Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
+| Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.`, `vehicles.`, `companies.` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
 ## Automation (the agreed plan)
@@ -227,6 +230,33 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       the price index is `spp` (~6,000). Fixed; the 15 old rows were relabelled "S&P SL20 TRI" (nothing deleted), and
       the TRI is still saved each day under that name. S&P SL20's own history starts again on 2026-11-05.
 
+34. `companies` module (Kanchana's request, 2026-11-05): a company directory, two steps.
+    - `collect`: name, website, country (+ source id, industry, registration no., ...). Sources run side by side; each
+      saves a cursor per country after every batch, so a run stopped anywhere continues there. Priority countries
+      (US, GB, AU, IN, LK) take turns, then one other country per round. A finished country restarts after 30 days.
+    - Sources checked first (terms, limits, robots.txt): **Wikidata** SPARQL (CC0; one query per country and company
+      type, 18 types: a whole country timed out at 60s, one type takes 2-35s; we wait as long as each query took,
+      for its 60s-per-minute budget; its robots.txt keeps search crawlers off /sparql, but the service is offered to
+      programs under the Wikimedia User-Agent policy). **GLEIF** (CC0, cursor paging because page numbers stop at
+      10,000; 60/min allowed, we do one per 1.1s; GENERAL + ACTIVE only). **CSE** (tradeSummary + companyProfile:
+      website, sector; one company per share class). Off: **Companies House** bulk zips (OGL, ~5.5M rows, no
+      websites), **ASIC** (data.gov.au's robots.txt disallows all robots, so Kanchana would download the CSV and set
+      `file`), **SEC** (needs a real contact email; never invented, never Kanchana's without asking).
+    - `update`: homepage + about/team/contact over plain HTTP with techintel's Fetcher and extractors (merge_pages),
+      robots.txt respected, one row per domain in `sites`. 401/403/429 go to `refusals` (not results), retried
+      after 14 days. Platform "websites" (facebook.com/..., blogspot) are skipped.
+    - Found on the way: crawl4ai reports a 403 in plain-HTTP mode as an error whose code listing mentions "Timeout",
+      so techintel's fetcher logged 403s as "timed out". `techintel/fetch.py` now reports "HTTP 403" and sets the
+      status. And the tests shared crawl4ai's robots.txt cache (by host:port), so a test site's "Disallow: /" could
+      refuse a later test on the same port: tests now use their own crawl4ai folder (47 test entries removed from
+      the real cache).
+    - Dashboard: Companies tab (KPIs, country/source/website-status filters, search, paged list, details drawer that
+      reuses the tech tab's company panel, sources, progress, runs). API: /api/companies/summary, /list, /company/{id}.
+    - First real run (Claude's shell): collect 5 min = 58,570 companies (Wikidata 37,053 with websites, GLEIF 21,247,
+      CSE 270) in 27 countries; US 25,884 / GB 6,674 / IN 2,218 / AU 2,065 / LK 324 with a website. update 3 min +
+      1.5 min = 535 websites read (414 ok; most with social links), 51 refusals kept out of the results. update takes
+      turns between countries (otherwise the US's 25,000 websites would keep Sri Lanka waiting).
+
 ## Open issues and things to watch
 
 
@@ -259,9 +289,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 - **Dashboard after updates:** it must be restarted after `git pull` (Ctrl+C, then `uv run python -m dashboard --open`).
 - **Yahoo Finance** can rate-limit (401/429). Fallbacks cover it; don't add impersonation.
 
+- **Companies:** the directory has no cross-source matching yet: the same company from Wikidata and GLEIF is two
+  rows (the details panel lists other records with the same website). GLEIF has no websites, so most GLEIF rows
+  are never enriched. Turning on Companies House / ASIC adds millions of rows without websites (dashboard queries
+  stay fast in DuckDB, but the file grows by roughly 1 GB).
+
 ## Ideas for next steps (not started)
 
 - `automation.local.conf` for personal settings (see above).
 - Alerts, e.g. a price drop on a watched car model, a new tech site in a chosen category, or a big market move.
 - Vehicles: more sites, or a details page per ad (mileage and year for ikman).
 - Tech intel: better categories, more discovery sources.
+- Companies: match records across sources (Wikidata has the LEI as P1278); find websites for GLEIF/CSE companies
+  from Wikidata; more company types or countries' open registers (e.g. India's MCA data if its terms allow).

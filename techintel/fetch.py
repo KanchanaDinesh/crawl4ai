@@ -14,6 +14,7 @@ the Fetcher gives up (`dead`), and the stages stop instead of failing every site
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -59,10 +60,23 @@ ERROR_PATTERNS = (
 )
 
 
+HTTP_STATUS_ERROR = re.compile(r"\bHTTP (\d{3}): Unexpected status code")
+
+
+def status_from_error(error: str | None) -> int | None:
+    """crawl4ai's plain-HTTP mode reports a 4xx/5xx answer as an error ("HTTP 403: Unexpected status code"),
+    without a status code."""
+    m = HTTP_STATUS_ERROR.search(error or "")
+    return int(m.group(1)) if m else None
+
+
 def friendly_error(error: str | None) -> str | None:
     """crawl4ai wraps errors in long tracebacks; turn them into a short, readable reason."""
     if not error:
         return error
+    status = status_from_error(error)
+    if status:          # before the patterns: the code listing in the error mentions "Timeout" too
+        return f"HTTP {status}"
     low = error.lower()
     for needles, label in ERROR_PATTERNS:
         if any(n in low for n in needles):
@@ -234,7 +248,8 @@ class Fetcher:
                                    error=friendly_error(error))
             break
         if result is None:
-            return FetchResult(url=url, mode=self.mode, success=False, error=friendly_error(error))
+            return FetchResult(url=url, mode=self.mode, success=False, status=status_from_error(error),
+                               error=friendly_error(error))
 
         markdown = ""
         if result.markdown is not None:
@@ -244,7 +259,7 @@ class Fetcher:
             url=url,
             mode=self.mode,
             success=bool(result.success),
-            status=result.status_code,
+            status=result.status_code or (None if result.success else status_from_error(result.error_message)),
             final_url=result.redirected_url or result.url,
             html=result.html or "",
             markdown=markdown,

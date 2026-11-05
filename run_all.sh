@@ -64,11 +64,14 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 : "${STEP_tech_update:=$UV run --frozen python -m techintel update ${TECH_UPDATE_ARGS:-}}"
 : "${STEP_tech_company:=$UV run --frozen python -m techintel company ${TECH_COMPANY_ARGS:-}}"
 : "${STEP_vehicles:=$UV run --frozen python -m vehicles run ${VEHICLES_ARGS:-}}"
+: "${STEP_companies_collect:=$UV run --frozen python -m companies collect ${COMPANIES_COLLECT_ARGS:-}}"
+: "${STEP_companies_update:=$UV run --frozen python -m companies update ${COMPANIES_UPDATE_ARGS:-}}"
 : "${STEP_lknews:=$UV run --frozen python -m scrapers.news ${LKNEWS_ARGS:-}}"
 : "${STEP_briefing:=$UV run --frozen python -m briefing run ${BRIEFING_ARGS:-}}"
 : "${TOOL_markets:=markets}" "${TOOL_news:=news}" "${TOOL_news_analyze:=news_analyze}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
 : "${TOOL_tech_collect:=tech}" "${TOOL_tech_update:=tech}" "${TOOL_tech_company:=tech}" "${TOOL_briefing:=briefing}"
 : "${TOOL_vehicles:=vehicles}" "${TOOL_lknews:=scrapers}"
+: "${TOOL_companies_collect:=companies}" "${TOOL_companies_update:=companies}"
 
 step_cmd() { local v="STEP_$1"; printf '%s' "${!v:-}"; }
 step_tool() { local v="TOOL_$1"; printf '%s' "${!v:-$1}"; }
@@ -88,9 +91,9 @@ if [ "$LIST" = 1 ]; then
   for v in $(compgen -v PROFILE_); do echo "Profile ${v#PROFILE_}:$(printf '%*s' $((10 - ${#v} + 8)) '') ${!v}"; done
   echo; echo "Steps:"
   seen=""
-  for s in markets news news_analyze tech tech_collect tech_update tech_company tech_quick vehicles lknews briefing $STEP_LIST; do
+  for s in markets news news_analyze tech tech_collect tech_update tech_company tech_quick vehicles companies_collect companies_update lknews briefing $STEP_LIST; do
     case " $seen " in *" $s "*) continue ;; esac; seen="$seen $s"
-    printf '  %-12s [%s]  %s\n' "$s" "$(step_tool "$s")" "$(step_cmd "$s")"
+    printf '  %-17s [%s]  %s\n' "$s" "$(step_tool "$s")" "$(step_cmd "$s")"
   done
   exit 0
 fi

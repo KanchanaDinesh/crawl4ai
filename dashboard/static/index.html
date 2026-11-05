@@ -16,6 +16,7 @@
       <button class="tab" data-view="tech">Tech Intel</button>
       <button class="tab" data-view="markets">Markets</button>
       <button class="tab" data-view="vehicles">Vehicles</button>
+      <button class="tab" data-view="companies">Companies</button>
     </nav>
     <div class="hright">
       <span id="lastrun"></span>
@@ -184,6 +185,46 @@
         <div class="panel"><h3>Makes <small>ads · median price</small></h3><div id="vh-makes" class="bars"></div></div>
         <div class="panel"><h3>Sites</h3><div id="vh-site-table" class="scroll"></div></div>
         <div class="panel"><h3>Price changes</h3><div id="vh-changes"></div></div>
+      </aside>
+    </div>
+  </section>
+  <!-- ─────────────── COMPANIES ─────────────── -->
+  <section id="view-companies" hidden>
+    <div class="kpis" id="co-kpis"></div>
+    <div class="filters">
+      <select id="co-country" title="Country"><option value="">All countries</option></select>
+      <span id="co-sources"></span>
+      <select id="co-status" title="Website">
+        <option value="">Any website status</option><option value="website">Has a website</option>
+        <option value="read">Website read</option><option value="not_read">Website not read yet</option>
+        <option value="failed">Website couldn't be read</option><option value="no_website">No website</option>
+        <option value="social">Has social links</option><option value="linkedin">Has LinkedIn</option>
+        <option value="people">Names its people</option><option value="employees">Gives employees</option>
+      </select>
+      <input type="search" id="co-q" placeholder="Search name, website, industry…">
+    </div>
+    <div class="chartgrid">
+      <div class="panel"><h3>Added per day <small>14 days · light = with a website</small></h3><div id="co-days-chart"></div></div>
+      <div class="panel"><h3>Top countries <small>click to filter</small></h3><div id="co-by-country" class="bars click-bars"></div></div>
+      <div class="panel"><h3>Websites <small>per company · python -m companies update</small></h3><div id="co-by-status" class="bars"></div></div>
+      <div class="panel"><h3>Social accounts <small>websites read</small></h3><div id="co-social" class="bars"></div></div>
+    </div>
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h3><span>Companies <small id="co-count"></small></span>
+            <span class="tools"><span class="muted small">Sort</span><select id="co-sort">
+              <option value="best">Websites read first</option><option value="name">Name</option>
+              <option value="newest">Newest added</option><option value="country">Country</option></select></span></h3>
+          <div class="tablewrap" id="co-table"></div>
+          <button class="btn more" id="co-more" hidden>Load more</button>
+        </div>
+      </div>
+      <aside>
+        <div class="panel"><h3>By source</h3><div id="co-source-table" class="scroll"></div></div>
+        <div class="panel"><h3>Industries <small>as the sources say</small></h3><div id="co-industries" class="bars"></div></div>
+        <div class="panel"><h3>Collection progress <small>countries / parts finished this pass</small></h3><div id="co-progress"></div></div>
+        <div class="panel"><h3>Recent runs</h3><div id="co-runs" class="scroll"></div></div>
       </aside>
     </div>
   </section>
