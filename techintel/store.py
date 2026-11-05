@@ -1,6 +1,7 @@
 """Storage for pipeline state.
 
-DuckStore (default) keeps every table in one DuckDB file, data/techintel/techintel.duckdb:
+TechStore (default) keeps every table in PostgreSQL, schema `tech` (database crawl4ai; moved from
+data/techintel/techintel.duckdb on 2026-11-06):
 
     candidates       discover: one row per newly found domain
     qualifications   qualify:  one row per check (re-checks add a new row)
@@ -15,7 +16,9 @@ Each row keeps the full record as JSON (so the stages stay flexible), and typed 
 query with SQL. Page text stays as files under raw/pages/<domain>/.
 
 FileStore is the original JSON Lines version, with the same methods. Existing .jsonl
-files are imported into DuckDB automatically the first time DuckStore opens the folder.
+files are imported automatically the first time TechStore opens the folder.
+
+JSON records come back as dicts with their keys in PostgreSQL's jsonb order (not the order they were written in).
 """
 
 import hashlib
@@ -72,66 +75,24 @@ class FileStore:
         return str(path.relative_to(self.root))
 
 
-VIEWS = {
-    "v_candidates": """
-        select row_id, key as domain, data->>'source' as source, data->>'url' as url,
-               try_cast(data->>'discovered_at' as timestamptz) as discovered_at,
-               try_cast(data->>'signal_at' as timestamptz) as signal_at, data->'detail' as detail
-        from candidates""",
-    "v_qualifications": """
-        select key as domain, data->>'status' as status, data->>'reason' as reason, data->>'category' as category,
-               try_cast(data->>'score' as double) as score, data->>'title' as title, data->>'final_url' as final_url,
-               try_cast(data->>'checked_at' as timestamptz) as checked_at
-        from qualifications qualify row_number() over (partition by key order by row_id desc) = 1""",
-    "v_registrations": """
-        select key as domain, try_cast(data->>'registered_at' as timestamptz) as registered_at,
-               data->>'registrar' as registrar, data->>'error' as error
-        from registrations qualify row_number() over (partition by key order by row_id desc) = 1""",
-    "v_profiles": """
-        select key as domain, data->>'status' as status, data->>'name' as name, data->>'description' as description,
-               data->>'category' as category, data->'tech_stack' as tech_stack, data->'signals' as signals,
-               data->'keywords' as keywords, try_cast(data->>'profiled_at' as timestamptz) as profiled_at
-        from profiles where data->>'status' = 'ok'
-        qualify row_number() over (partition by key order by row_id desc) = 1""",
-    "v_changes": """
-        select key as domain, data->>'change_type' as change_type, data->>'field' as field,
-               data->'before' as before, data->'after' as after,
-               try_cast(data->>'detected_at' as timestamptz) as detected_at
-        from changes""",
-    "v_companies": """
-        select key as domain, data->>'name' as name, data->'social'->>'linkedin' as linkedin,
-               data->'social'->>'facebook' as facebook, data->'social'->>'x' as x,
-               data->'social'->>'instagram' as instagram, data->'social'->>'github' as github,
-               data->'social' as social, data->'people' as people,
-               coalesce(data->>'employees', data->>'employees_hint') as employees, data->>'founded' as founded,
-               data->>'legal_name' as legal_name, data->>'address' as address, data->'emails' as emails,
-               data->'phones' as phones, data->'linkedin_people' as linkedin_people,
-               try_cast(data->'github'->>'public_repos' as integer) as github_repos,
-               try_cast(data->'github'->>'followers' as integer) as github_followers,
-               try_cast(data->'github'->>'created_at' as timestamptz) as github_since,
-               try_cast(data->>'checked_at' as timestamptz) as checked_at
-        from companies where data->>'status' = 'ok'
-        qualify row_number() over (partition by key order by row_id desc) = 1""",
-}
+class TechStore:
+    """Same methods as FileStore, backed by PostgreSQL (schema `tech`; tables and typed views in
+    warehouse/schema/tech.sql). Each append is one short transaction, so the dashboard reads while stages run."""
 
-
-class DuckStore:
-    """Same methods as FileStore, backed by DuckDB."""
-
-    def __init__(self, root: Path, db_path: Path | None = None):
-        from warehouse import connect
-        self.root = Path(root)
+    def __init__(self, root: Path):
+        from warehouse import postgres
+        self.root = Path(root)                  # raw page text and old JSON Lines files live here
         self.root.mkdir(parents=True, exist_ok=True)
-        self.db_path = Path(db_path) if db_path else self.root / "techintel.duckdb"
-        self.con = connect(self.db_path)
-        self.con.execute("create sequence if not exists row_seq")
-        for table in TABLES:
-            self.con.execute(f"""create table if not exists {table} (
-                row_id bigint primary key default nextval('row_seq'),
-                key varchar, created_at timestamp default current_timestamp, data json)""")
-        for name, sql in VIEWS.items():
-            self.con.execute(f"create or replace view {name} as {sql}")
+        self.con = postgres.connect("writer", autocommit=True)
+        self.con.execute("set timezone = 'UTC'")
+        postgres.migrate(self.con, ("tech",))
         self._import_jsonl()
+
+    @staticmethod
+    def _table(table: str) -> str:
+        if table not in TABLES:
+            raise ValueError(f"Unknown table {table!r}; expected one of {TABLES}")
+        return f"tech.{table}"
 
     def _import_jsonl(self) -> None:
         """One-time import of the old JSON Lines files (renamed to *.jsonl.imported afterwards)."""
@@ -139,7 +100,7 @@ class DuckStore:
             path = self.root / f"{table}.jsonl"
             if not path.exists():
                 continue
-            if self.con.execute(f"select count(*) from {table}").fetchone()[0] == 0:
+            if self.con.execute(f"select count(*) from {self._table(table)}").fetchone()[0] == 0:
                 with open(path, encoding="utf-8") as f:
                     self.append(table, (json.loads(line) for line in f if line.strip()))
             path.rename(path.with_suffix(".jsonl.imported"))
@@ -149,38 +110,39 @@ class DuckStore:
         return record.get("domain") or record.get("stage")
 
     def append(self, table: str, records: Iterable[dict]) -> int:
-        if table not in TABLES:
-            raise ValueError(f"Unknown table {table!r}; expected one of {TABLES}")
-        rows = [(self._key(r), json.dumps(r, ensure_ascii=False, default=str)) for r in records]
+        from warehouse.postgres import clean_text, json_text
+        target = self._table(table)
+        rows = [(clean_text(self._key(r)), json_text(r)) for r in records]
         if rows:
-            self.con.executemany(f"insert into {table} (key, data) values (?, ?)", rows)
+            with self.con.transaction():
+                self.con.cursor().executemany(f"insert into {target} (key, data) values (%s, %s)", rows)
         return len(rows)
 
     def read(self, table: str) -> Iterator[dict]:
-        for (data,) in self.con.execute(f"select data from {table} order by row_id").fetchall():
-            yield json.loads(data)
+        for (data,) in self.con.execute(f"select data from {self._table(table)} order by row_id").fetchall():
+            yield data
 
     def latest(self, table: str, key: str = "domain") -> dict[str, dict]:
         if key not in ("domain", "stage"):
             return {row[key]: row for row in self.read(table) if row.get(key)}
-        rows = self.con.execute(f"""select key, data from {table} where key is not null
-            qualify row_number() over (partition by key order by row_id desc) = 1 order by row_id""").fetchall()
-        return {k: json.loads(d) for k, d in rows}
+        rows = self.con.execute(f"""select key, data from (
+                select distinct on (key) key, data, row_id from {self._table(table)} where key is not null
+                order by key, row_id desc) latest
+            order by row_id""").fetchall()
+        return {k: d for k, d in rows}
 
     def keys(self, table: str, key: str = "domain") -> set[str]:
         if key not in ("domain", "stage"):
             return {row[key] for row in self.read(table) if row.get(key)}
-        return {k for (k,) in self.con.execute(f"select distinct key from {table} where key is not null").fetchall()}
+        return {k for (k,) in self.con.execute(
+            f"select distinct key from {self._table(table)} where key is not null").fetchall()}
 
     def remove_where(self, table: str, condition: str) -> int:
         """Delete rows matching a SQL condition on `data`. Only for undoing rows written by mistake;
         `condition` comes from our own code, never from outside."""
-        if table not in TABLES:
-            raise ValueError(f"Unknown table {table!r}; expected one of {TABLES}")
-        n = self.con.execute(f"select count(*) from {table} where {condition}").fetchone()[0]
-        if n:
-            self.con.execute(f"delete from {table} where {condition}")
-        return n
+        target = self._table(table)
+        with self.con.transaction():
+            return self.con.execute(f"delete from {target} where {condition}").rowcount
 
     write_raw_page = FileStore.write_raw_page
 
@@ -188,5 +150,5 @@ class DuckStore:
         self.con.close()
 
 
-def open_store(root: Path) -> DuckStore:
-    return DuckStore(root)
+def open_store(root: Path) -> TechStore:
+    return TechStore(root)

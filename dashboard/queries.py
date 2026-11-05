@@ -1,5 +1,5 @@
 """SQL behind the dashboard. Each function takes an open read-only connection: PostgreSQL (psycopg, %s placeholders)
-for the tools already moved there (warehouse.PG_TOOLS: news, markets, vehicles, companies), DuckDB (? placeholders) for the rest.
+for the tools already moved there (warehouse.PG_TOOLS: news, tech, markets, vehicles, companies), DuckDB (? placeholders) for the rest.
 
 Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
 """
@@ -140,145 +140,141 @@ def news_runs(con, limit=20) -> list[dict]:
         from news.news_runs order by news_runs.run_at desc limit {int(limit)}""")
 
 
-# ── tech intel ───────────────────────────────────────────────────────────
-TECH_DOMAINS = """
+# ── tech intel: PostgreSQL, schema tech (JSON records + typed views) ─────────
+def _arr_len(col: str) -> str:
+    """Length of a JSON array, NULL when it isn't one (DuckDB's json_array_length)."""
+    return f"case when jsonb_typeof({col}) = 'array' then jsonb_array_length({col}) end"
+
+
+TECH_DOMAINS = f"""
     select c.domain, c.source, c.url as candidate_url, c.detail,
            coalesce(c.signal_at, c.discovered_at) as seen_ts, c.discovered_at as found_ts,
            coalesce(q.status, 'not checked') as status, q.reason, q.category, q.score, q.title, q.final_url,
            r.registered_at as registered_ts, coalesce(p.name, co.name) as name, p.description,
-           co.social, co.employees, json_array_length(co.people) as people, co.github_repos
-    from v_candidates c
-    left join v_qualifications q using (domain)
-    left join v_registrations r using (domain)
-    left join v_profiles p using (domain)
-    left join {companies} co using (domain)
+           co.social, co.employees, {_arr_len('co.people')} as people, co.github_repos
+    from tech.v_candidates c
+    left join tech.v_qualifications q using (domain)
+    left join tech.v_registrations r using (domain)
+    left join tech.v_profiles p using (domain)
+    left join tech.v_companies co using (domain)
 """
-# A database from before `techintel company` existed has no v_companies view until techintel opens it again
-NO_COMPANIES = """(select null::varchar as domain, null::varchar as name, null::json as social, null::varchar as employees,
-                  null::json as people, null::integer as github_repos where false)"""
 TECH_COMPANY = {"linkedin": "social->>'linkedin' is not null", "people": "people > 0", "employees": "employees is not null",
-                "any": "social is not null and social::varchar <> '{}'"}
-
-
-def has_view(con, name: str) -> bool:
-    return con.execute("select count(*) from duckdb_views() where view_name = ?", [name]).fetchone()[0] > 0
-
-
-def _companies(con) -> str:
-    return "v_companies" if has_view(con, "v_companies") else NO_COMPANIES
+                "any": "social is not null and social <> '{}'::jsonb"}
 
 
 def tech_summary(con, days: int) -> dict:
-    d = int(days)
     counts = one(con, f"""select
-            (select count(distinct domain) from v_candidates) as candidates,
-            (select count(*) from v_candidates where discovered_at >= now() - interval {d} day) as new_candidates,
-            (select count(*) from v_qualifications where status = 'qualified') as qualified,
-            (select count(*) from v_qualifications where status = 'watch') as watch,
-            (select count(*) from v_qualifications where status = 'rejected') as rejected,
-            (select count(*) from v_profiles) as profiled,
-            (select count(*) from v_changes where detected_at >= now() - interval {d} day) as changes,
-            (select count(*) from v_registrations where registered_at is not null) as with_registration""")
-    by_category = rows(con, "select category, count(*) as n from v_qualifications where status = 'qualified' group by 1 order by 2 desc")
-    by_source = rows(con, f"select source, count(*) as n from v_candidates where discovered_at >= now() - interval {d} day group by 1 order by 2 desc")
+            (select count(distinct domain) from tech.v_candidates) as candidates,
+            (select count(*) from tech.v_candidates where discovered_at >= {_since(days)}) as new_candidates,
+            (select count(*) from tech.v_qualifications where status = 'qualified') as qualified,
+            (select count(*) from tech.v_qualifications where status = 'watch') as watch,
+            (select count(*) from tech.v_qualifications where status = 'rejected') as rejected,
+            (select count(*) from tech.v_profiles) as profiled,
+            (select count(*) from tech.v_changes where detected_at >= {_since(days)}) as changes,
+            (select count(*) from tech.v_registrations where registered_at is not null) as with_registration""")
+    by_category = rows(con, """select category, count(*) as n from tech.v_qualifications where status = 'qualified'
+        group by 1 order by 2 desc, 1""")
+    by_source = rows(con, f"""select source, count(*) as n from tech.v_candidates where discovered_at >= {_since(days)}
+        group by 1 order by 2 desc, 1""")
     by_status = rows(con, f"""select coalesce(q.status, 'not checked') as status, count(*) as n
-        from v_candidates c left join v_qualifications q using (domain)
-        where c.discovered_at >= now() - interval {d} day group by 1 order by 2 desc""")
-    tech_stack = rows(con, """select t.value::varchar as tech, count(*) as n
-        from v_profiles, json_each(tech_stack) t group by 1 order by 2 desc limit 15""")
-    by_day = rows(con, """select strftime(date_trunc('day', c.discovered_at), '%Y-%m-%d') as day, count(*) as n,
+        from tech.v_candidates c left join tech.v_qualifications q using (domain)
+        where c.discovered_at >= {_since(days)} group by 1 order by 2 desc, 1""")
+    tech_stack = rows(con, """select t as tech, count(*) as n
+        from tech.v_profiles, jsonb_array_elements_text(tech_stack) t
+        where jsonb_typeof(tech_stack) = 'array' group by 1 order by 2 desc, 1 limit 15""")
+    by_day = rows(con, f"""select {_day('c.discovered_at')} as day, count(*) as n,
             count(*) filter (where q.status = 'qualified') as qualified
-        from v_candidates c left join v_qualifications q using (domain)
-        where c.discovered_at >= now() - interval 14 day group by 1 order by 1""")
+        from tech.v_candidates c left join tech.v_qualifications q using (domain)
+        where c.discovered_at >= {_since(14)} group by 1 order by 1""")
     # How old the qualified sites' domains are: a site registered last week is a real launch signal
-    domain_age = rows(con, """select case
+    domain_age = rows(con, f"""select case
                 when r.registered_at is null then 'unknown'
-                when r.registered_at >= now() - interval 7 day then 'under 1 week'
-                when r.registered_at >= now() - interval 30 day then 'under 1 month'
-                when r.registered_at >= now() - interval 365 day then 'under 1 year'
-                when r.registered_at >= now() - interval 1825 day then '1-5 years'
+                when r.registered_at >= {_since(7)} then 'under 1 week'
+                when r.registered_at >= {_since(30)} then 'under 1 month'
+                when r.registered_at >= {_since(365)} then 'under 1 year'
+                when r.registered_at >= {_since(1825)} then '1-5 years'
                 else 'over 5 years' end as age, count(*) as n
-        from v_qualifications q left join v_registrations r using (domain)
+        from tech.v_qualifications q left join tech.v_registrations r using (domain)
         where q.status = 'qualified' group by 1""")
     order = ["under 1 week", "under 1 month", "under 1 year", "1-5 years", "over 5 years", "unknown"]
     domain_age.sort(key=lambda r: order.index(r["age"]))
-    companies = []
-    if has_view(con, "v_companies"):
-        counts.update(one(con, """select count(*) as companies, count(linkedin) as with_linkedin,
-            count(*) filter (where json_array_length(people) > 0) as with_people from v_companies"""))
-        companies = rows(con, """select s.key as platform, count(*) as n from v_companies, json_each(social) s
-            group by 1 order by 2 desc limit 12""")
-    new_domains = one(con, f"""select count(*) as n from v_qualifications q join v_registrations r using (domain)
-        where q.status = 'qualified' and r.registered_at >= now() - interval 30 day""")
+    counts.update(one(con, f"""select count(*) as companies, count(linkedin) as with_linkedin,
+        count(*) filter (where {_arr_len('people')} > 0) as with_people from tech.v_companies"""))
+    companies = rows(con, """select k as platform, count(*) as n from tech.v_companies, jsonb_object_keys(social) k
+        where jsonb_typeof(social) = 'object' group by 1 order by 2 desc, 1 limit 12""")
+    new_domains = one(con, f"""select count(*) as n from tech.v_qualifications q join tech.v_registrations r using (domain)
+        where q.status = 'qualified' and r.registered_at >= {_since(30)}""")
     counts["new_domains_30d"] = new_domains.get("n", 0)
-    for r in tech_stack:
-        r["tech"] = r["tech"].strip('"')
     return {"counts": counts, "by_category": by_category, "by_source": by_source, "by_status": by_status,
             "tech_stack": tech_stack, "by_day": by_day, "domain_age": domain_age, "social_platforms": companies}
 
 
-TECH_SORT = {"seen": "seen_ts desc nulls last, score desc nulls last",
-             "score": "score desc nulls last, seen_ts desc nulls last",
-             "registered": "registered_ts desc nulls last, seen_ts desc nulls last",
-             "name": "lower(coalesce(name, title, domain))"}
+TECH_SORT = {"seen": "seen_ts desc nulls last, score desc nulls last, domain",
+             "score": "score desc nulls last, seen_ts desc nulls last, domain",
+             "registered": "registered_ts desc nulls last, seen_ts desc nulls last, domain",
+             "name": "lower(coalesce(name, title, domain)), domain"}
 
 
 def tech_domains(con, *, status=None, category=None, source=None, q=None, days=30, limit=100, offset=0,
                  sort="seen", company=None) -> dict:
-    where, params = [f"seen_ts >= now() - interval {int(days)} day or found_ts >= now() - interval {int(days)} day"], []
+    where, params = [f"seen_ts >= {_since(days)} or found_ts >= {_since(days)}"], []
     if status:
-        where.append("status = ?"); params.append(status)
+        where.append("status = %s"); params.append(status)
     if category:
-        where.append("category = ?"); params.append(category)
+        where.append("category = %s"); params.append(category)
     if source:
-        where.append("source = ?"); params.append(source)
+        where.append("source = %s"); params.append(source)
     if company in TECH_COMPANY:
         where.append(TECH_COMPANY[company])
     if q:
-        where.append("(domain ilike ? or coalesce(title, '') ilike ? or coalesce(name, '') ilike ? "
-                     "or coalesce(description, '') ilike ? or coalesce(reason, '') ilike ?)")
-        params += [f"%{q}%"] * 5
+        where.append("(domain ilike %s or coalesce(title, '') ilike %s or coalesce(name, '') ilike %s "
+                     "or coalesce(description, '') ilike %s or coalesce(reason, '') ilike %s)")
+        params += [_like(q)] * 5
     cond = " and ".join(f"({w})" for w in where)
-    base = f"select * from ({TECH_DOMAINS.format(companies=_companies(con))}) where {cond}"
-    total = con.execute(f"select count(*) from ({base})", params).fetchone()[0]
+    base = f"select * from ({TECH_DOMAINS}) d where {cond}"
+    total = con.execute(f"select count(*) from ({base}) b", params).fetchone()[0]
     items = rows(con, f"""select domain, source, status, reason, category, score, coalesce(name, title) as name,
             description, coalesce(final_url, candidate_url) as url, detail->>'title' as source_title,
-            {_ts('seen_ts')} as seen_at, {_ts('found_ts')} as found_at, {_ts('registered_ts')} as registered_at,
-            social, employees, people, github_repos
-        from ({base}) order by {TECH_SORT.get(sort, TECH_SORT["seen"])}
+            {_pg_ts('seen_ts')} as seen_at, {_pg_ts('found_ts')} as found_at,
+            {_pg_ts('registered_ts')} as registered_at, social::text as social, employees, people, github_repos
+        from ({base}) b order by {TECH_SORT.get(sort, TECH_SORT["seen"])}
         limit {int(limit)} offset {int(offset)}""", params)
     return {"total": total, "items": items}
 
 
 def tech_domain(con, domain: str) -> dict:
     def latest_json(table: str, extra: str = "") -> dict | None:
-        r = con.execute(f"select data from {table} where key = ? {extra} order by row_id desc limit 1", [domain]).fetchone()
-        return json.loads(r[0]) if r else None
+        r = con.execute(f"select data from tech.{table} where key = %s {extra} order by row_id desc limit 1",
+                        [domain]).fetchone()
+        return _json(r[0], None) if r else None
 
-    history = [json.loads(d) for (d,) in con.execute(
-        "select data from qualifications where key = ? order by row_id", [domain]).fetchall()]
-    changes = rows(con, f"""select change_type, field, json_extract_string(before, '$') as before, json_extract_string(after, '$') as after,
-        {_ts('detected_at')} as detected_at from v_changes where domain = ? order by detected_at desc""", [domain])
+    history = [_json(d, {}) for (d,) in con.execute(
+        "select data from tech.qualifications where key = %s order by row_id", [domain]).fetchall()]
+    changes = rows(con, f"""select change_type, field, before #>> '{{}}' as before, after #>> '{{}}' as after,
+        {_pg_ts('detected_at')} as detected_at from tech.v_changes where domain = %s
+        order by v_changes.detected_at desc""", [domain])
     profile = latest_json("profiles", "and data->>'status' = 'ok'")
     if profile:
         profile.pop("external_domains", None)
         for page in profile.get("pages", []):
             page.pop("raw_file", None)
-    company = latest_json("companies", "and data->>'status' = 'ok'") if has_view(con, "v_companies") else None
+    company = latest_json("companies", "and data->>'status' = 'ok'")
     return {"domain": domain, "candidate": latest_json("candidates"), "qualifications": history,
             "registration": latest_json("registrations"), "profile": profile, "changes": changes, "company": company}
 
 
 def tech_changes(con, days=30, limit=100) -> list[dict]:
-    return rows(con, f"""select domain, change_type, field, json_extract_string(before, '$') as before, json_extract_string(after, '$') as after,
-        {_ts('detected_at')} as detected_at from v_changes
-        where detected_at >= now() - interval {int(days)} day order by detected_at desc limit {int(limit)}""")
+    return rows(con, f"""select domain, change_type, field, before #>> '{{}}' as before, after #>> '{{}}' as after,
+        {_pg_ts('detected_at')} as detected_at from tech.v_changes
+        where detected_at >= {_since(days)} order by v_changes.detected_at desc limit {int(limit)}""")
 
 
 def tech_runs(con) -> list[dict]:
-    return rows(con, """select key as stage, data->>'status' as status, data->>'finished_at' as finished_at,
-            try_cast(data->>'seconds' as double) as seconds, (data->'summary')::varchar as summary
-        from runs qualify row_number() over (partition by key order by row_id desc) = 1 order by finished_at desc""")
+    return rows(con, """select stage, status, finished_at, seconds, summary from (
+            select distinct on (key) key as stage, data->>'status' as status, data->>'finished_at' as finished_at,
+                   tech.try_num(data->>'seconds') as seconds, (data->'summary')::text as summary
+            from tech.runs where key is not null order by key, row_id desc) latest
+        order by finished_at desc nulls last""")
 
 
 # ── markets: PostgreSQL, schema markets ───────────────────────────────────

@@ -87,10 +87,11 @@ def _news(con) -> dict:
 
 
 def _tech(con) -> dict:
-    by_cat = con.execute("""select q.category, count(*) from v_qualifications q join v_registrations r using (domain)
-        where q.status = 'qualified' and r.registered_at >= now() - interval 7 day
+    by_cat = con.execute("""select q.category, count(*) from tech.v_qualifications q join tech.v_registrations r
+        using (domain) where q.status = 'qualified' and r.registered_at >= now() - interval '7 days'
         group by 1 order by 2 desc, 1""").fetchall()
-    found = con.execute("select count(*) from v_candidates where discovered_at >= now() - interval 1 day").fetchone()[0]
+    found = con.execute("""select count(*) from tech.v_candidates
+        where discovered_at >= now() - interval '1 day'""").fetchone()[0]
     return {"launches_by_category": [[c or "other", n] for c, n in by_cat],
             "launches": sum(n for _, n in by_cat), "found_24h": found}
 

@@ -69,8 +69,8 @@ def test_watch_queues_new_domains_and_quick_picks_them_up(settings, store):
     assert status["batches"] == 2 and status["queued"] == 2 and status["certificates"] >= 10 and status["errors"] == 0
     server.stop()
 
-    from techintel.store import DuckStore
-    s = DuckStore(settings.data_dir)
+    from techintel.store import TechStore
+    s = TechStore(settings.data_dir)
     summary = asyncio.run(run_stage("discover", settings, s, sources=["stream"]))
     assert summary["new_candidates"] == 2 and summary["sources"]["stream"] == {"found": 2, "new": 2}
     assert {c["source"] for c in s.read("candidates") if c["domain"] != "known.ai"} == {"certstream"}

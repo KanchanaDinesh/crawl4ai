@@ -3,23 +3,18 @@
     python -m dashboard                 http://127.0.0.1:8050
     python -m dashboard --port 9000 --open
 
-PostgreSQL (tools already moved, see PG_TOOLS and docs/postgres-migration.md): read with the read-only login;
-runs never block it. DuckDB (the others): opened read-only for each request and closed straight away, so the
-dashboard never blocks a running collection; if a run is writing at that moment, the last loaded data is shown
-with "busy": true.
+All tabs read PostgreSQL (database crawl4ai) with the read-only login: runs never block it, and it never blocks a
+run. If PostgreSQL can't be reached, the API answers with an error that says what to do (and the last data).
 """
 
 import argparse
 import logging
-import time
 import webbrowser
 from pathlib import Path
 
-import duckdb
 from aiohttp import web
 
 import project_paths
-from warehouse import DB_FILES, PG_TOOLS      # PG_TOOLS: tools whose data is in PostgreSQL now
 
 from . import queries
 
@@ -57,31 +52,8 @@ def _pg_query(fn, cache_key: str):
 
 
 def _query(db: str, fn, cache_key: str):
-    """Run fn(connection) on a database, read-only, with a short retry and a cached fallback."""
-    if db in PG_TOOLS:
-        return _pg_query(fn, cache_key)
-    path = DB_FILES[db]
-    if not path.exists():
-        return {"empty": True, "data": None}
-    deadline = time.monotonic() + 1.5
-    while True:
-        try:
-            con = duckdb.connect(str(path), read_only=True)
-            break
-        except duckdb.Error as e:
-            if "lock" in str(e).lower() and time.monotonic() < deadline:
-                time.sleep(0.3)
-                continue
-            if cache_key in _cache:
-                return {"busy": True, "data": _cache[cache_key]}
-            return {"busy": True, "data": None, "error": "A run is writing to the database; try again in a moment."}
-    try:
-        con.execute("set TimeZone = 'UTC'")
-        data = fn(con)
-    finally:
-        con.close()
-    _cache[cache_key] = data
-    return {"data": data}
+    """Every tab reads PostgreSQL now (docs/postgres-migration.md); `db` names the tool, for messages."""
+    return _pg_query(fn, cache_key)
 
 
 def _news_groups():
@@ -280,14 +252,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     url = f"http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}/"
     print(f"Dashboard: {url}   (Ctrl+C to stop)")
-    for name, path in DB_FILES.items():
-        if name in PG_TOOLS:
-            from warehouse.postgres import url
-            from psycopg.conninfo import conninfo_to_dict
-            info = conninfo_to_dict(url("reader"))
-            print(f"  {name:<5} PostgreSQL {info.get('host') or 'local'}:{info.get('port') or 5432}/{info.get('dbname')}")
-        elif name != "scrapers":
-            print(f"  {name:<5} {path}{'' if path.exists() else '  (no data yet)'}")
+    from psycopg.conninfo import conninfo_to_dict
+    from warehouse import postgres
+    info = conninfo_to_dict(postgres.url("reader"))
+    print(f"  Data: PostgreSQL {info.get('host') or 'local'}:{info.get('port') or 5432}/{info.get('dbname')} "
+          f"(read-only login {info.get('user')})")
     if args.open:
         webbrowser.open(url)
     web.run_app(build_app(), host=args.host, port=args.port, print=None, access_log=None)

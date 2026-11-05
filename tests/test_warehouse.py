@@ -62,20 +62,23 @@ def test_record_output_never_breaks_a_scrape(monkeypatch):
     assert sdb.record_output("x", [{"a": 1}]) == 0
 
 
-def test_techintel_imports_old_jsonl_and_views_work(settings):
-    from techintel.store import DuckStore
+def test_techintel_imports_old_jsonl_and_views_work(settings, pg_env):
+    from techintel.store import TechStore
+    from warehouse import postgres
+    postgres.setup()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     rows = [{"domain": "a.ai", "status": "rejected", "reason": "x", "checked_at": "2026-11-01T00:00:00Z"},
             {"domain": "a.ai", "status": "qualified", "reason": "y", "category": "ai_ml", "score": 12.5,
              "checked_at": "2026-11-02T00:00:00Z"}]
     (settings.data_dir / "qualifications.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    store = DuckStore(settings.data_dir)
+    store = TechStore(settings.data_dir)
     assert store.latest("qualifications")["a.ai"]["status"] == "qualified"            # latest wins
     assert len(list(store.read("qualifications"))) == 2                               # history kept
     assert (settings.data_dir / "qualifications.jsonl.imported").exists()
-    assert store.con.execute("select status, category, score from v_qualifications").fetchall() == [("qualified", "ai_ml", 12.5)]
+    assert store.con.execute("select status, category, score from tech.v_qualifications").fetchall() == \
+        [("qualified", "ai_ml", 12.5)]
     store.close()
-    again = DuckStore(settings.data_dir)                                               # reopening doesn't re-import
+    again = TechStore(settings.data_dir)                                               # reopening doesn't re-import
     assert len(list(again.read("qualifications"))) == 2
     again.close()
 

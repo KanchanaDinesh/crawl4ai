@@ -2,7 +2,7 @@
 
 Finds **new tech websites**, works out **what they do**, **tracks how they change**, and produces an
 **analytics report**. Built on crawl4ai. There's no AI API: classification is rule-based. Data is kept in
-DuckDB (`data/techintel/techintel.duckdb`).
+PostgreSQL (database `crawl4ai`, schema `tech`; since 2026-11-06, before that `data/techintel/techintel.duckdb`).
 
 ```
  1. DISCOVER ─▶ 2. QUALIFY ─▶ 2b. ENRICH ─▶ 3. PROFILE ─▶ 4. MONITOR ─▶ 5. ANALYZE ─▶ 6. REPORT
@@ -94,7 +94,7 @@ leadership, and 34 got GitHub numbers. `./run_all.sh tech_company` runs it with 
 ```bash
 uv run python -m techintel company --limit 50          # the next 50 sites
 uv run python -m techintel company --domain zapier.com # one site, again
-uv run python -m warehouse sql "select domain, linkedin, employees, people, github_repos from tech.v_companies"
+uv run python -m warehouse pg "select domain, linkedin, employees, jsonb_array_length(people) as people, github_repos from tech.v_companies"
 ```
 
 ## Running it often: `quick` and `watch`
@@ -200,18 +200,19 @@ To add a source, create `techintel/sources/<name>.py` with `async def collect(ct
 ## Data layout
 
 ```
-data/techintel/techintel.duckdb   all pipeline tables (DuckDB; git-ignored)
+PostgreSQL schema tech             all pipeline tables (tables and views: warehouse/schema/tech.sql)
 data/techintel/raw/pages/<domain>/<hash>.md   page text as crawled, for re-processing
 output/techintel/                 analysis JSON and reports (git-ignored)
 ```
 
-Tables: `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `runs`. Each row keeps
+Tables: `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `companies`, `runs`. Each row keeps
 the full record as JSON; a domain's current state is its **latest** row, and older rows are its history.
-Typed views make SQL easy: `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles` and
-`v_changes`. For example:
+Typed views make SQL easy: `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes` and
+`v_companies` (values from the JSON go through `tech.try_ts/try_num/try_int`: a bad value gives NULL, not an error).
+The dashboard reads while stages run. For example:
 
 ```bash
-uv run python -m warehouse sql "select category, count(*) from tech.v_qualifications where status='qualified' group by 1"
+uv run python -m warehouse pg "select category, count(*) from tech.v_qualifications where status='qualified' group by 1"
 ```
 
 Older `.jsonl` files in `data/techintel/` are imported automatically and renamed to `*.jsonl.imported`.
@@ -219,7 +220,7 @@ Override the folders with `TECHINTEL_DATA_DIR` and `TECHINTEL_OUTPUT_DIR`.
 
 ## Designed for the next steps
 
-- **Database:** all reads and writes go through `techintel/store.py`. `DuckStore` (DuckDB) is used by
+- **Database:** all reads and writes go through `techintel/store.py`. `TechStore` (PostgreSQL) is used by
   default; `FileStore` (JSON Lines) has the same methods.
 - **AI:** `techintel/classify.py` has a `RuleClassifier` with an `assess()` method. An LLM classifier
   with the same method can replace it, and LLM-written profile summaries can be added to `profile.py`.

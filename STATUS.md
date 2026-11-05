@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 137 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 136 tests pass.
 
 ## Parts and how to run them
 
@@ -22,7 +22,7 @@ Run every command from the project folder, after `source env.sh`.
 
 | Part | Command | Status |
 |---|---|---|
-| Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
+| Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
@@ -321,6 +321,19 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       DuckDB (334 + 10 new). CLI, briefing and the tab work, no browser errors.
     - **Next: step 3e, tech intel** (the biggest: JSON records, typed views, the live listener; then scrapers,
       briefing).
+42. **PostgreSQL step 3e: tech intel switched (2026-11-06).** `techintel/store.py`: `DuckStore` became `TechStore`
+    (schema `tech`, same methods; each append one short transaction). The six typed views are in
+    `warehouse/schema/tech.sql`, with `tech.try_ts/try_num/try_int` (built on `pg_input_is_valid`) in place of
+    DuckDB's `try_cast`. The Tech Intel tab, `techintel status/report`, the live listener's "known domains" and the
+    briefing read PostgreSQL. JSON records come back as dicts in jsonb key order.
+    - **Every dashboard tab reads PostgreSQL now**, so the dashboard has no DuckDB code left (the "busy" fallback
+      and its test are gone). Also fixed: the dashboard's startup printout (since step 3a) reused the name `url`,
+      so `--open` would have been given the wrong value.
+    - Checked on the Mac: fresh copy (7 tables match), a real `techintel quick` (11 s: 9 new sites, 6 qualified,
+      7 dated) and `company --max-minutes 1` (6 sites read), `status`, `report`; the listener knows 2,987 domains.
+      Counts match DuckDB plus this run (qualified 1,487 + 6, dated 1,604 + 7, companies 1,464 + 6, profiles 336).
+      The tab and a site's details panel showed it, no browser errors.
+    - **Next: step 3f, scrapers** (the older single-file scrapers; then briefing, which only reads, then step 4).
 
 ## Open issues and things to watch
 

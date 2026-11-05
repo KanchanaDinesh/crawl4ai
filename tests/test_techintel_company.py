@@ -94,7 +94,7 @@ def test_company_stage_reads_the_site_and_github(settings, store):
     assert {p["name"] for p in row["people"]} == {"Kasun Silva", "Dilini Fernando", "Ruwan Jayasuriya", "Nimal Perera"}
     assert row["emails"][:2] == ["hello@acme.lk", "sales@acme.lk"] and row["github"]["public_repos"] == 14
     assert row["linkedin_people"] == ["https://www.linkedin.com/in/kasun-silva-123"]
-    view = store.con.execute("select linkedin, employees, github_repos from v_companies where domain = ?",
+    view = store.con.execute("select linkedin, employees, github_repos from tech.v_companies where domain = %s",
                              [acme.domain]).fetchone()
     assert view == ("https://www.linkedin.com/company/acme-ai/", "11-50", 14)
     assert asyncio.run(run_stage("company", settings, store)) == {"checked": 0}       # nothing due again yet

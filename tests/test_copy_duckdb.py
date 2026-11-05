@@ -52,8 +52,13 @@ create table runs (saved_at timestamptz, site varchar, source_url varchar, succe
     seconds double, error varchar);
 create table meta (key varchar primary key, value varchar);
 """
+# and tech intel (techintel/store.py before 2026-11-06): JSON records, created_at a plain TIMESTAMP
+OLD_TECH_DUCKDB = "create sequence row_seq;\n" + "\n".join(
+    f"create table {t} (row_id bigint primary key default nextval('row_seq'), key varchar, "
+    "created_at timestamp default current_timestamp, data json);"
+    for t in ("candidates", "qualifications", "registrations", "profiles", "changes", "companies", "runs"))
 OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB, "markets": OLD_MARKETS_DUCKDB,
-              "vehicles": OLD_VEHICLES_DUCKDB}
+              "vehicles": OLD_VEHICLES_DUCKDB, "tech": OLD_TECH_DUCKDB}
 
 
 @pytest.fixture

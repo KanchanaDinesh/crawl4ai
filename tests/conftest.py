@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from techintel.settings import CONFIG_DIR, load_settings  # noqa: E402
-from techintel.store import DuckStore  # noqa: E402
+from techintel.store import TechStore  # noqa: E402
 
 
 @pytest.fixture
@@ -45,8 +45,10 @@ def settings(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def store(settings):
-    s = DuckStore(settings.data_dir)      # tests run on the real database backend
+def store(settings, pg_env):
+    from warehouse import postgres
+    postgres.setup()                      # the tech store on the throwaway PostgreSQL (a database of its own)
+    s = TechStore(settings.data_dir)
     yield s
     s.close()
 

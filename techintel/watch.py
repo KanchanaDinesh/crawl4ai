@@ -30,18 +30,17 @@ def _now() -> str:
 
 
 def known_domains(settings) -> set[str]:
-    """Domains already in the database (read-only, so it never blocks other jobs)."""
-    from warehouse import connect
-    db = settings.data_dir / "techintel.duckdb"
-    if not db.exists():
-        return set()
+    """Domains already in the database (PostgreSQL, read-only login, so it never blocks other jobs)."""
+    from warehouse.postgres import connect
     try:
-        con = connect(db, read_only=True, wait_seconds=30)
-    except Exception as e:  # noqa: BLE001  busy: start with an empty set, quick-run dedup still applies
+        con = connect("reader", autocommit=True)
+    except Exception as e:  # noqa: BLE001  unreachable: start with an empty set, quick-run dedup still applies
         logger.warning("could not read known domains (%s); continuing", e)
         return set()
     try:
-        return {k for (k,) in con.execute("select distinct key from candidates where key is not null").fetchall()}
+        if not con.execute("select to_regclass('tech.candidates') is not null").fetchone()[0]:
+            return set()
+        return {k for (k,) in con.execute("select distinct key from tech.candidates where key is not null").fetchall()}
     finally:
         con.close()
 

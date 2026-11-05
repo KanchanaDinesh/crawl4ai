@@ -3,7 +3,7 @@
 import random
 from datetime import datetime, timedelta, timezone
 
-from techintel.store import DuckStore
+from techintel.store import TechStore
 from worldnews.store import NewsStore
 from worldnews.tagging import TechTagger, TopicTagger
 
@@ -83,7 +83,7 @@ REASONS = {"watch": "placeholder: 'coming soon'", "rejected": "no tech keywords"
 
 def build_tech(root, now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
-    store = DuckStore(root)
+    store = TechStore(root)
     for i, (domain, source, status, category, score, desc, tech) in enumerate(SITES):
         found = now - timedelta(hours=3)
         seen = now - timedelta(hours=5 + i * 9)

@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **steps 1 and 2 done; step 3: companies, world news, markets and vehicles switched (2026-11-06), next tech intel.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **steps 1 and 2 done; step 3: companies, world news, markets, vehicles and tech intel switched (2026-11-06), next scrapers.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -208,8 +208,8 @@ skip the DuckDB files of switched tools; `uv run python -m warehouse pg "..."` q
 | world news | ✅ 2026-11-06 | executemany in one transaction per run; `check` became a dry run (reads, saves nothing); `analyze` and the briefing read PostgreSQL |
 | markets | ✅ 2026-11-06 | `v_latest` = `distinct on` + index (asset_class, symbol, run_at desc); `v_daily` per UTC day; `try_cast(extra->>x)` became a jsonb number check |
 | vehicles | ✅ 2026-11-06 | views with window functions in subqueries (no `qualify`); `median` → `percentile_cont(0.5)`; the one-time scrapers.duckdb import dropped (its rows came with the copy) |
-| tech intel | next | |
-| scrapers | | |
+| tech intel | ✅ 2026-11-06 | `DuckStore` → `TechStore`; views use `distinct on` and `tech.try_ts/try_num/try_int` (`pg_input_is_valid`) for DuckDB's `try_cast`; the dashboard has no DuckDB code left |
+| scrapers | next | |
 | briefing | | only reads |
 
 How the switch is done (companies as the example): the store keeps its methods and `self.con` (a writer
