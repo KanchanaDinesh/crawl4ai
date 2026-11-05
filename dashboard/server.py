@@ -1,11 +1,12 @@
-"""Local web dashboard for world news, tech intel, markets, vehicles and companies, reading live from the DuckDB files.
+"""Local web dashboard for world news, tech intel, markets, vehicles and companies, reading live from the databases.
 
     python -m dashboard                 http://127.0.0.1:8050
     python -m dashboard --port 9000 --open
 
-Databases are opened read-only for each request and closed straight away, so the
-dashboard never blocks a running collection. If a run is writing at that moment,
-the last loaded data is shown with "busy": true.
+PostgreSQL (tools already moved, see PG_TOOLS and docs/postgres-migration.md): read with the read-only login;
+runs never block it. DuckDB (the others): opened read-only for each request and closed straight away, so the
+dashboard never blocks a running collection; if a run is writing at that moment, the last loaded data is shown
+with "busy": true.
 """
 
 import argparse
@@ -18,7 +19,7 @@ import duckdb
 from aiohttp import web
 
 import project_paths
-from warehouse import DB_FILES
+from warehouse import DB_FILES, PG_TOOLS      # PG_TOOLS: tools whose data is in PostgreSQL now
 
 from . import queries
 
@@ -35,8 +36,27 @@ def _int(request, name, default, lo=1, hi=100000):
         return default
 
 
+def _pg_query(fn, cache_key: str):
+    """Run fn(connection) on PostgreSQL as the read-only login. Writers never block it, so there's no "busy";
+    if PostgreSQL can't be reached, the message says what to do (and the last data is shown if there is any)."""
+    from warehouse.postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        return {"data": _cache.get(cache_key), "error": str(e)}
+    try:
+        con.execute("set timezone = 'UTC'")
+        data = fn(con)
+    finally:
+        con.close()
+    _cache[cache_key] = data
+    return {"data": data}
+
+
 def _query(db: str, fn, cache_key: str):
     """Run fn(connection) on a database, read-only, with a short retry and a cached fallback."""
+    if db in PG_TOOLS:
+        return _pg_query(fn, cache_key)
     path = DB_FILES[db]
     if not path.exists():
         return {"empty": True, "data": None}
@@ -258,7 +278,12 @@ def main() -> None:
     url = f"http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}/"
     print(f"Dashboard: {url}   (Ctrl+C to stop)")
     for name, path in DB_FILES.items():
-        if name != "scrapers":
+        if name in PG_TOOLS:
+            from warehouse.postgres import url
+            from psycopg.conninfo import conninfo_to_dict
+            info = conninfo_to_dict(url("reader"))
+            print(f"  {name:<5} PostgreSQL {info.get('host') or 'local'}:{info.get('port') or 5432}/{info.get('dbname')}")
+        elif name != "scrapers":
             print(f"  {name:<5} {path}{'' if path.exists() else '  (no data yet)'}")
     if args.open:
         webbrowser.open(url)

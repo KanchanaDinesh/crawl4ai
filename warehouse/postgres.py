@@ -227,15 +227,55 @@ def schema_file(schema: str) -> Path:
     return SCHEMA_DIR / f"{schema}.sql"
 
 
+MIGRATE_LOCK = 4_242_001        # advisory lock id: two programs starting at once don't create tables at the same time
+
+
 def migrate(con=None, schemas: list[str] | tuple[str, ...] = SCHEMAS) -> list[str]:
-    """Create the tables, sequences and indexes of each schema (warehouse/schema/<schema>.sql). Safe to repeat:
-    every statement is `create ... if not exists`. Returns the schemas applied."""
+    """Create the tables, sequences, indexes and views of each schema (warehouse/schema/<schema>.sql).
+
+    A file is run only when it changed since it last ran (its SHA-256 is kept in public.schema_versions), so
+    opening a store costs one quick query, and never takes locks that could make dashboard readers wait.
+    Every statement in the files is `create ... if not exists` / `create or replace`, so running one again is
+    safe too. Returns the schemas whose file was run."""
+    import hashlib
     own = con is None
     con = con or connect("writer", autocommit=True)
+    ran: list[str] = []
     try:
+        con.execute("""create table if not exists public.schema_versions (
+                           schema text primary key, sha256 text not null, applied_at timestamptz not null)""")
         for schema in schemas:
-            con.execute(schema_file(schema).read_text(encoding="utf-8"))
+            text = schema_file(schema).read_text(encoding="utf-8")
+            digest = hashlib.sha256(text.encode()).hexdigest()
+            row = con.execute("select sha256 from public.schema_versions where schema = %s", [schema]).fetchone()
+            if row and row[0] == digest:
+                continue
+            with con.transaction():
+                con.execute("select pg_advisory_xact_lock(%s)", [MIGRATE_LOCK])
+                row = con.execute("select sha256 from public.schema_versions where schema = %s", [schema]).fetchone()
+                if row and row[0] == digest:        # another program ran it while we waited
+                    continue
+                con.execute(text)
+                con.execute("""insert into public.schema_versions values (%s, %s, now())
+                               on conflict (schema) do update set sha256 = excluded.sha256, applied_at = now()""",
+                            [schema, digest])
+                ran.append(schema)
     finally:
         if own:
             con.close()
-    return list(schemas)
+    return ran
+
+
+# --- values ------------------------------------------------------------------------------------------------
+
+def clean_text(value):
+    """PostgreSQL can't store the NUL character in text: drop it (scraped pages sometimes contain one)."""
+    return value.replace("\x00", "") if isinstance(value, str) else value
+
+
+def json_text(value) -> str | None:
+    """A value as JSON text for a jsonb column (None stays NULL). NUL can't be stored in jsonb either."""
+    import json
+    if value is None:
+        return None
+    return json.dumps(value, ensure_ascii=False, default=str).replace("\\u0000", "")

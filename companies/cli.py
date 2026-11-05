@@ -9,7 +9,7 @@
     stats    counts by country, source and website status
     sources  the sources, whether they're on, and where each one stopped
 
-Settings: companies/config/settings.json. Database: data/companies/companies.duckdb.
+Settings: companies/config/settings.json. Database: PostgreSQL, schema companies (database crawl4ai).
 """
 
 import argparse
@@ -64,11 +64,17 @@ def cmd_update(args, settings) -> None:
 
 
 def _db():
-    from warehouse import DB_FILES, connect
-    path = DB_FILES["companies"]
-    if not path.exists():
+    """PostgreSQL, read-only login (works while collect/update are running)."""
+    from warehouse.postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        sys.exit(str(e))
+    con.execute("set timezone = 'UTC'")
+    exists = con.execute("select to_regclass('companies.companies') is not null").fetchone()[0]
+    if not exists:
         sys.exit("No companies saved yet. Run:  uv run python -m companies collect")
-    return connect(path, read_only=True)
+    return con
 
 
 def cmd_show(args, settings) -> None:
@@ -109,16 +115,14 @@ def cmd_stats(args, settings) -> None:
 
 def cmd_sources(args, settings) -> None:
     from .sources import all_sources
-    from .store import db_path
     cursors = {}
-    if db_path().exists():
-        from warehouse import connect
-        con = connect(db_path(), read_only=True)
-        try:
-            for source, key, value in con.execute("select source, key, value from cursors order by source, key").fetchall():
-                cursors.setdefault(source, {})[key] = json.loads(value)
-        finally:
-            con.close()
+    con = _db()
+    try:
+        for source, key, value in con.execute(
+                "select source, key, value from companies.cursors order by source, key").fetchall():
+            cursors.setdefault(source, {})[key] = json.loads(value) if isinstance(value, str) else value
+    finally:
+        con.close()
     for name in all_sources():
         cfg = settings.get("sources", {}).get(name, {})
         state = cursors.get(name, {})

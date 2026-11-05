@@ -5,6 +5,8 @@
     sql "QUERY"          run SQL across all of them (read-only); without a query: interactive prompt
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
+    pg "QUERY"           run SQL on PostgreSQL (read-only login): the tools already moved there (companies)
+    pg "QUERY" --csv F   save the result as a CSV file
 
     setup                PostgreSQL: create or repair the logins, database, schemas and grants (safe to run again)
     pg-check             PostgreSQL: check that everything the tools need is there
@@ -13,14 +15,15 @@
                          [--tool companies] [--replace: copy again] [--check: only compare]
                          (PostgreSQL is replacing DuckDB: docs/postgres-migration.md)
 
-In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  companies.*  scrapers.*
+In SQL, prefix tables with the database name:  news.*  tech.*  markets.*  vehicles.*  scrapers.*
 e.g.  select * from news.news_items order by published_at desc limit 20
+Moved to PostgreSQL (use `pg` instead of `sql`, or psql crawl4ai):  companies.*
 """
 
 import argparse
 import sys
 
-from . import DB_FILES, connect
+from . import DB_FILES, PG_TOOLS, connect
 
 EXAMPLES = {
     "Latest 20 headlines": "select published_at, source, title from news.news_items order by published_at desc nulls last limit 20",
@@ -36,10 +39,22 @@ EXAMPLES = {
     "Market snapshot (key prices)": "select name, price, currency, round(change_pct, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
     "Top CSE gainers today": "select symbol, name, price, round(change_pct, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc limit 10",
     "Crypto top 20": "select rank, symbol, name, price, round(change_pct, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
-    "Companies per country": "select country, count(*) as companies, count(website) as with_website from companies.companies group by 1 order by 2 desc limit 20",
-    "Company websites with LinkedIn": "select name, country, website, linkedin, employees from companies.v_companies where linkedin is not null limit 20",
     "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from vehicles.v_vehicle_price_changes order by saved_at desc",
 }
+
+PG_EXAMPLES = {
+    "Companies per country": "select country, count(*) as companies, count(website) as with_website from companies.companies group by 1 order by 2 desc limit 20",
+    "Company websites with LinkedIn": "select name, country, website, linkedin, employees from companies.v_companies where linkedin is not null limit 20",
+    "Search companies by name": "select name, country, website, site_status from companies.v_companies where lower(name) like '%bank%' and country = 'LK' order by name limit 20",
+}
+
+
+def print_examples() -> None:
+    for title, sql in EXAMPLES.items():
+        print(f"-- {title}\n{sql};\n")
+    print("-- PostgreSQL (python -m warehouse pg \"...\"):\n")
+    for title, sql in PG_EXAMPLES.items():
+        print(f"-- {title}\n{sql};\n")
 
 
 def init() -> None:
@@ -56,7 +71,7 @@ def init() -> None:
     from vehicles.store import VehicleStore
     VehicleStore(DB_FILES["vehicles"]).close()
     from companies.store import CompanyStore
-    CompanyStore(DB_FILES["companies"]).close()
+    CompanyStore().close()                       # PostgreSQL (schema companies)
     for name, path in DB_FILES.items():
         print(f"{name:<9} {path}")
 
@@ -65,6 +80,8 @@ def open_all():
     import duckdb
     con = duckdb.connect()
     for name, path in DB_FILES.items():
+        if name in PG_TOOLS:                       # moved to PostgreSQL: its DuckDB file is only the old copy
+            continue
         if path.exists():
             try:
                 con.execute(f"attach '{path}' as {name} (read_only)")
@@ -76,6 +93,9 @@ def open_all():
 def info() -> None:
     con = open_all()
     for name, path in DB_FILES.items():
+        if name in PG_TOOLS:
+            pg_info(name)
+            continue
         size = f"{path.stat().st_size / 1e6:.1f} MB" if path.exists() else "not created yet"
         print(f"\n{name}: {path}  ({size})")
         if not path.exists():
@@ -85,6 +105,56 @@ def info() -> None:
                 [name]).fetchall():
             count = con.execute(f'select count(*) from {name}."{table}"').fetchone()[0]
             print(f"  {'view ' if kind == 'VIEW' else 'table'}  {table:<26} {count:>10,} rows")
+
+
+def pg_info(schema: str) -> None:
+    from .postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        print(f"\n{schema}: PostgreSQL, {e}")
+        return
+    with con:
+        size = con.execute("""select pg_size_pretty(coalesce(sum(pg_total_relation_size(c.oid)), 0))
+                              from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                              where n.nspname = %s and c.relkind = 'r'""", [schema]).fetchone()[0]
+        print(f"\n{schema}: PostgreSQL schema {schema}  ({size})")
+        for table, kind in con.execute("""select table_name, table_type from information_schema.tables
+                                          where table_schema = %s order by 2, 1""", [schema]).fetchall():
+            count = con.execute(f'select count(*) from {schema}."{table}"').fetchone()[0]
+            print(f"  {'view ' if kind == 'VIEW' else 'table'}  {table:<26} {count:>10,} rows")
+
+
+def run_pg(query: str, csv_path: str | None = None) -> None:
+    """A query on PostgreSQL as the read-only login (it can't change anything), printed as a table or saved as CSV."""
+    import csv
+    import psycopg
+    from .postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        sys.exit(str(e))
+    with con:
+        try:
+            cur = con.execute(query)
+        except psycopg.Error as e:
+            sys.exit(f"Error: {str(e).strip()}")
+        cols = [d.name for d in cur.description or []]
+        found = cur.fetchall() if cur.description else []
+    if csv_path:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(cols)
+            w.writerows(found)
+        print(f"Saved {csv_path} ({len(found):,} rows)")
+        return
+    shown = [[("" if v is None else str(v))[:60] for v in r] for r in found[:200]]
+    widths = [max([len(c)] + [len(r[i]) for r in shown]) for i, c in enumerate(cols)]
+    print("  ".join(c.ljust(w) for c, w in zip(cols, widths)))
+    print("  ".join("-" * w for w in widths))
+    for r in shown:
+        print("  ".join(v.ljust(w) for v, w in zip(r, widths)))
+    print(f"({len(found):,} rows{', first 200 shown' if len(found) > 200 else ''})")
 
 
 def run_sql(query: str, csv_path: str | None = None) -> None:
@@ -107,8 +177,7 @@ def repl() -> None:
         if query in ("exit", "quit", "\\q"):
             break
         if query == "examples":
-            for title, sql in EXAMPLES.items():
-                print(f"-- {title}\n{sql};\n")
+            print_examples()
             continue
         if query:
             try:
@@ -138,7 +207,7 @@ def pg_migrate() -> None:
         done = migrate()
     except DatabaseError as e:
         sys.exit(f"Creating the tables failed: {e}")
-    print(f"Tables and indexes are there for: {', '.join(done)}.")
+    print(f"Tables and indexes updated for: {', '.join(done)}." if done else "Tables and indexes are up to date.")
 
 
 def pg_copy(tools: list[str] | None, replace: bool, check_only: bool) -> bool:
@@ -176,6 +245,9 @@ def main() -> None:
     q = sub.add_parser("sql")
     q.add_argument("query", nargs="?")
     q.add_argument("--csv", help="Save the result to this CSV file")
+    g = sub.add_parser("pg", help="run SQL on PostgreSQL (read-only): the tools already moved there")
+    g.add_argument("query")
+    g.add_argument("--csv", help="Save the result to this CSV file")
     sub.add_parser("setup", help="PostgreSQL: create or repair the logins, database, schemas and grants")
     sub.add_parser("pg-check", help="PostgreSQL: check that everything the tools need is there")
     sub.add_parser("migrate", help="PostgreSQL: create the tables and indexes (safe to run again)")
@@ -185,7 +257,9 @@ def main() -> None:
     c.add_argument("--replace", action="store_true", help="Copy again: empties the PostgreSQL tables first")
     c.add_argument("--check", action="store_true", help="Only compare DuckDB and PostgreSQL, copy nothing")
     args = p.parse_args()
-    if args.command == "migrate":
+    if args.command == "pg":
+        run_pg(args.query, args.csv)
+    elif args.command == "migrate":
         pg_migrate()
     elif args.command == "copy-from-duckdb":
         sys.exit(0 if pg_copy(args.tool, args.replace, args.check) else 1)
@@ -198,8 +272,7 @@ def main() -> None:
     elif args.command == "info":
         info()
     elif args.command == "examples":
-        for title, sql in EXAMPLES.items():
-            print(f"-- {title}\n{sql};\n")
+        print_examples()
     elif args.query:
         run_sql(args.query, args.csv)
     else:

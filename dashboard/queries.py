@@ -442,15 +442,28 @@ def vehicle_price_changes(con, days: int = 30, limit: int = 30) -> list[dict]:
         order by saved_at desc limit {int(limit)}""")
 
 
-# ── companies (python -m companies) ───────────────────────────────────────
+# ── companies (python -m companies): PostgreSQL, schema companies ────────────
+# These take a psycopg connection (reader login). Placeholders are %s, and times come back as UTC strings.
 COMPANY_FILTERS = {
     "website": "website is not null", "no_website": "website is null", "read": "site_status = 'ok'",
     "not_read": "site_status = 'not read'", "failed": "site_status in ('unreachable', 'not_allowed')",
-    "social": "social is not null and social::varchar <> '{}'", "linkedin": "linkedin is not null",
+    "social": "social is not null and social <> '{}'::jsonb", "linkedin": "linkedin is not null",
     "people": "people > 0", "employees": "employees is not null",
 }
 COMPANY_SORT = {"best": "(website is null), (site_status <> 'ok'), name", "name": "name",
                 "newest": "first_seen desc, name", "country": "country nulls last, name"}
+
+
+def _pg_ts(col: str) -> str:
+    """A timestamptz as "2026-11-02T08:15:00Z" (what the browser expects, like _ts for DuckDB)."""
+    return f"""to_char({col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')"""
+
+
+def _json(value, empty):
+    """jsonb comes back from psycopg already decoded; older data or text columns may still be a JSON string."""
+    if value is None:
+        return empty
+    return json.loads(value) if isinstance(value, str) else value
 
 
 def _country_names() -> dict:
@@ -465,29 +478,35 @@ def companies_summary(con) -> dict:
     names = _country_names()
     counts = one(con, f"""select count(*) as companies, count(website) as with_website,
         count(distinct domain) as websites, count(distinct country) as countries, count(distinct source) as sources,
-        count(*) filter (where first_seen >= now() - interval 1 day) as new_24h,
-        {_ts('max(first_seen)')} as last_added from companies""")
+        count(*) filter (where first_seen >= now() - interval '1 day') as new_24h,
+        {_pg_ts('max(first_seen)')} as last_added from companies.companies""")
     counts.update(one(con, """select count(*) filter (where status = 'ok') as sites_ok, count(*) as sites_checked,
-        count(*) filter (where status = 'ok' and social is not null and social::varchar <> '{}') as sites_with_social,
-        count(*) filter (where status = 'ok' and json_array_length(people) > 0) as sites_with_people from sites"""))
-    counts["refusals"] = one(con, "select count(*) as n from refusals")["n"]
+        count(*) filter (where status = 'ok' and social is not null and social <> '{}'::jsonb) as sites_with_social,
+        count(*) filter (where status = 'ok' and jsonb_typeof(people) = 'array' and jsonb_array_length(people) > 0)
+            as sites_with_people
+        from companies.sites"""))
+    counts["refusals"] = one(con, "select count(*) as n from companies.refusals")["n"]
     by_country = rows(con, """select country, count(*) as n, count(website) as with_website,
-        count(*) filter (where site_status = 'ok') as sites_ok from v_companies group by 1 order by n desc""")
+        count(*) filter (where site_status = 'ok') as sites_ok from companies.v_companies
+        group by 1 order by n desc, country""")
     for r in by_country:
         r["name"] = names.get(r["country"] or "", r["country"] or "unknown")
     by_source = rows(con, f"""select source, count(*) as n, count(website) as with_website,
-        count(distinct country) as countries, {_ts('max(last_seen)')} as last_seen from companies group by 1 order by n desc""")
-    by_status = rows(con, "select site_status as status, count(*) as n from v_companies group by 1 order by n desc")
-    social = rows(con, """select k as platform, count(*) as n from sites, unnest(json_keys(social)) t(k)
-        where status = 'ok' group by 1 order by n desc""")
-    by_day = rows(con, """select strftime(first_seen, '%Y-%m-%d') as day, count(*) as n, count(website) as with_website
-        from companies where first_seen >= current_date - interval 14 day group by 1 order by 1""")
-    industries = rows(con, """select industry, count(*) as n from companies where industry is not null
-        group by 1 order by n desc limit 15""")
-    runs = rows(con, f"""select command, {_ts('started_at')} as started_at, seconds, summary from runs
-        order by started_at desc limit 10""")
+        count(distinct country) as countries, {_pg_ts('max(last_seen)')} as last_seen from companies.companies
+        group by 1 order by n desc""")
+    by_status = rows(con, """select site_status as status, count(*) as n from companies.v_companies
+        group by 1 order by n desc""")
+    social = rows(con, """select k as platform, count(*) as n from companies.sites, jsonb_object_keys(social) k
+        where status = 'ok' and jsonb_typeof(social) = 'object' group by 1 order by n desc, k""")
+    by_day = rows(con, """select to_char(first_seen at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n,
+        count(website) as with_website
+        from companies.companies where first_seen >= current_date - interval '14 days' group by 1 order by 1""")
+    industries = rows(con, """select industry, count(*) as n from companies.companies where industry is not null
+        group by 1 order by n desc, industry limit 15""")
+    runs = rows(con, f"""select command, {_pg_ts('started_at')} as started_at, seconds, summary from companies.runs
+        order by runs.started_at desc limit 10""")
     for r in runs:
-        s = json.loads(r.pop("summary") or "{}")
+        s = _json(r.pop("summary"), {})
         r["text"] = (f"{s.get('added', 0):,} new, {s.get('total', 0):,} in total" if r["command"] == "collect" else
                      f"{s.get('checked', 0)} websites: {s.get('ok', 0)} ok, {s.get('unreachable', 0)} unreachable, "
                      f"{s.get('refused', 0)} refused")
@@ -495,7 +514,7 @@ def companies_summary(con) -> dict:
                                   if v.get("refused") or v.get("error"))
     progress = []
     for source, n, done in con.execute("""select source, count(*), count(*) filter (where value->>'done_at' is not null)
-            from cursors where key not like '\\_%' escape '\\' group by 1 order by 1""").fetchall():
+            from companies.cursors where left(key, 1) <> '_' group by 1 order by 1""").fetchall():
         progress.append({"source": source, "parts": n, "done": done})
     return {"counts": counts, "by_country": by_country, "by_source": by_source, "by_status": by_status,
             "social": social, "by_day": by_day, "industries": industries, "runs": runs, "progress": progress}
@@ -504,21 +523,23 @@ def companies_summary(con) -> dict:
 def companies_list(con, *, country=None, source=None, status=None, q=None, sort="best", limit=100, offset=0) -> dict:
     where, params = ["true"], []
     if country:
-        where.append("country = ?")
+        where.append("country = %s")
         params.append(country)
     if source:
-        where.append("source = ?")
+        where.append("source = %s")
         params.append(source)
     if status in COMPANY_FILTERS:
         where.append(COMPANY_FILTERS[status])
     if q:
-        where.append("(name ilike ? or domain ilike ? or industry ilike ?)")
-        params += [f"%{q}%"] * 3
-    base = f"from v_companies where {' and '.join(where)}"
+        where.append("(lower(name) like %s or domain ilike %s or industry ilike %s)")
+        like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        params += [like] * 3
+    base = f"from companies.v_companies where {' and '.join(where)}"
     total = con.execute(f"select count(*) {base}", params).fetchone()[0]
-    items = rows(con, f"""select id, source, name, country, website, domain, industry, site_status, social,
-        people, employees, {_ts('first_seen')} as first_seen, {_ts('checked_at')} as checked_at
-        {base} order by {COMPANY_SORT.get(sort, COMPANY_SORT['best'])} limit {int(limit)} offset {int(offset)}""", params)
+    items = rows(con, f"""select id, source, name, country, website, domain, industry, site_status, social::text as social,
+        people, employees, {_pg_ts('first_seen')} as first_seen, {_pg_ts('checked_at')} as checked_at
+        {base} order by {COMPANY_SORT.get(sort, COMPANY_SORT['best'])}, id limit {int(limit)} offset {int(offset)}""",
+                 params)
     names = _country_names()
     for r in items:
         r["country_name"] = names.get(r["country"] or "", r["country"])
@@ -527,21 +548,23 @@ def companies_list(con, *, country=None, source=None, status=None, q=None, sort=
 
 def company_detail(con, company_id: str) -> dict:
     c = one(con, f"""select id, source, source_id, name, country, website, domain, industry, extra,
-        {_ts('first_seen')} as first_seen, {_ts('last_seen')} as last_seen from companies where id = ?""", [company_id])
+        {_pg_ts('first_seen')} as first_seen, {_pg_ts('last_seen')} as last_seen
+        from companies.companies where id = %s""", [company_id])
     if not c:
         return {}
-    c["extra"] = json.loads(c["extra"] or "{}")
+    c["extra"] = _json(c["extra"], {})
     c["country_name"] = _country_names().get(c["country"] or "", c["country"])
     site = None
     if c["domain"]:
-        site = one(con, f"""select domain, url, final_url, {_ts('checked_at')} as checked_at, status, error, name,
+        site = one(con, f"""select domain, url, final_url, {_pg_ts('checked_at')} as checked_at, status, error, name,
             legal_name, founded, employees, employees_hint, address, people, emails, phones, social, linkedin_people, pages
-            from sites where domain = ?""", [c["domain"]]) or None
+            from companies.sites where domain = %s""", [c["domain"]]) or None
         if site:
             for k in ("people", "emails", "phones", "social", "linkedin_people", "pages"):
-                site[k] = json.loads(site[k]) if site[k] else ([] if k != "social" else {})
-        refusal = one(con, f"select {_ts('refused_at')} as refused_at, error from refusals where domain = ?", [c["domain"]])
+                site[k] = _json(site[k], {} if k == "social" else [])
+        refusal = one(con, f"""select {_pg_ts('refused_at')} as refused_at, error from companies.refusals
+            where domain = %s""", [c["domain"]])
         c["refusal"] = refusal or None
-    same = rows(con, """select id, source, name, country from companies where domain = ? and id <> ?
-        order by source limit 20""", [c["domain"], c["id"]]) if c["domain"] else []
+    same = rows(con, """select id, source, name, country from companies.companies where domain = %s and id <> %s
+        order by source, id limit 20""", [c["domain"], c["id"]]) if c["domain"] else []
     return {"company": c, "site": site, "same_website": same}

@@ -88,8 +88,11 @@ def lei(n, name, country):
 
 
 @pytest.fixture
-def store(tmp_path):
-    s = CompanyStore(tmp_path / "companies.duckdb")
+def store(tmp_path, pg_env):
+    """The companies store on the test PostgreSQL (a database of this test's own), downloads in tmp_path."""
+    from warehouse import postgres
+    postgres.setup()
+    s = CompanyStore(tmp_path)
     yield s
     s.close()
 
@@ -153,7 +156,7 @@ def test_collect_saves_name_website_country_and_continues_where_it_stopped(store
     settings = settings_for(srv.base)
     s1 = asyncio.run(collect(settings, store, countries=["US", "LK"], max_minutes=1))
 
-    rows = {r[0]: r for r in store.con.execute("select id, name, country, website, domain, industry from companies").fetchall()}
+    rows = {r[0]: r for r in store.con.execute("select id, name, country, website, domain, industry from companies.companies").fetchall()}
     assert rows["wikidata:Q1"][1:] == ("Acme Inc", "US", "https://acme.com", "acme.com", "retail")   # https first
     assert "wikidata:Q2" not in rows                              # no English name: skipped
     assert rows["wikidata:Q3"][1:5] == ("Bank of Ceylon", "LK", "https://www.boc.lk/", "boc.lk")
@@ -175,7 +178,7 @@ def test_collect_saves_name_website_country_and_continues_where_it_stopped(store
     assert store.count("id = 'gleif:LEI3'") == 1 and s2["sources"]["gleif"]["added"] == 1
     paths = [p for _, p in srv.calls]
     assert all("p2" in p for p in paths if "lei-records" in p) and len(paths) == 1
-    first = store.con.execute("select first_seen, last_seen from companies where id = 'gleif:LEI1'").fetchone()
+    first = store.con.execute("select first_seen, last_seen from companies.companies where id = 'gleif:LEI1'").fetchone()
     assert first[0] == first[1]                                  # not seen again, nothing changed
 
 
@@ -185,7 +188,7 @@ def test_upsert_keeps_first_seen_and_counts(store):
     b = company("gleif", "L1", "New Name", "LK", "acme.lk")
     assert store.upsert_companies([b, company("gleif", "L2", "", "LK")], "2026-11-05T00:00:00Z") == (0, 1)
     name, website_, first, last = store.con.execute(
-        "select name, website, strftime(first_seen, '%d'), strftime(last_seen, '%d') from companies").fetchone()
+        "select name, website, to_char(first_seen, 'DD'), to_char(last_seen, 'DD') from companies.companies").fetchone()
     assert (name, website_, first, last) == ("New Name", "https://acme.lk", "01", "05")
 
 
@@ -254,7 +257,7 @@ def test_companies_house_imports_in_chunks_and_resumes(store, tmp_path):
         (store.download_dir / name.lstrip("/")).write_bytes(files[name])
     summary = asyncio.run(collect(settings, store, max_minutes=1))
     assert summary["sources"]["companies_house"]["added"] == 8          # 2 files x 4 active companies
-    row = store.con.execute("select name, country, industry from companies where id = 'companies_house:0100000'").fetchone()
+    row = store.con.execute("select name, country, industry from companies.companies where id = 'companies_house:0100000'").fetchone()
     assert row == ("CO 1-0 LTD", "GB", "Information technology consultancy activities")
     assert store.cursors("companies_house")["basic"]["done_at"] and not list(store.download_dir.glob("*.zip"))
     assert ch.latest_files('<a href="BasicCompanyData-2026-10-01-part1_7.zip"> <a href="BasicCompanyData-2026-11-01-part3_7.zip">') \
@@ -275,7 +278,7 @@ def test_asic_reads_a_local_file_by_byte_offset(store, tmp_path):
         settings["sources"][name]["enabled"] = False
     summary = asyncio.run(collect(settings, store, max_minutes=1))
     assert summary["sources"]["asic"]["batches"] > 3 and store.count("source = 'asic'") == 29
-    assert store.con.execute("select name, country from companies where id = 'asic:000000007'").fetchone() == (
+    assert store.con.execute("select name, country from companies.companies where id = 'asic:000000007'").fetchone() == (
         "COMPANY 7 PTY LTD", "AU")
     assert store.cursors("asic")["file"]["offset"] == path.stat().st_size
     again = asyncio.run(collect(settings, store, max_minutes=1))           # same file: nothing to do
@@ -308,24 +311,28 @@ def test_update_reads_websites_and_backs_off_on_refusals(store):
     assert (summary["checked"], summary["ok"], summary["refused"], summary["not_allowed"]) == (3, 1, 1, 1)
 
     domain = site.base.split("//")[1]
-    s = store.con.execute("select status, social, people, emails, phones, employees_hint from sites where domain = ?",
-                          [domain]).fetchone()
-    assert s[0] == "ok" and json.loads(s[1]) == {"linkedin": "https://www.linkedin.com/company/acme/",
-                                                  "facebook": "https://www.facebook.com/acme"}
-    assert json.loads(s[2]) == [{"name": "Nimal Perera", "role": "Founder & CEO"}]
-    assert json.loads(s[3]) == ["hello@acme.lk"] and json.loads(s[4]) == ["+94112345678"] and s[5] == "team of 40"
+    s = store.con.execute("select status, social, people, emails, phones, employees_hint from companies.sites "
+                          "where domain = %s", [domain]).fetchone()
+    assert s[0] == "ok" and s[1] == {"linkedin": "https://www.linkedin.com/company/acme/",   # jsonb: already decoded
+                                     "facebook": "https://www.facebook.com/acme"}
+    assert s[2] == [{"name": "Nimal Perera", "role": "Founder & CEO"}]
+    assert s[3] == ["hello@acme.lk"] and s[4] == ["+94112345678"] and s[5] == "team of 40"
     refused = refuser.base.split("//")[1]
-    assert store.con.execute("select count(*) from sites where domain = ?", [refused]).fetchone()[0] == 0
-    assert store.con.execute("select error from refusals where domain = ?", [refused]).fetchone()[0] == "HTTP 403"
-    assert store.con.execute("select status from sites where domain = ?",
+    assert store.con.execute("select count(*) from companies.sites where domain = %s", [refused]).fetchone()[0] == 0
+    assert store.con.execute("select error from companies.refusals where domain = %s",
+                             [refused]).fetchone()[0] == "HTTP 403"
+    assert store.con.execute("select status from companies.sites where domain = %s",
                              [robots.base.split("//")[1]]).fetchone()[0] == "not_allowed"
     # nothing is due again straight away (the refusal waits refused_wait_days)
     assert asyncio.run(update(settings, store, max_minutes=1))["checked"] == 0
-    assert store.con.execute("select site_status from v_companies where id = 'cse:ACME.N0000'").fetchone()[0] == "ok"
+    assert store.con.execute("select site_status from companies.v_companies "
+                             "where id = 'cse:ACME.N0000'").fetchone()[0] == "ok"
 
 
 # ── dashboard ───────────────────────────────────────────────────────────
-def test_dashboard_companies_tab(tmp_path, monkeypatch):
+def test_dashboard_companies_tab(tmp_path, monkeypatch, pg_env):
+    from warehouse import postgres
+    postgres.setup()
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("COMPANIES_DATA_DIR", raising=False)
     import importlib
@@ -334,7 +341,7 @@ def test_dashboard_companies_tab(tmp_path, monkeypatch):
     import dashboard.server as server
     for mod in (project_paths, warehouse, server):
         importlib.reload(mod)
-    s = CompanyStore(warehouse.DB_FILES["companies"])
+    s = CompanyStore()
     s.upsert_companies([company("wikidata", "Q1", "Acme Inc", "US", "https://acme.com", "retail", type="company"),
                         company("gleif", "L1", "ACME INC", "US", "acme.com"),
                         company("cse", "JKH.N0000", "JOHN KEELLS HOLDINGS PLC", "LK", "keells.com", "Capital Goods"),
@@ -387,7 +394,9 @@ def test_update_takes_turns_between_countries(store):
     assert [d["domain"] for d in store.due_sites({}, [], 9, domains=["us0.com"])] == ["us0.com"]
 
 
-def test_cli_show_and_stats(tmp_path, monkeypatch, capsys):
+def test_cli_show_and_stats(tmp_path, monkeypatch, capsys, pg_env):
+    from warehouse import postgres
+    postgres.setup()
     monkeypatch.setenv("PROJECT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("COMPANIES_DATA_DIR", raising=False)
     import importlib
@@ -395,7 +404,7 @@ def test_cli_show_and_stats(tmp_path, monkeypatch, capsys):
     import warehouse
     for mod in (project_paths, warehouse):
         importlib.reload(mod)
-    s = CompanyStore(warehouse.DB_FILES["companies"])
+    s = CompanyStore()
     s.upsert_companies([company("cse", "JKH.N0000", "JOHN KEELLS HOLDINGS PLC", "LK", "keells.com"),
                         company("wikidata", "Q1", "Acme Inc", "US", "acme.com")])
     s.close()
@@ -405,3 +414,11 @@ def test_cli_show_and_stats(tmp_path, monkeypatch, capsys):
     assert "JOHN KEELLS" in out and "Acme" not in out and "1 of 1 companies" in out
     main(["stats"])
     assert "2 companies, 2 with a website" in capsys.readouterr().out
+
+
+def test_dashboard_says_what_to_do_when_postgres_is_down(monkeypatch):
+    import dashboard.server as server
+    from dashboard import queries
+    monkeypatch.setenv("CRAWL4AI_READER_URL", "postgresql://nobody@127.0.0.1:1/crawl4ai")
+    out = server._query("companies", queries.companies_summary, "test_down")
+    assert out["data"] is None and "Can't reach PostgreSQL" in out["error"] and "brew services start" in out["error"]

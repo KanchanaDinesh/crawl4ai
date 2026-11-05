@@ -10,14 +10,31 @@ from warehouse.cli import init
 from warehouse.copy_duckdb import copy_all, copy_tool, report
 
 
+# companies moved to PostgreSQL (step 3), so its store no longer makes a DuckDB file: this is the last DuckDB
+# layout (companies/store.py before 2026-11-06), as the real data/companies/companies.duckdb still has it.
+OLD_COMPANIES_DUCKDB = """
+create table companies (id varchar primary key, source varchar, source_id varchar, name varchar, country varchar,
+    website varchar, domain varchar, industry varchar, extra json, first_seen timestamptz, last_seen timestamptz);
+create table sites (domain varchar primary key, url varchar, final_url varchar, checked_at timestamptz, status varchar,
+    error varchar, name varchar, legal_name varchar, founded varchar, employees varchar, employees_hint varchar,
+    address varchar, people json, emails json, phones json, social json, linkedin_people json, pages json);
+create table refusals (domain varchar primary key, refused_at timestamptz, error varchar);
+create table cursors (source varchar, key varchar, value json, updated_at timestamptz, primary key (source, key));
+create table runs (started_at timestamptz, command varchar, seconds double, summary json);
+"""
+
+
 @pytest.fixture
 def duck_files(tmp_path, monkeypatch, pg_env):
     """Every tool's DuckDB file, made by the tools' own stores (so the test notices when a tool adds a table or a
-    column that warehouse/schema/*.sql doesn't have), in a temp folder."""
+    column that warehouse/schema/*.sql doesn't have), in a temp folder. The PostgreSQL tables start empty."""
     for name, path in list(DB_FILES.items()):
         monkeypatch.setitem(DB_FILES, name, tmp_path / path.parent.name / path.name)
-    init()
     postgres.setup()
+    init()
+    DB_FILES["companies"].parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(str(DB_FILES["companies"])) as con:
+        con.execute(OLD_COMPANIES_DUCKDB)
     return DB_FILES
 
 

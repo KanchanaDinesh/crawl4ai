@@ -71,7 +71,10 @@ Or run one once without enabling it: `uv run python -m companies collect --sourc
 
 ## Database
 
-`data/companies/companies.duckdb` (query it with `uv run python -m warehouse sql`, prefix `companies.`):
+PostgreSQL, database `crawl4ai`, schema `companies` (since 2026-11-06; tables in `warehouse/schema/companies.sql`).
+The dashboard and anyone with the read-only login can read while collect and update are writing. Query it with
+`uv run python -m warehouse pg "..."` or `psql -U crawl4ai_reader crawl4ai`. The old DuckDB file
+`data/companies/companies.duckdb` is no longer used (kept as a backup until the move is finished).
 
 | Table | What |
 |---|---|
@@ -83,5 +86,5 @@ Or run one once without enabling it: `uv run python -m companies collect --sourc
 | `v_companies` | companies joined with their website check |
 
 ```bash
-uv run python -m warehouse sql "select country, count(*), count(website) from companies.companies group by 1 order by 2 desc"
+uv run python -m warehouse pg "select country, count(*), count(website) from companies.companies group by 1 order by 2 desc"
 ```

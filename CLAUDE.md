@@ -51,7 +51,8 @@ data/  output/  logs/  .local/  .venv/       git-ignored
 - **Databases:** DuckDB, one file per tool under `data/` (worldnews, techintel, markets, vehicles, scrapers), because DuckDB
   allows only one writer per file. The dashboard opens them read-only, one query at a time, so it never
   blocks a run. **Being replaced by PostgreSQL** (decided 2026-11-05, no sync, one schema per tool): follow
-  `docs/postgres-migration.md` and tick off its steps there and in STATUS.md as they're done.
+  `docs/postgres-migration.md` and tick off its steps there and in STATUS.md as they're done. Already moved:
+  `warehouse.PG_TOOLS` (companies). Tests for those use the `pg_env` fixture (a throwaway PostgreSQL).
 - **Vehicle ads** are in `data/vehicles/vehicles.duckdb` (`vehicles/store.py`): tables `ads` and `runs`,
   views `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
   `data/scrapers/scrapers.duckdb` holds only the `scrapers/` tools' output (generic `scraper_rows`).

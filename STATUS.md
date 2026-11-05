@@ -14,7 +14,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in DuckDB databases inside the project folder and shown in a local web dashboard.
-It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 134 tests pass.
+It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`). All 135 tests pass.
 
 ## Parts and how to run them
 
@@ -26,10 +26,10 @@ Run every command from the project folder, after `source env.sh`.
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json` |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
-| Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). Own database `data/companies/companies.duckdb`. run_all steps `companies_collect`, `companies_update` |
+| Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Dashboard | `uv run python -m dashboard --open` → http://localhost:8050 | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. **Restart it after every `git pull`** |
-| Database queries | `uv run python -m warehouse info`, `sql "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.`, `vehicles.`, `companies.` |
+| Database queries | `uv run python -m warehouse info`, `sql "..."`, `pg "..."`, `examples` | Prefix tables with the database name: `news.`, `tech.`, `scrapers.`, `markets.`, `vehicles.` (DuckDB, `sql`); `companies.` is in PostgreSQL: use `pg` (read-only login) |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
 
 ## Automation (the agreed plan)
@@ -277,6 +277,18 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     (rows + newest time), all or nothing per tool. Real copy: all 25 tables match (~145,000 rows, ~9 s); the same
     questions give the same answers in both, 1-46 ms each in PostgreSQL. The tools still write to DuckDB, so the
     PostgreSQL copy gets older until each tool switches. **Next: step 3, switch companies (store, dashboard tab).**
+38. **PostgreSQL step 3a: companies switched (2026-11-06).** `companies/store.py` writes to PostgreSQL (schema
+    `companies`): batches go in with COPY into a temp table and one upsert, one short transaction each; the
+    dashboard's Companies tab, `companies show/stats/sources` read with the read-only login. `warehouse.PG_TOOLS`
+    lists the tools already moved; `warehouse sql/info` skip their DuckDB file, and the new
+    `uv run python -m warehouse pg "..."` queries PostgreSQL. `warehouse migrate` runs a schema file only when it
+    changed (hash in `public.schema_versions`, advisory lock), so opening a store costs one query.
+    - Checked on the Mac: fresh copy (all 5 tables match), then a real 1-minute collect (+3,913 companies, 109,690
+      in all) while another program read the summary and a search every 10 s: every read answered (0.4-0.6 s for
+      the whole summary), nothing waited. A 1-minute update read 71 LK websites. The Companies tab on the new code
+      showed it all, no browser errors.
+    - `data/companies/companies.duckdb` is not used any more (kept until step 4).
+    - **Next: step 3b, world news** (then markets, vehicles, tech intel, scrapers, briefing).
 
 ## Open issues and things to watch
 

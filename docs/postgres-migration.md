@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **steps 1 and 2 done (2026-11-05/06); next: step 3, companies first.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **steps 1 and 2 done; step 3: companies switched (2026-11-06), next world news.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -92,9 +92,11 @@ Locally the Mac's PostgreSQL uses socket login without a password. On the server
 - One file per schema, `warehouse/schema/<schema>.sql`, with its tables, sequences and indexes (`create ... if not
   exists`); views are added in step 3 together with each tool's queries. `python -m warehouse migrate` applies them
   (as the writer login, so the tables belong to `crawl4ai`); `warehouse setup` runs it too.
-- Later changes (columns added to existing tables) are numbered files `warehouse/schema/migrations/NNN_what.sql`; a `public.schema_versions` table remembers
-  which ran. `python -m warehouse migrate` applies what's new (also run by `warehouse init` and at the start of
-  `run_all.sh`).
+- A schema file runs again only when it changed: its SHA-256 is kept in `public.schema_versions`, and an advisory
+  lock stops two programs running it at once. Each store calls `migrate` for its own schema when it opens (one
+  quick query when nothing changed). Statements must stay safe to repeat (`if not exists`, `create or replace
+  view` adding columns only at the end). A change that can't be written that way (renaming or retyping a column)
+  needs its own one-off statement added to the file, guarded so it only runs once.
 - Times: `timestamptz` everywhere, session time zone UTC (as the dashboard already does).
 - JSON: `jsonb` (techintel keeps its "whole record as JSON + typed views" design for now).
 
@@ -197,7 +199,24 @@ For each tool, in this order: **companies** (most lock trouble), **world news**,
 5. Commit, push; Kanchana: `git pull origin main`, restart the dashboard, run the tool once, check its tab.
 
 While this is going on, the dashboard reads PostgreSQL for tools already switched and DuckDB for the rest
-(`_query` picks by tool). No tool ever writes to both.
+(`_query` picks by tool, from `warehouse.PG_TOOLS`). No tool ever writes to both. `warehouse sql` and `info`
+skip the DuckDB files of switched tools; `uv run python -m warehouse pg "..."` queries PostgreSQL.
+
+| Tool | Switched | Notes |
+|---|---|---|
+| companies | ✅ 2026-11-06 | store: COPY into a temp table + one upsert per batch; view `v_companies` in the schema file; dashboard summary over 110k companies 0.4-0.6 s while collect writes |
+| world news | next | |
+| markets | | |
+| vehicles | | |
+| tech intel | | |
+| scrapers | | |
+| briefing | | only reads |
+
+How the switch is done (companies as the example): the store keeps its methods and `self.con` (a writer
+connection, autocommit, `timezone` UTC); placeholders `%s`; every table name with its schema; jsonb comes back
+decoded (dicts/lists), so code that did `json.loads` accepts both; values go through `postgres.clean_text` /
+`postgres.json_text` (no NUL). Tests take the `pg_env` fixture and call `postgres.setup()`. The tool's DuckDB
+layout is kept in `tests/test_copy_duckdb.py` so the copy test still covers it.
 
 **Done when (each tool):** a run of the tool and the dashboard tab work at the same time with no "busy" message;
 `warehouse sql` gives the same numbers as before the switch plus the new run.

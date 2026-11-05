@@ -31,6 +31,11 @@ DB_FILES = {
     "companies": Path(os.environ.get("COMPANIES_DATA_DIR", project_paths.DATA_DIR / "companies")) / "companies.duckdb",
 }
 
+# Tools whose data has moved to PostgreSQL (docs/postgres-migration.md, step 3): their DuckDB file above is only
+# the old copy (kept until step 4, used by `copy-from-duckdb`); the tool, the dashboard and `warehouse pg` use
+# PostgreSQL, and `warehouse sql` / `info` no longer open their DuckDB file.
+PG_TOOLS = {"companies"}
+
 
 def connect(path, read_only: bool = False, wait_seconds: float = 60) -> duckdb.DuckDBPyConnection:
     """Open a DuckDB file. If another process is writing to it, wait up to `wait_seconds`."""
