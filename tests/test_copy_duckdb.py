@@ -34,7 +34,16 @@ create table news_source_runs (run_at timestamptz, source varchar, group_code va
 create table news_run_items (run_at timestamptz, url varchar, source varchar, rank integer);
 create table feed_cache (source varchar primary key, feed_url varchar, updated_at timestamptz);
 """
-OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB}
+# and markets (markets/store.py before 2026-11-06)
+OLD_MARKETS_DUCKDB = """
+create table quotes (run_at timestamptz, asset_class varchar, symbol varchar, name varchar, price double,
+    prev_close double, change double, change_pct double, currency varchar, volume double, market_cap double,
+    rank integer, high double, low double, as_of timestamptz, source varchar, extra json);
+create table runs (run_at timestamptz primary key, finished_at timestamptz, quotes integer, errors json);
+create table source_runs (run_at timestamptz, source varchar, grp varchar, ok boolean, count integer,
+    error varchar, seconds double);
+"""
+OLD_DUCKDB = {"companies": OLD_COMPANIES_DUCKDB, "news": OLD_NEWS_DUCKDB, "markets": OLD_MARKETS_DUCKDB}
 
 
 @pytest.fixture

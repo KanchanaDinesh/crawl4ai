@@ -1,5 +1,5 @@
 """SQL behind the dashboard. Each function takes an open read-only connection: PostgreSQL (psycopg, %s placeholders)
-for the tools already moved there (warehouse.PG_TOOLS: news, companies), DuckDB (? placeholders) for the rest.
+for the tools already moved there (warehouse.PG_TOOLS: news, markets, companies), DuckDB (? placeholders) for the rest.
 
 Times are returned as ISO strings in UTC ("2026-11-02T08:15:00Z"); the browser shows them in local time.
 """
@@ -281,50 +281,61 @@ def tech_runs(con) -> list[dict]:
         from runs qualify row_number() over (partition by key order by row_id desc) = 1 order by finished_at desc""")
 
 
-# ── markets ──────────────────────────────────────────────────────────────
+# ── markets: PostgreSQL, schema markets ───────────────────────────────────
 KEY_SYMBOLS = [("index", "^GSPC"), ("index", "^IXIC"), ("index", "^DJI"), ("index", "^VIX"), ("index", "ASPI"),
                ("index", "S&P SL20"), ("commodity", "GC=F"), ("commodity", "SI=F"), ("crypto", "BTC"),
                ("crypto", "ETH"), ("fx", "LKR=X"), ("commodity_lkr", "GOLD24K_LKR_PAWN")]
+
+
+def _num(key: str) -> str:
+    """A number from the quote's extra JSON, or NULL when it's missing or not a number (DuckDB's try_cast)."""
+    return f"case when jsonb_typeof(extra->'{key}') = 'number' then (extra->>'{key}')::float8 end"
+
+
 QUOTE_COLS = f"""asset_class, symbol, name, price, prev_close, change, change_pct, currency, volume, market_cap, rank,
-    high, low, {_ts('as_of')} as as_of, {_ts('run_at')} as run_at, source,
-    try_cast(extra->>'pct_1h' as double) as pct_1h, try_cast(extra->>'pct_7d' as double) as pct_7d,
-    try_cast(extra->>'turnover' as double) as turnover, extra->>'unit' as unit, extra->>'note' as note,
+    high, low, {_pg_ts('as_of')} as as_of, {_pg_ts('run_at')} as run_at, source,
+    {_num('pct_1h')} as pct_1h, {_num('pct_7d')} as pct_7d,
+    {_num('turnover')} as turnover, extra->>'unit' as unit, extra->>'note' as note,
     extra->>'image' as image"""
 
 
 def _spark(con, asset_class: str, symbol: str, days: int = 30) -> list[float]:
-    pts = [r[0] for r in con.execute(f"""select price from quotes where asset_class = ? and symbol = ? and price is not null
-        and run_at >= now() - interval {int(days)} day order by run_at""", [asset_class, symbol]).fetchall()]
+    pts = [r[0] for r in con.execute(f"""select price from markets.quotes
+        where asset_class = %s and symbol = %s and price is not null and run_at >= {_since(days)}
+        order by run_at""", [asset_class, symbol]).fetchall()]
     if len(pts) >= 3:
         return pts[-60:]
-    extra = con.execute("select extra->'spark' from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol]).fetchone()
+    extra = con.execute("select extra->'spark' from markets.v_latest where asset_class = %s and symbol = %s",
+                        [asset_class, symbol]).fetchone()
     if extra and extra[0]:
-        return [p for p in json.loads(extra[0]) if p is not None]
+        return [p for p in _json(extra[0], []) if p is not None]
     return pts
 
 
 def markets_summary(con) -> dict:
     cards = []
     for cls, sym in KEY_SYMBOLS:
-        row = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [cls, sym])
+        row = one(con, f"select {QUOTE_COLS} from markets.v_latest where asset_class = %s and symbol = %s", [cls, sym])
         if row:
             row["spark"] = _spark(con, cls, sym)
             cards.append(row)
-    last = one(con, f"select {_ts('run_at')} as run_at, quotes, errors::varchar as errors from runs order by run_at desc limit 1")
-    sources = rows(con, """select source, grp, ok, count, error, seconds from source_runs
-        where run_at = (select max(run_at) from runs) order by ok, grp, source""")
-    counts = rows(con, "select asset_class, count(*) as n from v_latest group by 1 order by 1")
+    last = one(con, f"""select {_pg_ts('run_at')} as run_at, quotes, errors::text as errors from markets.runs
+        order by runs.run_at desc limit 1""")
+    sources = rows(con, """select source, grp, ok, count, error, seconds from markets.source_runs
+        where run_at = (select max(run_at) from markets.runs) order by ok, grp, source""")
+    counts = rows(con, "select asset_class, count(*) as n from markets.v_latest group by 1 order by 1")
     return {"cards": cards, "last_run": last, "sources": sources, "counts": counts}
 
 
 def markets_quotes(con, asset_class: str, q: str | None = None, limit: int = 500) -> list[dict]:
-    where, params = ["asset_class = ?"], [asset_class]
+    where, params = ["asset_class = %s"], [asset_class]
     if asset_class == "index_all":
         where, params = ["asset_class = 'index'"], []
     if q:
-        where.append("(symbol ilike ? or name ilike ?)"); params += [f"%{q}%"] * 2
-    order = "rank nulls last" if asset_class == "crypto" else "market_cap desc nulls last, symbol"
-    return rows(con, f"select {QUOTE_COLS} from v_latest where {' and '.join(where)} order by {order} limit {int(limit)}", params)
+        where.append("(symbol ilike %s or name ilike %s)"); params += [_like(q)] * 2
+    order = "rank nulls last, symbol" if asset_class == "crypto" else "market_cap desc nulls last, symbol"
+    return rows(con, f"""select {QUOTE_COLS} from markets.v_latest where {' and '.join(where)}
+        order by {order} limit {int(limit)}""", params)
 
 
 def history_points(con, asset_class: str, symbol: str, days: int = 90) -> list[dict]:
@@ -333,16 +344,16 @@ def history_points(con, asset_class: str, symbol: str, days: int = 90) -> list[d
     Two sources, merged: the daily closes Yahoo sends with each price (about 3 months, so there's
     history from the first run on), and the price saved by every run. Days that have saved runs use
     those; earlier days use the daily close."""
-    saved = rows(con, f"""select {_ts('run_at')} as t, price from quotes
-        where asset_class = ? and symbol = ? and price is not null and run_at >= now() - interval {int(days)} day
-        order by run_at""", [asset_class, symbol])
+    saved = rows(con, f"""select {_pg_ts('run_at')} as t, price from markets.quotes
+        where asset_class = %s and symbol = %s and price is not null and run_at >= {_since(days)}
+        order by quotes.run_at""", [asset_class, symbol])
     first_saved_day = saved[0]["t"][:10] if saved else "9999"
-    daily = con.execute("select extra->'daily' from v_latest where asset_class = ? and symbol = ?",
+    daily = con.execute("select extra->'daily' from markets.v_latest where asset_class = %s and symbol = %s",
                         [asset_class, symbol]).fetchone()
-    cutoff = con.execute(f"select strftime(now() - interval {int(days)} day, '%Y-%m-%d')").fetchone()[0]
+    cutoff = con.execute(f"select to_char(({_since(days)}) at time zone 'UTC', 'YYYY-MM-DD')").fetchone()[0]
     early = []
     if daily and daily[0]:
-        for day, close in json.loads(daily[0]):
+        for day, close in _json(daily[0], []):
             if close is not None and cutoff <= day < first_saved_day:
                 early.append({"t": f"{day}T12:00:00Z", "price": close})   # midday UTC: the same date everywhere
     return early + saved
@@ -350,7 +361,8 @@ def history_points(con, asset_class: str, symbol: str, days: int = 90) -> list[d
 
 def markets_history(con, asset_class: str, symbol: str, days: int = 90) -> dict:
     pts = history_points(con, asset_class, symbol, days)
-    latest = one(con, f"select {QUOTE_COLS} from v_latest where asset_class = ? and symbol = ?", [asset_class, symbol])
+    latest = one(con, f"select {QUOTE_COLS} from markets.v_latest where asset_class = %s and symbol = %s",
+                 [asset_class, symbol])
     return {"quote": latest, "points": pts, "spark": _spark(con, asset_class, symbol, days)}
 
 
@@ -358,7 +370,8 @@ def markets_compare(con, items: list[tuple[str, str]], days: int = 30) -> list[d
     """Several instruments' history, for one chart (the browser shows each as % change from the start)."""
     out = []
     for cls, sym in items[:8]:
-        q = one(con, "select asset_class, symbol, name, currency from v_latest where asset_class = ? and symbol = ?", [cls, sym])
+        q = one(con, """select asset_class, symbol, name, currency from markets.v_latest
+            where asset_class = %s and symbol = %s""", [cls, sym])
         if q:
             out.append({**q, "points": history_points(con, cls, sym, days)})
     return out
@@ -380,8 +393,8 @@ def _change_since(points: list[dict], price: float, days: int, now_iso: str) -> 
 
 def markets_performance(con) -> list[dict]:
     """How the main instruments did over 1 day, 1 week, 1 month and 3 months."""
-    now_iso = con.execute(f"select strftime(now(), '{UTC}')").fetchone()[0]
-    picks = rows(con, f"""select {QUOTE_COLS} from v_latest
+    now_iso = con.execute(f"select {_pg_ts('now()')}").fetchone()[0]
+    picks = rows(con, f"""select {QUOTE_COLS} from markets.v_latest
         where asset_class in ('index', 'commodity', 'fx', 'commodity_lkr') or (asset_class = 'crypto' and rank <= 5)
         order by case asset_class when 'index' then 1 when 'commodity' then 2 when 'commodity_lkr' then 3
                  when 'fx' then 4 else 5 end, rank nulls last, symbol""")

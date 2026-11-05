@@ -47,11 +47,9 @@ async def cmd_run(args, save: bool) -> None:
     only = [g.strip() for g in args.only.split(",")] if args.only else None
     if only and set(only) - set(GROUPS):
         sys.exit(f"--only takes: {', '.join(GROUPS)}")
-    previous = {}
-    if (data_dir() / "markets.duckdb").exists():
-        store = MarketStore(data_dir())
-        previous = store.latest_prices()
-        store.close()
+    store = MarketStore(data_dir())        # PostgreSQL; the prices saved last time fill gaps in this run
+    previous = store.latest_prices()
+    store.close()
     snap = await run_collection(settings, only, previous)
     ok = sum(s["ok"] for s in snap["sources"])
     failed = [s for s in snap["sources"] if not s["ok"]]
@@ -83,20 +81,24 @@ async def cmd_run(args, save: bool) -> None:
 
 
 def _open_read_only():
-    from warehouse import connect
-    path = data_dir() / "markets.duckdb"
-    if not path.exists():
+    """PostgreSQL, read-only login (works while a run is saving)."""
+    from warehouse.postgres import DatabaseError, connect
+    try:
+        con = connect("reader", autocommit=True)
+    except DatabaseError as e:
+        sys.exit(str(e))
+    if not con.execute("select to_regclass('markets.quotes') is not null").fetchone()[0]:
         sys.exit("No prices saved yet. Run:  python -m markets run")
-    return connect(path, read_only=True)
+    return con
 
 
 def cmd_show(args) -> None:
     con = _open_read_only()
     where, params = "", []
     if args.asset_class:
-        where, params = "where asset_class = ?", [args.asset_class]
+        where, params = "where asset_class = %s", [args.asset_class]
     rows = con.execute(f"""select asset_class, symbol, name, price, currency, change_pct, market_cap, rank
-        from v_latest {where} order by asset_class, rank nulls last, market_cap desc nulls last, symbol
+        from markets.v_latest {where} order by asset_class, rank nulls last, market_cap desc nulls last, symbol
         limit {int(args.limit)}""", params).fetchall()
     con.close()
     if not rows:
@@ -108,8 +110,9 @@ def cmd_show(args) -> None:
 
 def cmd_history(args) -> None:
     con = _open_read_only()
-    rows = con.execute(f"""select strftime(run_at, '%Y-%m-%d %H:%M'), price, change_pct, currency from quotes
-        where symbol = ? and run_at >= now() - interval {int(args.days)} day order by run_at""", [args.symbol]).fetchall()
+    rows = con.execute(f"""select to_char(run_at, 'YYYY-MM-DD HH24:MI'), price, change_pct, currency
+        from markets.quotes where symbol = %s and run_at >= now() - interval '{int(args.days)} days'
+        order by run_at""", [args.symbol]).fetchall()
     con.close()
     if not rows:
         print(f"No saved prices for {args.symbol}. Symbols look like ^GSPC, AAPL, ASPI, JKH.N0000, BTC, GC=F, LKR=X")

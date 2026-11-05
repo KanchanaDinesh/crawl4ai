@@ -24,7 +24,7 @@ Run every command from the project folder, after `source env.sh`.
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update` |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
-| Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup |
+| Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). Own database `data/vehicles/vehicles.duckdb`; older history is copied in from scrapers.duckdb automatically |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
@@ -299,6 +299,14 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       172 new) while summary + analysis were read every 4 s (all answered, ~1 s each); 4,582 + 172 = 4,754 saved;
       `check` saved nothing; `analyze` and the briefing read PostgreSQL; the World News tab showed it, no errors.
     - **Next: step 3c, markets** (then vehicles, tech intel, scrapers, briefing).
+40. **PostgreSQL step 3c: markets switched (2026-11-06).** `markets/store.py` saves each run to schema `markets` in
+    one transaction; views `v_latest` (distinct on, with an index on asset_class, symbol, run_at desc) and `v_daily`
+    (last quote per UTC day) are in `warehouse/schema/markets.sql`. The Markets tab, `markets show/history` and the
+    briefing's prices read with the read-only login. DuckDB's `try_cast` on extra fields became a jsonb type check.
+    - Checked on the Mac: fresh copy (3 tables match), then a real `markets run` (446 prices, 50/50 sources) while
+      the summary + performance table were read (all answered, ~0.2 s); 7,608 + 446 = 8,054 saved. `show`,
+      `history ASPI`, the briefing and every Markets API answered; the tab showed it, no browser errors.
+    - **Next: step 3d, vehicles** (then tech intel, scrapers, briefing).
 
 ## Open issues and things to watch
 

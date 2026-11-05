@@ -1,64 +1,61 @@
-"""Markets database: data/markets/markets.duckdb.
+"""Markets database: PostgreSQL schema `markets` (database crawl4ai; tables in warehouse/schema/markets.sql).
 
     quotes        one row per instrument per run: price, change, %, volume, market cap, rank, ... (history)
     runs          one row per run: when, how many quotes, errors
     source_runs   one row per data source per run: ok?, how many, error, seconds
     v_latest      the latest quote of every instrument
-    v_daily       the last quote of each day per instrument (for charts over weeks/months)
+    v_daily       the last quote of each day (UTC) per instrument (for charts over weeks/months)
+
+Moved from DuckDB (data/markets/markets.duckdb) on 2026-11-06: the dashboard reads while a run saves. A run is
+saved in one short transaction.
 """
 
-import json
 from pathlib import Path
-
-SCHEMA = """
-create table if not exists quotes (
-    run_at timestamptz, asset_class varchar, symbol varchar, name varchar, price double, prev_close double,
-    change double, change_pct double, currency varchar, volume double, market_cap double, rank integer,
-    high double, low double, as_of timestamptz, source varchar, extra json);
-create table if not exists runs (run_at timestamptz primary key, finished_at timestamptz, quotes integer, errors json);
-create table if not exists source_runs (run_at timestamptz, source varchar, grp varchar, ok boolean, count integer,
-    error varchar, seconds double);
-create or replace view v_latest as
-    select * from quotes qualify row_number() over (partition by asset_class, symbol order by run_at desc) = 1;
-create or replace view v_daily as
-    select date_trunc('day', run_at) as day, * exclude (run_at), run_at from quotes
-    qualify row_number() over (partition by asset_class, symbol, date_trunc('day', run_at) order by run_at desc) = 1;
-"""
 
 COLUMNS = ("asset_class", "symbol", "name", "price", "prev_close", "change", "change_pct", "currency", "volume",
            "market_cap", "rank", "high", "low", "as_of", "source")
 
 
 class MarketStore:
-    def __init__(self, root: Path):
-        from warehouse import connect
-        self.root = Path(root)
-        self.con = connect(self.root / "markets.duckdb")
-        self.con.execute(SCHEMA)
+    def __init__(self, root: Path | None = None):
+        """root: kept for the callers' sake (no files are written there now); the data is in PostgreSQL."""
+        from warehouse import postgres
+        self.root = Path(root) if root else None
+        self.con = postgres.connect("writer", autocommit=True)
+        self.con.execute("set timezone = 'UTC'")
+        postgres.migrate(self.con, ("markets",))
         self._relabel_sl20_total_return()
 
     def _relabel_sl20_total_return(self) -> None:
         """Until 2026-11-05, "S&P SL20" was saved from the CSE field "spt", which is the S&P SL20 *total return*
         index (about 12,000; the price index is about 6,000). Those rows keep their values under the right name.
         Rows saved since then carry extra.field, so this only ever touches the old ones."""
-        self.con.execute("""update quotes set symbol = 'S&P SL20 TRI', name = 'S&P Sri Lanka 20 Total Return'
-            where symbol = 'S&P SL20' and source = 'cse' and json_extract_string(extra, '$.field') is null""")
+        self.con.execute("""update markets.quotes set symbol = 'S&P SL20 TRI', name = 'S&P Sri Lanka 20 Total Return'
+            where symbol = 'S&P SL20' and source = 'cse' and extra ->> 'field' is null""")
 
     def save_run(self, run_at: str, finished_at: str, quotes: list[dict], sources: list[dict]) -> None:
-        if quotes:     # (DuckDB rejects an empty batch; a run with no prices still records its sources)
-            self.con.executemany(
-                f"insert into quotes (run_at, {', '.join(COLUMNS)}, extra) values ({', '.join(['?'] * (len(COLUMNS) + 2))})",
-                [(run_at, *[q.get(c) for c in COLUMNS], json.dumps(q.get("extra") or {}, default=str)) for q in quotes])
-        if sources:
-            self.con.executemany("insert into source_runs values (?, ?, ?, ?, ?, ?, ?)",
-                                 [(run_at, s["source"], s["group"], s["ok"], s["count"], s.get("error"), s["seconds"])
-                                  for s in sources])
+        from warehouse.postgres import clean_text as t, json_text
         errors = {s["source"]: s["error"] for s in sources if s.get("error")}
-        self.con.execute("insert or replace into runs values (?, ?, ?, ?)", [run_at, finished_at, len(quotes), json.dumps(errors)])
+        with self.con.transaction():
+            cur = self.con.cursor()
+            if quotes:
+                cur.executemany(
+                    f"insert into markets.quotes (run_at, {', '.join(COLUMNS)}, extra) "
+                    f"values ({', '.join(['%s'] * (len(COLUMNS) + 2))})",
+                    [(run_at, *[t(q.get(c)) for c in COLUMNS], json_text(q.get("extra") or {})) for q in quotes])
+            if sources:
+                cur.executemany("insert into markets.source_runs values (%s, %s, %s, %s, %s, %s, %s)",
+                                [(run_at, s["source"], s["group"], s["ok"], s["count"], t(s.get("error")), s["seconds"])
+                                 for s in sources])
+            cur.execute("""insert into markets.runs values (%s, %s, %s, %s)
+                           on conflict (run_at) do update set finished_at = excluded.finished_at,
+                               quotes = excluded.quotes, errors = excluded.errors""",
+                        [run_at, finished_at, len(quotes), json_text(errors)])
 
     def latest_prices(self) -> dict:
         """{(asset_class, symbol): {"price", "as_of"}} from the last saved run of each instrument."""
-        rows = self.con.execute("select asset_class, symbol, price, strftime(as_of, '%Y-%m-%dT%H:%M:%SZ') from v_latest").fetchall()
+        rows = self.con.execute("""select asset_class, symbol, price,
+                to_char(as_of at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from markets.v_latest""").fetchall()
         return {(c, s): {"price": p, "as_of": a} for c, s, p, a in rows}
 
     def close(self) -> None:

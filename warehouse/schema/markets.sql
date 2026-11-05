@@ -1,4 +1,4 @@
--- markets: prices over time (markets/). Same tables and columns as data/markets/markets.duckdb.
+-- markets: prices over time (markets/). Moved from data/markets/markets.duckdb on 2026-11-06.
 
 create table if not exists markets.quotes (
     run_at       timestamptz,
@@ -39,3 +39,18 @@ create table if not exists markets.source_runs (
     seconds  double precision
 );
 create index if not exists source_runs_run_at_idx on markets.source_runs (run_at);
+
+-- the latest quote of each instrument: one index walk per instrument
+create index if not exists quotes_latest_idx on markets.quotes (asset_class, symbol, run_at desc);
+
+create or replace view markets.v_latest as
+    select distinct on (asset_class, symbol) *
+    from markets.quotes
+    order by asset_class, symbol, run_at desc;
+
+-- the last quote of each day (UTC) per instrument, for charts over weeks and months
+create or replace view markets.v_daily as
+    select distinct on (asset_class, symbol, (run_at at time zone 'UTC')::date)
+           (run_at at time zone 'UTC')::date as day, *
+    from markets.quotes
+    order by asset_class, symbol, (run_at at time zone 'UTC')::date, run_at desc;

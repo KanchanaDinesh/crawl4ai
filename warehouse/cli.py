@@ -5,7 +5,7 @@
     sql "QUERY"          run SQL across all of them (read-only); without a query: interactive prompt
     sql "QUERY" --csv F  save the result as a CSV file
     examples             useful example queries
-    pg "QUERY"           run SQL on PostgreSQL (read-only login): the tools already moved there (companies, news)
+    pg "QUERY"           run SQL on PostgreSQL (read-only login): the tools already moved there (companies, news, markets)
     pg "QUERY" --csv F   save the result as a CSV file
 
     setup                PostgreSQL: create or repair the logins, database, schemas and grants (safe to run again)
@@ -15,9 +15,9 @@
                          [--tool companies] [--replace: copy again] [--check: only compare]
                          (PostgreSQL is replacing DuckDB: docs/postgres-migration.md)
 
-In SQL, prefix tables with the database name:  tech.*  markets.*  vehicles.*  scrapers.*
-e.g.  select * from markets.v_latest limit 20
-Moved to PostgreSQL (use `pg` instead of `sql`, or psql crawl4ai):  companies.*  news.*
+In SQL, prefix tables with the database name:  tech.*  vehicles.*  scrapers.*
+e.g.  select * from vehicles.v_vehicle_ads_latest limit 20
+Moved to PostgreSQL (use `pg` instead of `sql`, or psql crawl4ai):  companies.*  news.*  markets.*
 e.g.  pg "select * from news.news_items order by published_at desc limit 20"
 """
 
@@ -33,13 +33,13 @@ EXAMPLES = {
     "Companies with LinkedIn, people and GitHub": "select domain, name, linkedin, employees, people, github_repos from tech.v_companies where linkedin is not null order by checked_at desc limit 20",
     "Newest registered domains": "select domain, registered_at from tech.v_registrations where registered_at is not null order by registered_at desc limit 20",
     "Vehicle ads, cheapest first": "select site, title, price_lkr, url from vehicles.v_vehicle_ads_latest where price_lkr is not null order by price_lkr limit 20",
-    "Market snapshot (key prices)": "select name, price, currency, round(change_pct, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
-    "Top CSE gainers today": "select symbol, name, price, round(change_pct, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc limit 10",
-    "Crypto top 20": "select rank, symbol, name, price, round(change_pct, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
     "Vehicle price changes": "select saved_at, title, previous_price_lkr, price_lkr, url from vehicles.v_vehicle_price_changes order by saved_at desc",
 }
 
 PG_EXAMPLES = {
+    "Market snapshot (key prices)": "select name, price, currency, round(change_pct::numeric, 2) as pct from markets.v_latest where symbol in ('^GSPC','^IXIC','^DJI','ASPI','S&P SL20','GC=F','SI=F','LKR=X','GOLD24K_LKR_PAWN') or (asset_class = 'crypto' and rank <= 5) order by asset_class, rank",
+    "Top CSE gainers today": "select symbol, name, price, round(change_pct::numeric, 2) as pct, volume from markets.v_latest where asset_class = 'stock_lk' and volume > 0 order by change_pct desc nulls last limit 10",
+    "Crypto top 20": "select rank, symbol, name, price, round(change_pct::numeric, 2) as pct_24h, market_cap from markets.v_latest where asset_class = 'crypto' order by rank limit 20",
     "Latest 20 headlines": "select published_at, source, title from news.news_items order by published_at desc nulls last limit 20",
     "Headlines per country today": "select group_code, count(*) from news.news_items where first_seen_at >= current_date group by 1 order by 2 desc",
     "Tech headlines this week": "select first_seen_at, source, title from news.news_items where 'tech' = any(topics) and first_seen_at >= now() - interval '7 days' order by first_seen_at desc",
@@ -169,7 +169,7 @@ def run_sql(query: str, csv_path: str | None = None) -> None:
 
 def repl() -> None:
     con = open_all()
-    print("SQL prompt (read-only). Tables: tech.*, scrapers.*, markets.*, vehicles.*  (news and companies: "
+    print("SQL prompt (read-only). Tables: tech.*, scrapers.*, vehicles.*  (news, markets, companies: "
           "python -m warehouse pg)  Type 'examples' or 'exit'.")
     while True:
         try:

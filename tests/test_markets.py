@@ -75,15 +75,23 @@ def test_cse_live_index_replaces_yesterdays_summary():
     assert cse.apply_live(aspi, {**live, "timestamp": 1774204200000 - 86400000}) is aspi   # older than the summary
 
 
-def test_old_sl20_rows_are_relabelled_as_total_return(tmp_path):
+@pytest.fixture
+def pg(pg_env):
+    """Markets are saved in the test PostgreSQL (a database of this test's own)."""
+    from warehouse import postgres
+    postgres.setup()
+    return pg_env
+
+
+def test_old_sl20_rows_are_relabelled_as_total_return(tmp_path, pg):
     from markets.store import MarketStore
     store = MarketStore(tmp_path)
-    store.con.execute("""insert into quotes (run_at, asset_class, symbol, name, price, source, extra) values
+    store.con.execute("""insert into markets.quotes (run_at, asset_class, symbol, name, price, source, extra) values
         ('2026-11-04 10:00:00+00', 'index', 'S&P SL20', 'S&P Sri Lanka 20', 12394.73, 'cse', '{"market": "LK"}'),
         ('2026-11-05 10:00:00+00', 'index', 'S&P SL20', 'S&P Sri Lanka 20', 6033.19, 'cse', '{"field": "spp"}')""")
     store.close()
     store = MarketStore(tmp_path)
-    rows = store.con.execute("select symbol, price from quotes order by run_at").fetchall()
+    rows = store.con.execute("select symbol, price from markets.quotes order by run_at").fetchall()
     assert rows == [("S&P SL20 TRI", 12394.73), ("S&P SL20", 6033.19)]
     store.close()
 
@@ -124,7 +132,7 @@ def test_lkr_metal_prices():
     assert lkr_metal_prices([gold]) == []                                                 # no FX rate, no LKR prices
 
 
-def test_end_to_end_with_fake_apis(tmp_path, monkeypatch):
+def test_end_to_end_with_fake_apis(tmp_path, monkeypatch, pg):
     enc = lambda s: s.replace("^", "%5E")  # noqa: E731  (aiohttp sends "=" as is)
     yahoo_site = Site({f"/v8/finance/chart/{enc(sym)}": json.dumps(chart(sym, closes, closes[-1], cur, name))
                        for sym, closes, cur, name in [("^GSPC", [5700.0, 5728.8], "USD", "S&P 500"),
@@ -158,9 +166,9 @@ def test_end_to_end_with_fake_apis(tmp_path, monkeypatch):
     store.save_run(snap["run_at"], snap["finished_at"], snap["quotes"], snap["sources"])
     store.save_run(snap["run_at"].replace("Z", "1Z"), snap["finished_at"], snap["quotes"], snap["sources"])
     con = store.con
-    assert con.execute("select count(*) from v_latest").fetchone()[0] == len(snap["quotes"])
-    assert con.execute("select count(*) from quotes where symbol = 'BTC'").fetchone()[0] == 2     # history kept
-    assert con.execute("select count(*) from source_runs where not ok").fetchone()[0] == 2
+    assert con.execute("select count(*) from markets.v_latest").fetchone()[0] == len(snap["quotes"])
+    assert con.execute("select count(*) from markets.quotes where symbol = 'BTC'").fetchone()[0] == 2  # history kept
+    assert con.execute("select count(*) from markets.source_runs where not ok").fetchone()[0] == 2
     store.close()
     for s in (yahoo_site, cse_site, paprika_site):
         s.server.shutdown()
@@ -242,15 +250,15 @@ def test_yahoo_blocked_falls_back_to_stooq_and_fx_api(monkeypatch):
         s.server.shutdown()
 
 
-def test_saving_a_run_with_no_prices(tmp_path):
+def test_saving_a_run_with_no_prices(tmp_path, pg):
     """No internet: nothing collected, but the run and its failed sources are still recorded."""
     from markets.store import MarketStore
     store = MarketStore(tmp_path)
     store.save_run("2026-11-02T10:00:00.000001Z", "2026-11-02T10:00:05Z", [],
                    [{"source": "cse indices", "group": "lk", "ok": False, "count": 0, "error": "offline", "seconds": 1.0}])
     store.save_run("2026-11-02T11:00:00.000001Z", "2026-11-02T11:00:05Z", [], [])
-    assert store.con.execute("select count(*) from runs").fetchone()[0] == 2
-    assert store.con.execute("select error from source_runs").fetchone()[0] == "offline"
+    assert store.con.execute("select count(*) from markets.runs").fetchone()[0] == 2
+    assert store.con.execute("select error from markets.source_runs").fetchone()[0] == "offline"
     store.close()
 
 

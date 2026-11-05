@@ -63,11 +63,11 @@ def unusual(change_pct: float | None, daily: list) -> bool:
 def _markets(con) -> dict:
     out = {}
     for cls, sym, label in PRICES:
-        row = con.execute("select price, change_pct, currency, extra->'daily' from v_latest "
-                          "where asset_class = ? and symbol = ?", [cls, sym]).fetchone()
+        row = con.execute("select price, change_pct, currency, extra->'daily' from markets.v_latest "
+                          "where asset_class = %s and symbol = %s", [cls, sym]).fetchone()
         if not row or row[0] is None:
             continue
-        daily = json.loads(row[3]) if row[3] else []
+        daily = (json.loads(row[3]) if isinstance(row[3], str) else row[3]) or []
         out[sym] = {"label": label, "price": row[0], "change_pct": row[1], "currency": row[2],
                     "held_back": unusual(row[1], daily),
                     "three_months": [[d, c] for d, c in daily[-66:] if c is not None]}

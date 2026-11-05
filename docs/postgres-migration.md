@@ -1,6 +1,6 @@
 # Moving from DuckDB to PostgreSQL: the plan
 
-_Written 2026-11-05. Status: **steps 1 and 2 done; step 3: companies and world news switched (2026-11-06), next markets.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
+_Written 2026-11-05. Status: **steps 1 and 2 done; step 3: companies, world news and markets switched (2026-11-06), next vehicles.** Agreed with Kanchana: PostgreSQL only, no DuckDB, no sync._
 
 ## Why
 
@@ -206,8 +206,8 @@ skip the DuckDB files of switched tools; `uv run python -m warehouse pg "..."` q
 |---|---|---|
 | companies | ✅ 2026-11-06 | store: COPY into a temp table + one upsert per batch; view `v_companies` in the schema file; dashboard summary over 110k companies 0.4-0.6 s while collect writes |
 | world news | ✅ 2026-11-06 | executemany in one transaction per run; `check` became a dry run (reads, saves nothing); `analyze` and the briefing read PostgreSQL |
-| markets | next | |
-| vehicles | | |
+| markets | ✅ 2026-11-06 | `v_latest` = `distinct on` + index (asset_class, symbol, run_at desc); `v_daily` per UTC day; `try_cast(extra->>x)` became a jsonb number check |
+| vehicles | next | |
 | tech intel | | |
 | scrapers | | |
 | briefing | | only reads |
