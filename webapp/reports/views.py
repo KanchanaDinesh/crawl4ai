@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from webapp.accounts.rights import menu_required
@@ -12,6 +13,7 @@ from webapp.audit.log import record
 from webapp.catalog.rights import can_view, is_admin
 from webapp.charts.forms import mine_or_shared
 from webapp.charts.models import Dashboard
+from webapp.core.confirm import ask_first
 
 from . import sections as section_forms
 from .making import make_report, report_context, reports_dir
@@ -105,7 +107,7 @@ def report_page(request, pk):
             messages.success(request, "Saved.")
             return redirect("report", report.pk)
     return render(request, "reports/report.html", {"report": report, "runs": report.runs.select_related("made_by")[:30], "may_change": _may_change(request.user, report),
-                                                   "sections": report.sections.select_related("dataset") if report.is_newsletter else [],
+                                                   "sections": report.sections.select_related("dataset"),
                                                    "may_download": _may_download(request.user, report), "boards": mine_or_shared(Dashboard, request.user),
                                                    "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS))})
 
@@ -135,9 +137,10 @@ def _may_download(user, report: Report) -> bool:
     """A file holds what its maker could see. Someone else gets it only if they may see all the data in it too."""
     if _may_change(user, report):
         return True
-    if report.is_newsletter:
-        return all(can_view(user, s.dataset) for s in report.sections.select_related("dataset"))
-    return all(can_view(user, i.chart.dataset) for i in report.dashboard.items.select_related("chart__dataset"))
+    datasets = [s.dataset for s in report.sections.select_related("dataset")]
+    if report.dashboard_id:
+        datasets += [i.chart.dataset for i in report.dashboard.items.select_related("chart__dataset")]
+    return all(can_view(user, ds) for ds in datasets)
 
 
 @menu_required("reports")
@@ -160,6 +163,11 @@ def download(request, pk, run_id):
 def delete_report(request, pk):
     report = _changing(request, pk)
     name = report.name
+    made = report.runs.exclude(filename="").count()
+    asked = ask_first(request, f"Delete the report “{name}”?", back=reverse("report", args=[pk]),
+                      detail=f"Its settings{', sections' if report.sections.exists() else ''} and list of PDFs go, and this can't be undone." + (" The PDF already made stays in output/reports/." if made == 1 else f" The {made} PDFs already made stay in output/reports/." if made else ""))
+    if asked:
+        return asked
     with transaction.atomic():
         record(request, "report_deleted", f"Report “{name}” deleted", target_type="report", target_id=pk)
         report.delete()
@@ -167,14 +175,7 @@ def delete_report(request, pk):
     return redirect("reports")
 
 
-# ── a newsletter's sections ──────────────────────────────────────────
-def _newsletter(request, pk) -> Report:
-    report = _changing(request, pk)
-    if not report.is_newsletter:
-        raise Http404("That report prints a dashboard")
-    return report
-
-
+# ── a report's sections: a newsletter is made of them, and a report of a dashboard can have them after its charts ──
 def _section_of(report: Report, section_id) -> ReportSection:
     return get_object_or_404(report.sections.select_related("dataset"), pk=section_id)
 
@@ -193,7 +194,7 @@ def _section_form(request, report: Report, section: ReportSection | None):
             if filled.pk is None:
                 filled.order = report.sections.count()
             filled.save()
-            record(request, "report_saved", f"Newsletter “{report.name}”: section “{filled.heading}” saved", target_type="report", target_id=report.pk)
+            record(request, "report_saved", f"Report “{report.name}”: section “{filled.heading}” saved", target_type="report", target_id=report.pk)
             messages.success(request, f"Saved “{filled.heading}”.")
             return redirect("report", report.pk)
     ds = section.dataset if section else None
@@ -202,23 +203,23 @@ def _section_form(request, report: Report, section: ReportSection | None):
 
 @menu_required("reports")
 def section_new(request, pk):
-    report = _newsletter(request, pk)
+    report = _changing(request, pk)
     if request.method == "POST" and report.sections.count() >= section_forms.MAX_SECTIONS:
-        messages.error(request, f"A newsletter has at most {section_forms.MAX_SECTIONS} sections.")
+        messages.error(request, f"A report has at most {section_forms.MAX_SECTIONS} sections.")
         return redirect("report", report.pk)
     return _section_form(request, report, None)
 
 
 @menu_required("reports")
 def section_edit(request, pk, section_id):
-    report = _newsletter(request, pk)
+    report = _changing(request, pk)
     return _section_form(request, report, _section_of(report, section_id))
 
 
 @menu_required("reports")
 def section_fields(request, pk):
     """The choices that depend on the dataset chosen, with good guesses filled in."""
-    report = _newsletter(request, pk)
+    report = _changing(request, pk)
     ds = section_forms.dataset_named(request.user, request.GET.get("dataset"))
     section = section_forms.guessed_section(ds, request.user, report) if ds else None
     return render(request, "reports/_section_fields.html", _section_context(request, report, section, ds))
@@ -227,11 +228,15 @@ def section_fields(request, pk):
 @require_POST
 @menu_required("reports")
 def section_change(request, pk, section_id):
-    report = _newsletter(request, pk)
+    report = _changing(request, pk)
     section = _section_of(report, section_id)
     action = request.POST.get("action")
     if action == "remove":
-        record(request, "report_saved", f"Newsletter “{report.name}”: section “{section.heading}” removed", target_type="report", target_id=report.pk)
+        asked = ask_first(request, f"Remove the section “{section.heading}”?", back=reverse("report", args=[pk]), yes="Yes, remove it",
+                          detail=f"It goes from “{report.name}”, and its choices are lost. The data in {section.dataset.label} isn't touched.")
+        if asked:
+            return asked
+        record(request, "report_saved", f"Report “{report.name}”: section “{section.heading}” removed", target_type="report", target_id=report.pk)
         section.delete()
     elif action in ("up", "down"):
         section_forms.move(report, section, -1 if action == "up" else 1)

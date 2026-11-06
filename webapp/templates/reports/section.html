@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{% if section %}{{ section.heading }}{% else %}New section{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{% if section %}{{ section.heading }}{% else %}New section{% endif %}</h1><p class="muted">In the newsletter “{{ report.name }}”.</p></div><a href="{% url 'report' report.pk %}">Back to the report</a></div>
+<div class="page-head"><div><h1>{% if section %}{{ section.heading }}{% else %}New section{% endif %}</h1><p class="muted">In the report “{{ report.name }}”.</p></div><a href="{% url 'report' report.pk %}">Back to the report</a></div>
 <form method="post" class="card form">{% csrf_token %}
   <div class="field"><label for="dataset">Dataset</label><select id="dataset" name="dataset" required hx-get="{% url 'report_section_fields' report.pk %}" hx-trigger="change" hx-target="#section-fields"><option value="">Choose a dataset</option>{% for d in datasets %}<option value="{{ d.ref }}"{% if ds and ds.pk == d.pk %} selected{% endif %}>{{ d.label }}</option>{% endfor %}</select></div>
   <div id="section-fields">{% include "reports/_section_fields.html" %}</div>

@@ -19,6 +19,7 @@
 </form>
 <form method="post" class="card form">{% csrf_token %}
   <h2>New report from a dashboard</h2>
+  <p class="muted small">Prints the charts of a dashboard. You can add sections of latest rows after them, on the report's page.</p>
   {% if boards %}{% include "reports/_form_fields.html" %}<div class="form-actions"><button class="btn primary" type="submit">Make the report</button></div>
   {% else %}<p class="muted">A report prints a dashboard, so make one first, under <a href="{% url 'charts' %}">Charts</a>.</p>{% endif %}
 </form>

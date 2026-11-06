@@ -300,7 +300,8 @@ def test_rights_to_charts(client, ada):
     tile = client.get(reverse("chart_tile", args=[ch.pk]))
     assert tile.status_code == 200 and b"right to see" in tile.content and b"plot" not in tile.content
     client.force_login(ada)
-    assert client.post(reverse("chart_delete", args=[ch.pk])).status_code == 302 and not Chart.objects.exists()
+    assert client.post(reverse("chart_delete", args=[ch.pk])).status_code == 200 and Chart.objects.exists()          # asks first
+    assert client.post(reverse("chart_delete", args=[ch.pk]), {"confirmed": "yes"}).status_code == 302 and not Chart.objects.exists()
 
 
 def test_preview_cant_reach_a_dataset_you_cant_see(client, ada):
@@ -348,6 +349,8 @@ def test_arrange_a_dashboard(client, ada):
     assert client.post(url, {"action": "nonsense", "item": board.items.first().pk}).status_code == 404
     assert client.post(url, {"action": "add", "chart": "99999"}).status_code == 404
     client.post(reverse("dashboard_delete", args=[board.pk]))
+    assert Dashboard.objects.exists()                                                    # asks first
+    client.post(reverse("dashboard_delete", args=[board.pk]), {"confirmed": "yes"})
     assert not Dashboard.objects.exists() and Chart.objects.count() == 2
 
 

@@ -128,6 +128,8 @@ def test_roles_builtin_and_with_members_cant_be_deleted(admin_client):
     assert Group.objects.filter(name="Vehicles team").exists()
     team.user_set.clear()
     admin_client.post(reverse("role_delete", args=[team.pk]))
+    assert Group.objects.filter(name="Vehicles team").exists()                           # asks first
+    admin_client.post(reverse("role_delete", args=[team.pk]), {"confirmed": "yes"})
     assert not Group.objects.filter(name="Vehicles team").exists()
     assert {"role_created", "role_deleted"} <= set(AuditEvent.objects.values_list("action", flat=True))
 

@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 466 tests pass.
+All 471 tests pass.
 
 ## Parts and how to run them
 
@@ -461,6 +461,11 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **Sri Lankan dates were 5½ hours ahead:** Daily Mirror and Daily FT write their own time with no zone, and it was read as UTC. A date with no zone from a `.lk` or LK site now means Sri Lankan time (`collect.source_zone`). The saved rows of those two sources were moved back once by hand.
     - Left as they are: 2 old Newsfirst titles in other wordings ("COLOMBO, SRI LANKA | ...", "By Dr. ..."); The Island gives only a day, so its stories show 05:30; other countries' dates with no zone can't be told apart, and stay UTC.
 
+56. **Deleting asks first, and every report can have sections (Kanchana, 2026-11-06).**
+    - Deleting a report went straight through on the first click. Now a page asks "Delete ...? No, keep it / Yes, delete it" (`webapp/core/confirm.py`, `ask_first`). The server asks, so an old page or a double click can't skip it. Also for: a report's section, a chart, a dashboard, a role, an own field.
+    - Deleting a dashboard also deletes the reports that print it, without a word. The question now names them. A chart's question names the dashboards it comes off.
+    - Kanchana's "News from Oxsora" was made with the "New report from a dashboard" form, and that kind had no sections. Now any report can: it prints the dashboard's charts, then the sections (`_sections.html`, shared with newsletters). A file is given to someone else only if they may see the data of both.
+    - Checked in the browser on a temporary copy of the database, then deleted. The real reports weren't touched.
 
 ## Open issues and things to watch
 

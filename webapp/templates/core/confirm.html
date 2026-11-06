@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}Are you sure?{% endblock %}
+{% block content %}
+<form method="post" action="{{ action }}" class="card form confirm-box">{% csrf_token %}
+  <h1>{{ question }}</h1>
+  {% if detail %}<p class="muted">{{ detail }}</p>{% endif %}
+  {% for name, value in sent %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <div class="form-actions"><a class="btn primary" href="{{ back }}" autofocus>No, keep it</a><button class="btn danger" type="submit" name="confirmed" value="yes">{{ yes }}</button></div>
+</form>
+{% endblock %}

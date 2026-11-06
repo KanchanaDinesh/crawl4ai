@@ -1,11 +1,3 @@
 <header class="n-mast"><p class="n-date">{{ made_at|date:"l, j F Y" }}{% if issue %} · Issue {{ issue }}{% endif %}</p><h1>{{ report.name }}</h1></header>
 {% for p in paragraphs %}<p class="n-intro">{{ p }}</p>{% endfor %}
-{% if sections|length > 1 %}<nav class="n-toc"><h2>In this issue</h2><table>{% for s in sections %}<tr><td><a href="#{{ s.anchor }}">{{ s.heading }}</a></td><td>{% if s.problem %}Not included{% else %}{{ s.total|default:0 }} {% if s.period %}new{% else %}row{{ s.total|pluralize }}{% endif %}{% endif %}</td></tr>{% endfor %}</table></nav>{% endif %}
-{% for s in sections %}<section class="n-section" id="{{ s.anchor }}"><h2>{{ s.heading }}</h2>
-  {% if s.problem %}<p class="n-none">{{ s.problem }}</p>{% else %}
-  <p class="n-sub">{{ s.dataset }}{% if s.period %} · {{ s.period }}{% endif %} · {{ s.total }} row{{ s.total|pluralize }}{% if s.more %}, the first {{ s.shown }} shown{% endif %}</p>
-  {% if s.bars %}<p class="n-breakdown">By {{ s.breakdown|lower }}</p><table class="n-bars">{% for b in s.bars %}<tr><td class="n-label">{{ b.label }}</td><td><div class="n-bar" style="width:{{ b.pct }}%"></div></td><td class="n-count">{{ b.count }}</td></tr>{% endfor %}</table>{% endif %}
-  {% if s.articles %}<div class="n-articles">{% for i in s.articles %}<article class="n-item"><h3>{% if i.href %}<a href="{{ i.href }}">{{ i.title|default:"(no heading)" }}</a>{% else %}{{ i.title|default:"(no heading)" }}{% endif %}</h3>{% if i.text %}<p class="n-text">{{ i.text }}</p>{% endif %}{% if i.meta %}<p class="n-meta">{{ i.meta|join:" · " }}</p>{% endif %}</article>{% endfor %}</div>
-  {% elif s.lines %}<table class="n-table"><thead><tr>{% for h in s.heads %}<th{% if h.num %} class="num"{% endif %}>{{ h.label }}</th>{% endfor %}</tr></thead><tbody>{% for line in s.lines %}<tr>{% for c in line %}<td{% if c.num %} class="num"{% endif %}>{% if c.href %}<a{% if c.is_link %} class="n-link"{% endif %} href="{{ c.href }}">{{ c.text }}</a>{% else %}{{ c.text }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
-  {% elif not s.total %}<p class="n-none">{% if s.period %}Nothing new in this period.{% else %}No rows match.{% endif %}</p>{% endif %}
-  {% endif %}</section>{% empty %}<p class="n-none">This newsletter has no sections yet.</p>{% endfor %}
+{% include "reports/_sections.html" %}

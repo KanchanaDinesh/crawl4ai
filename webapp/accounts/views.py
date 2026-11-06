@@ -14,9 +14,11 @@ from django.contrib.auth.models import Group
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from webapp.audit.log import record
+from webapp.core.confirm import ask_first
 
 from .forms import RoleForm, UserForm
 from .models import Menu, RoleProfile
@@ -184,6 +186,9 @@ def role_delete(request, pk):
     elif group.user_set.exists():
         messages.error(request, f"{group.name} still has members. Take them out of the role first.")
     else:
+        asked = ask_first(request, f"Delete the role {group.name}?", back=reverse("roles"), detail="Nobody has this role now. Its rights are lost, and this can't be undone.")
+        if asked:
+            return asked
         with transaction.atomic():
             name = group.name
             record(request, "role_deleted", f"Role {name} deleted", target_type="role", target_id=group.pk)

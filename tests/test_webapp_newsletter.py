@@ -244,7 +244,10 @@ def test_adding_changing_moving_removing_sections(world, client, boss):
     change = reverse("report_section_change", args=[report.pk, first.pk])
     client.post(change, {"action": "down"}, HTTP_HOST="localhost")
     assert [s.heading for s in report.sections.all()] == ["Second", "Renamed"]
-    client.post(change, {"action": "remove"}, HTTP_HOST="localhost")
+    asked = client.post(change, {"action": "remove"}, HTTP_HOST="localhost")
+    assert asked.status_code == 200 and "Remove the section" in asked.content.decode() and 'name="action" value="remove"' in asked.content.decode()
+    assert report.sections.count() == 2                                                 # asked, nothing gone yet
+    client.post(change, {"action": "remove", "confirmed": "yes"}, HTTP_HOST="localhost")
     assert [s.heading for s in report.sections.all()] == ["Second"]
     assert b"Second" in client.get(reverse("report", args=[report.pk]), HTTP_HOST="localhost").content
 
@@ -327,3 +330,77 @@ def test_dashboard_reports_still_work_beside_them(world, client, boss):
     assert r.status_code == 302
     report = Report.objects.get(name="Board report")
     assert not report.is_newsletter and "Board" in making.render_html(report, boss) and not report.sections.exists()
+
+
+# ── asking before anything is deleted ──
+def test_deleting_a_report_asks_yes_or_no_first(world, client, boss):
+    from webapp.audit.models import AuditEvent
+    report = new_report(client, "blank", name="Keep me?")
+    url = reverse("report_delete", args=[report.pk])
+    asked = client.post(url, HTTP_HOST="localhost")
+    page = asked.content.decode()
+    assert asked.status_code == 200 and "Delete the report “Keep me?”?" in page and "Yes, delete it" in page and "No, keep it" in page
+    assert f'href="{reverse("report", args=[report.pk])}"' in page                       # no: back where they were
+    assert Report.objects.filter(pk=report.pk).exists() and not AuditEvent.objects.filter(action="report_deleted").exists()
+    assert client.post(url, {"confirmed": "yes"}, HTTP_HOST="localhost").status_code == 302
+    assert not Report.objects.filter(pk=report.pk).exists() and AuditEvent.objects.filter(action="report_deleted").exists()
+
+
+def test_deleting_a_dashboard_names_the_reports_that_go_with_it(world, client, boss):
+    from webapp.charts.models import Dashboard
+    board = Dashboard.objects.create(owner=boss, name="Board")
+    report = Report.objects.create(owner=boss, name="Monday <report>", dashboard=board)
+    page = client.post(reverse("dashboard_delete", args=[board.pk]), HTTP_HOST="localhost").content.decode()
+    assert "will be deleted too" in page and "Monday &lt;report&gt;" in page and Report.objects.filter(pk=report.pk).exists()
+    client.post(reverse("dashboard_delete", args=[board.pk]), {"confirmed": "yes"}, HTTP_HOST="localhost")
+    assert not Report.objects.filter(pk=report.pk).exists()
+
+
+# ── every report can have sections ──
+def dashboard_report(owner, name="News from Oxsora"):
+    from webapp.charts.models import Chart, Dashboard, DashboardItem
+    chart = Chart.objects.create(owner=owner, name="Companies by country", dataset=ds("companies.v_companies"))
+    board = Dashboard.objects.create(owner=owner, name="t1")
+    DashboardItem.objects.create(dashboard=board, chart=chart, order=10)
+    return Report.objects.create(owner=owner, name=name, dashboard=board)
+
+
+def test_a_report_of_a_dashboard_can_have_sections_too(world, client, boss):
+    report = dashboard_report(boss)
+    page = client.get(reverse("report", args=[report.pk]), HTTP_HOST="localhost").content.decode()
+    assert "What's in it" in page and reverse("report_section_new", args=[report.pk]) in page and "It prints the charts of the dashboard" in page
+    assert client.get(reverse("report_section_new", args=[report.pk]), HTTP_HOST="localhost").status_code == 200
+    assert client.post(reverse("report_section_new", args=[report.pk]), section_post(heading="Latest news"), HTTP_HOST="localhost").status_code == 302
+    report.refresh_from_db()
+    assert not report.is_newsletter and report.dashboard is not None
+
+    html = making.render_html(report, boss)
+    assert html.index("Companies by country") < html.index("Latest news") < html.index("Colombo story 0")   # the charts, then the section
+    assert "In this issue" not in html and "Issue 1" not in html                         # those belong to a newsletter
+    assert "Latest news" in client.get(reverse("report_preview", args=[report.pk]), HTTP_HOST="localhost").content.decode()
+    run = making.make_report(report, boss)
+    assert not run.problem and (world / "reports" / run.filename).read_bytes().startswith(b"%PDF")
+
+
+def test_a_report_of_a_dashboard_without_sections_prints_as_before(world, client, boss):
+    from webapp.charts.models import Dashboard
+    html = making.render_html(dashboard_report(boss), boss)
+    assert "Companies by country" in html and "no sections" not in html
+    empty = Report.objects.create(owner=boss, name="Empty", dashboard=Dashboard.objects.create(owner=boss, name="Nothing"))
+    assert "This dashboard has no charts yet" in making.render_html(empty, boss)
+
+
+def test_its_file_is_only_for_people_who_may_see_its_sections_too(world, client, boss):
+    report = dashboard_report(boss)
+    report.shared = True
+    report.save()
+    ReportSection.objects.create(report=report, dataset=ds("news.news_items"), heading="News", title_field="title")
+    run = making.make_report(report, boss)
+    reader = make_user("reader", "Analyst")
+    companies = ds("companies.v_companies")
+    DatasetRight.objects.filter(dataset__schema="news").delete()
+    DatasetRight.objects.get_or_create(dataset=companies, group=Group.objects.get(name="Analyst"), defaults={"can_view": True})
+    client.force_login(reader)
+    assert client.get(reverse("report_download", args=[report.pk, run.pk]), HTTP_HOST="localhost").status_code == 403
+    DatasetRight.objects.create(dataset=ds("news.news_items"), group=Group.objects.get(name="Analyst"), can_view=True)
+    assert client.get(reverse("report_download", args=[report.pk, run.pk]), HTTP_HOST="localhost").status_code == 200

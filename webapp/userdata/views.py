@@ -16,6 +16,7 @@ from webapp.audit.log import record
 from webapp.catalog import rights
 from webapp.catalog.models import QUERY_PREFIX, Dataset, DatasetRight, Field
 from webapp.catalog.sqlnames import relation
+from webapp.core.confirm import ask_first
 from webapp.explore.editing import bump_counts
 
 from . import fields as tools
@@ -286,6 +287,10 @@ def field_change(request, ref, pk):
     if f is None:
         raise Http404("No such field")
     if request.POST.get("action") == "remove":
+        asked = ask_first(request, f"Remove the field “{f.label}” from {ds.label}?", back=reverse("dataset_fields", args=[ds.ref]), yes="Yes, remove it",
+                          detail="Fields that depend on it go too. Its values stay in the database, but only an administrator can bring it back.")
+        if asked:
+            return asked
         gone = tools.remove_field(f)
         record(request, "field_removed", f"“{f.label}” removed from {ds.label}" + (f" (with {', '.join(gone[1:])})" if gone[1:] else ""), target_type="dataset", target_id=ds.ref, detail={"fields": gone})
         messages.success(request, f"“{f.label}” removed. Its values stay in the database, in case it's wanted back: ask an administrator.")

@@ -305,7 +305,9 @@ def test_field_names_must_differ_and_removing_takes_dependents(eve):
     count = add_field(eve, dealers, "rollup", "Ad count", link=field(dealers, "Vehicle ads").pk, how="count")
     with_price = add_field(eve, dealers, "lookup", "Prices", link=field(dealers, "Vehicle ads").pk, target_field=field(ads, "Price LKR").pk)
     link(eve, ads, "Dealer", [URL1], [auto])
-    assert eve.post(reverse("dataset_field_change", args=[ads.ref, field(ads, "Dealer").pk]), {"action": "remove"}).status_code == 302
+    removing = reverse("dataset_field_change", args=[ads.ref, field(ads, "Dealer").pk])
+    assert "Remove the field" in eve.post(removing, {"action": "remove"}).content.decode()   # asks first
+    assert eve.post(removing, {"action": "remove", "confirmed": "yes"}).status_code == 302
     for f in (count, with_price, Field.objects.get(dataset=dealers, label="Vehicle ads")):
         f.refresh_from_db()
         assert f.missing

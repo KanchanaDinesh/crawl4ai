@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 from webapp.accounts.rights import menu_required
 from webapp.audit.log import record
 from webapp.catalog.rights import is_admin
+from webapp.core.confirm import ask_first
 
 from . import forms
 from .data import ChartData, ChartProblem, chart_data, show_number, table_rows
@@ -121,6 +122,12 @@ def preview(request):
     return render(request, "charts/_tile_body.html", _chart_context(chart, request.user))
 
 
+def _names(names: list[str]) -> str:
+    """For a question before deleting: the first few, so it stays readable."""
+    shown = ", ".join(f"“{n}”" for n in names[:5])
+    return shown + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+
+
 @require_POST
 @menu_required("charts")
 def delete_chart(request, pk):
@@ -128,6 +135,11 @@ def delete_chart(request, pk):
     if not _may_change(request.user, chart):
         raise PermissionDenied("Only its owner or an administrator can delete a chart.")
     name = chart.name
+    boards = list(Dashboard.objects.filter(items__chart=chart).values_list("name", flat=True).distinct())
+    asked = ask_first(request, f"Delete the chart “{name}”?", back=reverse("chart", args=[pk]),
+                      detail=(f"It also comes off {_names(boards)}. " if boards else "") + "This can't be undone. The data it shows isn't touched.")
+    if asked:
+        return asked
     with transaction.atomic():
         record(request, "chart_deleted", f"Chart “{name}” deleted", target_type="chart", target_id=pk)
         chart.delete()
@@ -223,6 +235,12 @@ def _move(board: Dashboard, item: DashboardItem, by: int) -> None:
 def delete_dashboard(request, pk):
     board = _changing(request, pk)
     name = board.name
+    reports = list(board.reports.values_list("name", flat=True))
+    asked = ask_first(request, f"Delete the dashboard “{name}”?", back=f"{reverse('dashboard_page', args=[pk])}?arrange=1",
+                      detail=(f"The report{'s' if len(reports) != 1 else ''} that print{'' if len(reports) != 1 else 's'} it will be deleted too: {_names(reports)}. " if reports else "")
+                      + "This can't be undone. Its charts stay.")
+    if asked:
+        return asked
     with transaction.atomic():
         record(request, "dashboard_deleted", f"Dashboard “{name}” deleted", target_type="dashboard", target_id=pk)
         board.delete()

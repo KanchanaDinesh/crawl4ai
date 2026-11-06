@@ -54,11 +54,12 @@ def _section(chart: Chart, user, with_table: bool) -> dict:
 
 def report_context(report: Report, user, now: datetime | None = None) -> dict:
     now = timezone.localtime(now or timezone.now())
-    context = {"report": report, "made_at": now, "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()]}
+    context = {"report": report, "made_at": now, "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()],
+               "sections": newsletter.sections_for(report, user)}
     if report.is_newsletter:
-        context.update(sections=newsletter.sections_for(report, user), issue=report.runs.filter(problem="").count() + 1)
+        context["issue"] = report.runs.filter(problem="").count() + 1
     else:
-        context["sections"] = [_section(i.chart, user, report.include_tables) for i in report.dashboard.items.select_related("chart", "chart__dataset")]
+        context["charts"] = [_section(i.chart, user, report.include_tables) for i in report.dashboard.items.select_related("chart", "chart__dataset")]
     return context
 
 
