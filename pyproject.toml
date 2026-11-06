@@ -20,6 +20,7 @@ dependencies = [
     "weasyprint>=66,<71",
     "anthropic>=2.4,<3",
     "sqlglot>=30,<31",
+    "tinycss2>=1.5,<2",
 ]
 
 [tool.uv]

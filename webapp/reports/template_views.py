@@ -14,7 +14,7 @@ from webapp.catalog.rights import is_admin
 from webapp.charts.forms import mine_or_shared
 from webapp.core.confirm import ask_first
 
-from . import designs
+from . import customcss, designs
 from .models import ReportTemplate
 
 
@@ -54,12 +54,16 @@ def _save_form(request, template: ReportTemplate):
         except designs.DesignProblem as e:
             problem = str(e)
     template.shared = "shared" in post
+    try:
+        customcss.clean(template.custom_css)
+    except customcss.CSSProblem as e:
+        problem = str(e)
     if problem:
         messages.error(request, problem)
         return None
     with transaction.atomic():
         template.save()
-        record(request, "report_template_saved", f"Report template “{template.name}” saved", target_type="report_template", target_id=template.pk, detail={"shared": template.shared})
+        record(request, "report_template_saved", f"Report template “{template.name}” saved", target_type="report_template", target_id=template.pk, detail={"shared": template.shared, "own_css": bool(template.custom_css.strip())})
     messages.success(request, "Saved. Choose it under Design on any report.")
     return redirect("report_template", template.pk)
 
@@ -106,7 +110,12 @@ def preview(request):
     if saved.isdigit() and "remove_logo" not in request.GET:
         found = mine_or_shared(ReportTemplate, request.user).filter(pk=saved).first()
         template.logo = found.logo if found else ""
-    return render(request, "reports/_sheet.html", designs.sample_context(template))
+    context = designs.sample_context(template)
+    try:
+        customcss.clean(template.custom_css)
+    except customcss.CSSProblem as e:
+        context["css_problem"] = str(e)
+    return render(request, "reports/_sheet.html", context)
 
 
 @require_POST

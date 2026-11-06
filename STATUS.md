@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 495 tests pass.
+All 526 tests pass.
 
 ## Parts and how to run them
 
@@ -471,7 +471,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - It's a form, not free HTML or CSS: every value is from a list or a checked colour, because it all goes into the stylesheet. Logos must be PNG or JPEG up to 2 MB, and are redrawn as a PNG kept in the database, so a PDF still fetches nothing. SVG is refused.
     - Bug fixed on the way: the footer's report name went through a JavaScript escape, so "Sales-team" printed as "Salesu002Dteam".
     - Migrated on the Mac after a backup. Checked in the browser on a temporary copy of the database, then deleted: no template is in the real database yet.
-    - Not done: fonts beyond the two families, free HTML/CSS, a template that also carries sections, colours for charts' second series onwards.
+    - Not done: fonts beyond the two families, free HTML, a template that also carries sections, colours for charts' second series onwards.
+58. **Custom CSS in report templates (Kanchana's choice, 2026-11-06).** A box on the template form: CSS rules added after the form's choices, with the live preview and a list of the parts that can be styled.
+    - `webapp/reports/customcss.py` (tinycss2): the CSS is parsed, checked and written out again, every rule tied to `.r-doc`. No `url()`, `@import`, `@font-face`, `@media`, unknown functions or `<`, including when spelled with escapes. Refused CSS isn't saved, and the message gives the line. CSS that stops passing later is left out and the report still prints.
+    - **On screen, a design with custom CSS shows in a sandboxed frame** (`_sheet.html`), because a rule like `position: fixed` could otherwise cover the app for someone viewing a shared template. Designs without it show as before.
+    - Found by a test: a rendered template counts as safe in Django, so the frame's content wasn't being escaped. It now uses `force_escape`.
+    - Migrated on the Mac after a backup. Checked in the browser on a temporary copy of the database, then deleted.
 
 ## Open issues and things to watch
 

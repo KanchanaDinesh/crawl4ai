@@ -328,7 +328,9 @@ Someone else can download a PDF only if they may see all the datasets in it. Tex
 
 Kanchana's request: a separate place to define how reports look, so people can add their own design. Menu Report templates; a report chooses one under Design. A template holds only the look (`ReportTemplate`), never what's in a report, so one design serves many reports. Deleting one asks first, names the reports using it, and they go back to the plain design.
 
-**Form, not code:** every value goes into the PDF's stylesheet, so it's a checked colour or a choice from a list, and header and footer text is written as CSS escapes (`css_string`). Free HTML or CSS was left out on purpose: it would need a sandboxed preview and more checks, and the people using it aren't writing code. Say if it's wanted. Logos are redrawn as a PNG (`designs.read_logo`), and `no_fetching` lets through only that kind of data address.
+**Form, not code:** every value goes into the PDF's stylesheet, so it's a checked colour or a choice from a list, and header and footer text is written as CSS escapes (`css_string`). Free HTML was left out on purpose. Logos are redrawn as a PNG (`designs.read_logo`), and `no_fetching` lets through only that kind of data address.
+
+**Custom CSS** (added the same day, Kanchana's choice): a box on the form. `customcss.py` parses it with tinycss2 and writes it out again, each rule tied to `.r-doc`. Functions are named on an allowlist, because new CSS functions that fetch things keep appearing. Only style rules and `@page`. A design with custom CSS shows on screen in a sandboxed frame without scripts or same-origin access, so it never shares a page with the app.
 
 ## Phase 7 results (2026-11-06)
 

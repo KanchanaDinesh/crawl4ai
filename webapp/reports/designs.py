@@ -43,6 +43,7 @@ def apply_design(data, template: ReportTemplate) -> None:
     template.show_page_numbers = "show_page_numbers" in data
     template.header_text = " ".join(data.get("header_text", "").split())[:120]
     template.footer_text = " ".join(data.get("footer_text", "").split())[:120]
+    template.custom_css = data.get("custom_css", "").replace("\r\n", "\n")
 
 
 def read_logo(upload) -> str:

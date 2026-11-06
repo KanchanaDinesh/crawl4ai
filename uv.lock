@@ -5313,6 +5313,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pytz" },
     { name = "sqlglot" },
+    { name = "tinycss2" },
     { name = "tldextract" },
     { name = "weasyprint" },
 ]
@@ -5338,6 +5339,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pytz", specifier = ">=2026.6" },
     { name = "sqlglot", specifier = ">=30,<31" },
+    { name = "tinycss2", specifier = ">=1.5,<2" },
     { name = "tldextract", specifier = ">=5.1" },
     { name = "weasyprint", specifier = ">=66,<71" },
 ]

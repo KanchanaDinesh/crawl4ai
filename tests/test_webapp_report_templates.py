@@ -12,7 +12,7 @@ from PIL import Image
 
 from webapp.accounts.models import Menu
 from webapp.audit.models import AuditEvent
-from webapp.reports import designs, making
+from webapp.reports import customcss, designs, making
 from webapp.reports.models import Report, ReportTemplate
 from webapp.reports.templatetags.report_design import css_string
 
@@ -272,3 +272,104 @@ def test_a_chart_in_a_report_takes_the_main_colour():
     data = ChartData(kind=Chart.COLUMN, name="C", categories=["a", "b"], series=[{"name": "Rows", "values": [1, 2], "slot": 0}], measure_label="Rows")
     svg = making._chart_svg(data, ReportTemplate(accent="#a51c30"))
     assert "#a51c30" in svg and SERIES[0] not in svg
+
+
+# ── someone's own CSS ──
+def css(text):
+    return customcss.clean(text)
+
+
+def test_own_css_is_written_out_again_and_tied_to_the_report():
+    assert css("h1 { color: #123456 }") == ".r-doc h1 { color: #123456 }"
+    assert css("/* note */ h1, .n-item h3:not(.a, .b) { color: red !important }") == ".r-doc h1, .r-doc .n-item h3:not(.a, .b) { color: red !important }"
+    assert css(".r-doc.m-band h1 { margin: 0 }") == ".r-doc.m-band h1 { margin: 0 }"
+    assert css("html body { color: red }") == ".r-doc html body { color: red }"                   # matches nothing: it can't reach the app's page
+    assert css("* { color: red }") == ".r-doc * { color: red }"
+    assert css("a, .r-document b { color: red }") == ".r-doc a, .r-doc .r-document b { color: red }"
+    assert css("  ") == "" and css("") == ""
+
+
+def test_own_css_can_set_up_the_page():
+    out = css('@page :first { margin: 1cm; @top-center { content: "First" } }')
+    assert out == '@page :first { margin: 1cm; @top-center { content: "First" } }'
+
+
+@pytest.mark.parametrize("bad, says", [
+    ("h1 { background: url(http://169.254.169.254/x) }", "url()"),
+    ('h1 { background: url("http://evil/x") }', "url()"),
+    ("h1 { background: u\\72l(http://evil/x) }", "url()"),                                     # an escape spells it
+    ('h1 { background: URL( "http://evil/x" ) }', "url()"),
+    ('h1 { background: linear-gradient(red, url(http://evil/x)) }', "url()"),
+    ('h1 { --x: url(http://evil/x) }', "url()"),
+    ('h1 { background: image-set("http://evil/x" 1x) }', "image-set()"),
+    ('h1 { background: -webkit-image-set("http://evil/x" 1x) }', "-webkit-image-set()"),
+    ('h1 { background: cross-fade("http://evil/x", red) }', "cross-fade()"),
+    ("h1 { width: expression(alert(1)) }", "expression()"),
+    ('@import "http://evil/x.css";', "@import"),
+    ('@\\69mport "http://evil/x.css";', "@import"),
+    ('@font-face { font-family: x; src: url(http://evil/x) }', "@font-face"),
+    ("@media print { h1 { color: red } }", "@media"),
+    ("h1 { behavior: x }", "behavior"),
+    ("h1 { -moz-binding: x }", "-moz-binding"),
+    ("</style><script>alert(1)</script>", "< sign"),
+    ('h1 { content: "\\3c /style\\3e\\3c script\\3e" }', "< sign"),                                # an escape hides the sign
+    ("h1 { .a { color: red } }", "not another rule"),
+    ("h1, { color: red }", "stray comma"),
+    ("this is not css", "Line 1"),
+    ("a:url(x) { color: red }", "url()"),
+])
+def test_own_css_that_could_fetch_or_break_out_is_refused(bad, says):
+    with pytest.raises(customcss.CSSProblem) as e:
+        css(bad)
+    assert says in str(e.value)
+
+
+def test_too_much_css_is_refused():
+    with pytest.raises(customcss.CSSProblem, match="over 20,000"):
+        css("h1 { color: red }" * 2000)
+
+
+def test_own_css_reaches_the_pdf_and_a_real_file_is_made(eve, out_folder):
+    template = saved(eve, custom_css="/* mine */ h1 { letter-spacing: 3pt; color: #00aa44 }")
+    assert "/* mine */" in template.custom_css                                                  # kept as typed, for changing later
+    report = Report.objects.create(owner=eve.user, name="Mine", kind=Report.NEWSLETTER, template=template)
+    html = making.render_html(report, eve.user)
+    assert ".r-doc h1 { letter-spacing: 3pt; color: #00aa44 }" in html and "/* mine */" not in html
+    assert html.index("letter-spacing: 3pt") > html.index(".r-doc .n-mast h1")                   # after the rest, so it wins
+    run = making.make_report(report, eve.user)
+    assert not run.problem and (out_folder / "reports" / run.filename).read_bytes().startswith(b"%PDF")
+
+
+def test_css_that_is_refused_isnt_saved_and_what_was_typed_stays(eve):
+    r = eve.post(reverse("report_template_new"), form(custom_css="h1 { background: url(http://evil/x) }"), **HOST)
+    page = r.content.decode()
+    assert r.status_code == 200 and "url() can" in page and "http://evil/x" in page and not ReportTemplate.objects.exists()
+
+
+def test_css_that_stops_passing_is_left_out_and_the_report_still_prints(eve):
+    template = ReportTemplate.objects.create(owner=eve.user, name="Old", custom_css="h1 { background: url(http://evil/x) }")
+    report = Report.objects.create(owner=eve.user, name="Mine", kind=Report.NEWSLETTER, template=template)
+    assert "evil" not in making.render_html(report, eve.user)
+
+
+def test_on_screen_own_css_stays_in_a_sandboxed_frame(eve):
+    template = saved(eve, custom_css="h1 { position: fixed; color: #00aa44 }")
+    report = Report.objects.create(owner=eve.user, name="Mine", kind=Report.NEWSLETTER, template=template)
+    for page in (eve.get(reverse("report_preview", args=[report.pk]), **HOST).content.decode(),
+                 eve.get(reverse("report_template_preview"), form(custom_css="h1 { position: fixed; color: #00aa44 }"), **HOST).content.decode()):
+        assert '<iframe class="r-frame"' in page and "allow-scripts" not in page and "allow-same-origin" not in page
+        assert "position: fixed" not in page.split("srcdoc=")[0]                                 # nothing outside the frame
+        assert "&lt;style&gt;" in page and "position: fixed" in page                             # inside, escaped by Django
+    plain = Report.objects.create(owner=eve.user, name="Plain", kind=Report.NEWSLETTER)
+    assert "<iframe" not in eve.get(reverse("report_preview", args=[plain.pk]), **HOST).content.decode()
+
+
+def test_the_preview_says_whats_wrong_with_the_css(eve):
+    page = eve.get(reverse("report_template_preview"), form(custom_css="@import 'x';"), **HOST).content.decode()
+    assert "@import can" in page and "leaves your CSS out" in page and "<iframe" not in page and "A section of articles" in page
+
+
+def test_a_copy_keeps_the_css(eve):
+    template = saved(eve, custom_css="h1 { color: red }")
+    eve.post(reverse("report_template_copy", args=[template.pk]), **HOST)
+    assert ReportTemplate.objects.get(name="Company style (copy)").custom_css == "h1 { color: red }"

@@ -30,6 +30,12 @@
     <div class="field"><label for="header_text">Line at the top of each page (optional)</label><input type="text" id="header_text" name="header_text" value="{{ template.header_text }}" maxlength="120" placeholder="e.g. Oxsora · Internal"></div>
     <div class="field"><label for="footer_text">Line at the bottom of each page (optional)</label><input type="text" id="footer_text" name="footer_text" value="{{ template.footer_text }}" maxlength="120" placeholder="Empty: the report's name"></div>
     <label class="small" style="font-weight:400"><input type="checkbox" name="show_page_numbers"{% if template.show_page_numbers %} checked{% endif %}> Page numbers</label>
+    <h2>Your own CSS (optional)</h2>
+    <div class="field"><label for="custom_css">CSS rules, added after everything above</label><textarea id="custom_css" name="custom_css" class="css-box" rows="8" maxlength="20000" spellcheck="false" placeholder="h1 { letter-spacing: -0.5pt; }
+.n-item h3 { text-transform: uppercase; }">{{ template.custom_css }}</textarea>
+      <span class="help">Ordinary rules and @page. Each rule applies only inside the report. Nothing can come from an address, so no url(), @import or @font-face.</span></div>
+    <details class="small css-names"><summary>The parts you can style</summary><p>
+      <code>h1</code> title, <code>.n-mast</code> <code>.r-head</code> top of the first page, <code>.t-logo</code> logo, <code>.n-date</code> <code>.r-meta</code> date line, <code>.n-intro</code> <code>.r-intro</code> opening text, <code>.n-toc</code> list of sections, <code>.n-section</code> <code>.r-section</code> a section, <code>h2</code> its heading, <code>.n-sub</code> line under it, <code>.n-item</code> an article, <code>h3</code> its heading, <code>.n-text</code> its text, <code>.n-meta</code> its small print, <code>.n-table</code> <code>.r-table</code> tables, <code>.n-bar</code> a bar, <code>.r-chart</code> a chart, <code>.r-number</code> a big number.</p></details>
     <label class="small" style="font-weight:400"><input type="checkbox" name="shared"{% if template.shared %} checked{% endif %}> Share with everyone who has Report templates</label>
     <div class="form-actions"><button class="btn primary" type="submit">{% if saved %}Save{% else %}Save the template{% endif %}</button></div>
   </div>

@@ -7,6 +7,8 @@ from django.db import models
 from webapp.catalog.models import Dataset
 from webapp.charts.models import Dashboard
 
+from . import customcss
+
 
 class ReportTemplate(models.Model):
     """How a report looks, apart from what's in it: people choose colours, fonts, a logo and a page layout from a form. Every value ends up in
@@ -56,6 +58,7 @@ class ReportTemplate(models.Model):
     header_text = models.CharField(max_length=120, blank=True)
     footer_text = models.CharField(max_length=120, blank=True, help_text="Empty: the report's name")
     show_page_numbers = models.BooleanField(default=True)
+    custom_css = models.TextField(blank=True, help_text="As typed. What's used is `safe_css`, checked and written out again")
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -64,6 +67,14 @@ class ReportTemplate(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def safe_css(self) -> str:
+        """Checked when saved, and again here because the rules may have tightened since: CSS that no longer passes is left out, and the report still prints."""
+        try:
+            return customcss.clean(self.custom_css)
+        except customcss.CSSProblem:
+            return ""
 
     @property
     def body_stack(self) -> str:
