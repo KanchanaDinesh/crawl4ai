@@ -3,6 +3,7 @@
   <tbody>{% for r in rows %}{% symbol_url r as href %}<tr class="click" tabindex="0" hx-get="{{ href }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">{% for col in columns %}{% quote_cell r col.key %}{% endfor %}</tr>{% endfor %}</tbody></table>
   {% else %}<div class="empty">No prices for this market yet.</div>{% endif %}</div>{% endif %}
 <div class="muted small">{{ note }}</div>
+{% if stoch_note %}<div class="muted small">{{ stoch_note }}</div>{% endif %}
 {% if oob %}<span id="mk-title" hx-swap-oob="true">{{ title }}</span><small id="mk-movers-label" hx-swap-oob="true">{{ title }}</small>
 <div id="mk-gainers" hx-swap-oob="true">{% include "insights/_mk_movers.html" with movers=gainers %}</div>
 <div id="mk-losers" hx-swap-oob="true">{% include "insights/_mk_movers.html" with movers=losers %}</div>{% endif %}

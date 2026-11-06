@@ -56,6 +56,7 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 
 # Default command and tool (lock) for each step; automation.conf can override STEP_<name> / TOOL_<name>
 : "${STEP_markets:=$UV run --frozen python -m markets run ${MARKETS_ARGS:-}}"
+: "${STEP_markets_closes:=$UV run --frozen python -m markets closes ${MARKETS_CLOSES_ARGS:-}}"
 : "${STEP_news:=$UV run --frozen python -m worldnews run ${NEWS_ARGS:-}}"
 : "${STEP_tech:=$UV run --frozen python -m techintel run ${TECH_ARGS:-}}"
 : "${STEP_tech_quick:=$UV run --frozen python -m techintel quick ${TECH_QUICK_ARGS:-}}"
@@ -71,7 +72,7 @@ if [ -z "$UV" ]; then echo "uv not found. Install it: curl -LsSf https://astral.
 : "${STEP_catalog:=$UV run --frozen python -m webapp catalog_scan}"
 : "${STEP_reports:=$UV run --frozen python -m webapp run_reports}"
 : "${STEP_backup:=$UV run --frozen python -m warehouse backup ${BACKUP_ARGS:-}}"
-: "${TOOL_markets:=markets}" "${TOOL_news:=news}" "${TOOL_news_analyze:=news_analyze}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
+: "${TOOL_markets:=markets}" "${TOOL_markets_closes:=markets_closes}" "${TOOL_news:=news}" "${TOOL_news_analyze:=news_analyze}" "${TOOL_tech:=tech}" "${TOOL_tech_quick:=tech}"
 : "${TOOL_tech_collect:=tech}" "${TOOL_tech_update:=tech}" "${TOOL_tech_company:=tech}" "${TOOL_briefing:=briefing}"
 : "${TOOL_vehicles:=vehicles}" "${TOOL_lknews:=scrapers}"
 : "${TOOL_companies_collect:=companies}" "${TOOL_companies_update:=companies}" "${TOOL_catalog:=catalog}" "${TOOL_backup:=backup}"
@@ -94,7 +95,7 @@ if [ "$LIST" = 1 ]; then
   for v in $(compgen -v PROFILE_); do echo "Profile ${v#PROFILE_}:$(printf '%*s' $((10 - ${#v} + 8)) '') ${!v}"; done
   echo; echo "Steps:"
   seen=""
-  for s in markets news news_analyze tech tech_collect tech_update tech_company tech_quick vehicles companies_collect companies_update lknews briefing catalog reports backup $STEP_LIST; do
+  for s in markets markets_closes news news_analyze tech tech_collect tech_update tech_company tech_quick vehicles companies_collect companies_update lknews briefing catalog reports backup $STEP_LIST; do
     case " $seen " in *" $s "*) continue ;; esac; seen="$seen $s"
     printf '  %-17s [%s]  %s\n' "$s" "$(step_tool "$s")" "$(step_cmd "$s")"
   done

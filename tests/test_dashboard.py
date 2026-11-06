@@ -236,6 +236,63 @@ def test_markets_queries(market):
     assert [x["symbol"] for x in compared] == ["^GSPC", "ASPI"]                # unknown ones are skipped
 
 
+def _with_stoch_rsi(store_rows):
+    """Writes a few closes through the real store and works out the indicator."""
+    from markets.store import MarketStore
+    store = MarketStore()
+    for cls, symbol, closes in store_rows:
+        from datetime import date, timedelta
+        days = [(date(2026, 11, 6) - timedelta(days=len(closes) - 1 - i), c) for i, c in enumerate(closes)]
+        store.save_closes(cls, symbol, days, "cse" if cls == "stock_lk" else "coinpaprika", source_id="1", synced_day=date(2026, 11, 6), error=None)
+    store.update_stoch_rsi()
+    store.close()
+
+
+def test_markets_tab_shows_stoch_rsi_for_cse_and_crypto_only(market):
+    lk = read(queries.markets_quotes, "stock_lk")
+    wavy = [100.0 + (i * 7) % 11 for i in range(60)]
+    falling = [200.0 - i + (i % 2) * 0.5 for i in range(40)] + [160.0 - i * (1 + i % 3) for i in range(20)]
+    _with_stoch_rsi([("stock_lk", lk[0]["symbol"], wavy), ("stock_lk", lk[1]["symbol"], falling), ("stock_lk", lk[2]["symbol"], [10.0, 11.0, 12.0]),
+                     ("crypto", "BTC", wavy), ("crypto", "ETH", [5.0] * 50)])
+    client = market
+    html = text_of(client.get(reverse("insights_prices"), {"cls": "stock_lk"}))
+    for head in (">Stoch RSI<", ">%K<", ">%D<", ">Last close<"):
+        assert head in html
+    assert "Stochastic RSI on a 0-100 scale" in html and "not advice" in html
+    assert "not enough history yet (3 of 34 days)" in html
+    assert "not enough history yet (0 of 34 days)" in html          # a share without a row says so too
+    assert "From cse.lk" in html
+    crypto = text_of(client.get(reverse("insights_prices"), {"cls": "crypto"}))
+    assert "Powered by CoinPaprika" in crypto and "no value: RSI hardly moved" in crypto
+    other = text_of(client.get(reverse("insights_prices"), {"cls": "stock_us"}))
+    assert "Stoch RSI" not in other and "CoinPaprika" not in other
+    # sorting: the rows with a number come first, either way; no number stays last
+    for direction in ("1", "-1"):
+        page = text_of(client.get(reverse("insights_prices"), {"cls": "stock_lk", "sort": "pct_k", "dir": direction}))
+        assert page.index(lk[0]["symbol"]) < page.index(lk[2]["symbol"])
+    # the side panel gives the details
+    panel = text_of(client.get(reverse("insights_symbol"), {"class": "stock_lk", "symbol": lk[0]["symbol"]}))
+    assert "Stochastic RSI" in panel and "60 (needs 34)" in panel and "2026-11-06" in panel
+    short = text_of(client.get(reverse("insights_symbol"), {"class": "stock_lk", "symbol": lk[2]["symbol"]}))
+    assert "not enough history yet (3 of 34 days)" in short and "3 (needs 34)" in short
+    us = text_of(client.get(reverse("insights_symbol"), {"class": "stock_us", "symbol": "AAPL"}))
+    assert "Stochastic RSI" not in us
+
+
+def test_stoch_cell_marks_zones_and_never_invents_a_number():
+    row = {"asset_class": "crypto", "stoch_rsi": 95.0, "pct_k": 91.26, "pct_d": 70.0, "zone": "overbought"}
+    assert 'class="badge overbought"' in ui.quote_cell(row, "pct_k") and "91.3" in ui.quote_cell(row, "pct_k")
+    assert "badge" not in ui.quote_cell(row, "pct_d")
+    low = {**row, "pct_k": 5.0, "zone": "oversold"}
+    assert 'class="badge oversold"' in ui.quote_cell(low, "pct_k")
+    assert "badge" not in ui.quote_cell({**row, "pct_k": 50.0, "zone": "middle"}, "pct_k")
+    none = {"stoch_rsi": None, "pct_k": None, "pct_d": None, "message": "not enough history yet (5 of 34 days)"}
+    assert 'colspan="3"' in ui.quote_cell(none, "stoch_rsi") and "5 of 34" in ui.quote_cell(none, "stoch_rsi")
+    assert ui.quote_cell(none, "pct_k") == "" and ui.quote_cell(none, "pct_d") == ""
+    partial = {"stoch_rsi": 40.0, "pct_k": None, "pct_d": None, "message": "no value"}
+    assert "40.0" in ui.quote_cell(partial, "stoch_rsi") and "–" in ui.quote_cell(partial, "pct_k")
+
+
 def test_markets_tab_prices_sort_and_map(market):
     client = market
     html = text_of(client.get(reverse("insights_markets")))

@@ -12,11 +12,33 @@ uv run python -m markets run --only lk,crypto    # just some groups: us, lk, met
 uv run python -m markets check                   # same, but only print the results (nothing saved)
 uv run python -m markets show --class crypto     # latest saved prices (index, stock_us, stock_lk, commodity, commodity_lkr, fx, crypto)
 uv run python -m markets history ASPI --days 30  # one instrument over time
+uv run python -m markets closes                  # daily closes for the CSE and crypto, then their Stochastic RSI
+uv run python -m markets stochrsi --class crypto --zone oversold   # the latest values (also: overbought, short)
 uv run python -m dashboard --open                # Markets tab
 ```
 
 Run `markets run` as often as you like (for example every 15–60 minutes during market hours). Each run
 adds a point to the history and the dashboard charts.
+
+## Stochastic RSI
+
+For every CSE share and every coin we show, on the Markets tab (CSE and Crypto), in the side panel of each row, and in the grid
+as the datasets **Stochastic RSI** and **Daily closes**. Numbers only, not advice.
+
+- **The calculation** (`markets/indicators.py`): Wilder's RSI 14, then the stochastic of RSI over 14 days, %K = mean of 3, %D = mean of 3 of %K.
+  Everything is on a **0-100 scale** (some charts show 0-1). %K above 80 is marked overbought, below 20 oversold.
+- **Needs 34 daily closes** (14 + 14 + 3 + 3; the first %D is possible at 32). With fewer it says
+  "not enough history yet (N of 34 days)". Prices or an RSI that didn't move give "no value", never a made-up number.
+- **Daily closes** (`markets/closes.py`, table `markets.daily_closes`), never prices from our own runs, which can be from the middle of a day:
+  - CSE: cse.lk's chart API, about a year per share, one close per day the share traded. A day's close is only saved after 15:00 Sri Lankan time.
+  - Crypto: CoinPaprika's free API, 364 days, the price at 00:00 UTC. The free plan is for **personal use** and requires attribution, so the page says
+    "Powered by CoinPaprika". Paid plans start at $99 a month if this becomes more than personal use. It allows about **60 requests an hour**.
+- **How long:** CSE, first time about 8 minutes (one call every 1.5 s), then 2 calls a day. A share needs its own call again only if a whole
+  trading day was missed. Crypto takes at most 50 coins a run (under 2 minutes), stalest first, so the top 100 needs two runs at least an
+  hour apart. A coin that waits loses nothing: one call fills every day it's behind. Each row shows the date of its last close. Stop a run any time; the next continues.
+- **When a source says no** (401, 402, 403, 429): it stops at once and leaves that source alone for 60 minutes (`markets.history_refusals`). No retries, no tricks.
+- `markets.stoch_rsi` is a table written after each sync, not a view: Wilder's RSI carries each day's average into the next, which is awkward and slow in SQL.
+- Shares with a corporate action: cse.lk's closes may not be adjusted for splits or rights. See STATUS.md.
 
 ## What's collected
 

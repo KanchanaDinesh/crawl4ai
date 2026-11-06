@@ -38,6 +38,13 @@ KNOWN = {
     "markets.quotes": dict(label="Price history", description="Every price from every run.", sort=("run_at", "desc"), hide=["extra"]),
     "markets.v_daily": dict(label="Daily prices", description="The last price of each day per instrument.",
                             key=["asset_class", "symbol", "day"], sort=("day", "desc")),
+    "markets.stoch_rsi": dict(label="Stochastic RSI", description="Latest Stochastic RSI per CSE share and coin, 0-100: RSI 14, Stochastic 14, %K 3, %D 3, on daily closes. "
+                              "%K above 80 is overbought, below 20 oversold. Sources: cse.lk; powered by CoinPaprika. Numbers only, not advice.",
+                              sort=("pct_k", "desc"), hide=["closes_needed", "status", "computed_at"]),
+    "markets.daily_closes": dict(label="Daily closes", description="One close per day per CSE share and coin, from cse.lk and CoinPaprika (the price at 00:00 UTC).",
+                                 sort=("day", "desc"), hide=["fetched_at"]),
+    "markets.history_sync": dict(label="Daily closes progress", off=True),
+    "markets.history_refusals": dict(label="Daily closes refusals", off=True),
     "markets.runs": dict(label="Market runs", off=True),
     "markets.source_runs": dict(label="Market source health", off=True),
     "vehicles.v_vehicle_ads_latest": dict(label="Vehicle ads", description="One row per ad: latest details, first seen, times seen.",

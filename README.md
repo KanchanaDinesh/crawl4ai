@@ -63,7 +63,7 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 ./run_all.sh --status              # the last runs
 ```
 
-**Steps:** `markets`, `news`, `news_analyze` (biggest stories, topics, names, countries and tone from the saved headlines), `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
+**Steps:** `markets`, `markets_closes` (daily closes for the CSE and crypto, then their Stochastic RSI), `news`, `news_analyze` (biggest stories, topics, names, countries and tone from the saved headlines), `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
 (company facts from each site's own pages: social links, people, employees, GitHub), `tech_update`
 (profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
 registration dates), `vehicles` (ikman.lk + riyasewana), `companies_collect` (add companies from open data, continues
@@ -251,7 +251,7 @@ each tool had its own DuckDB file, which allowed only one program at a time; tho
 |---|---|
 | `news` | `news_items` (every headline, first/last seen, times seen), `news_runs`, `news_source_runs` (source health), `news_run_items`, `feed_cache` |
 | `tech` | `candidates`, `qualifications`, `registrations`, `profiles`, `changes`, `companies`, `runs`, plus typed views `v_candidates`, `v_qualifications`, `v_registrations`, `v_profiles`, `v_changes`, `v_companies` |
-| `markets` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs` |
+| `markets` | `quotes` (every price from every run), views `v_latest`, `v_daily`; `runs`, `source_runs`; `daily_closes`, `stoch_rsi`, `history_sync`, `history_refusals` |
 | `vehicles` | `ads` (every ad from every run), `runs` (per site: ok?, ads, seconds, error), views `v_vehicle_ads`, `v_vehicle_ads_latest`, `v_vehicle_price_changes` |
 | `companies` | `companies` (one row per company per source: name, country, website, industry), `sites` (what each company website says), `refusals`, `cursors` (where each source stopped), `runs`, view `v_companies` |
 | `scrapers` | `scraper_rows` (every output of the `scrapers/` tools, every run), views `v_news_headlines`, `v_products` |

@@ -4,6 +4,16 @@
 <div class="seg">{% for r in ranges %}{% symbol_url row r.days as href %}<button type="button" class="{% if r.on %}active{% endif %}" hx-get="{{ href }}" hx-target="#drawer-body">{{ r.label }}</button>{% endfor %}</div>
 {% chart figure "Price history" %}
 {% if stats %}<div class="muted small">{{ stats.points }} points · high {{ stats.high|price:cls }} · low {{ stats.low|price:cls }} · change {{ stats.change|pct }}</div>{% endif %}
+{% if stoch %}<h4>Stochastic RSI <small class="muted">0-100 scale</small></h4>
+{% if stoch.message %}<div class="muted small">{{ stoch.message }}</div>{% endif %}
+<div class="kv">
+  {% if stoch.stoch_rsi != None or stoch.pct_k != None or stoch.pct_d != None %}<div>Stoch RSI</div><div>{{ stoch.stoch_rsi|floatformat:1|default:"–" }}</div>
+  <div>%K</div><div>{% if stoch.zone == "overbought" or stoch.zone == "oversold" %}<span class="badge {{ stoch.zone }}">{{ stoch.zone }}</span>{% endif %}{{ stoch.pct_k|floatformat:1|default:"–" }}</div>
+  <div>%D</div><div>{{ stoch.pct_d|floatformat:1|default:"–" }}</div>{% endif %}
+  {% if stoch.last_day %}<div>Last close used</div><div>{{ stoch.last_close|price:cls }} on {{ stoch.last_day }}</div>{% endif %}
+  <div>Daily closes used</div><div>{{ stoch.closes_used }} (needs {{ stoch.closes_needed }})</div>
+</div>
+<div class="muted small">RSI 14, Stochastic 14, %K 3, %D 3. {{ stoch_source }}. Numbers only, not advice.</div>{% endif %}
 <h4>Details</h4><div class="kv">
   <div>Previous close</div><div>{{ q.prev_close|price:cls }}</div><div>Change</div><div>{{ q.change|price:cls }}</div>
   {% if q.high %}<div>Day high / low</div><div>{{ q.high|price:cls }} / {{ q.low|price:cls }}</div>{% endif %}

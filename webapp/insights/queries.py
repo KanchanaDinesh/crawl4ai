@@ -330,6 +330,17 @@ def markets_quotes(con, asset_class: str, q: str | None = None, limit: int = 500
         order by {order} limit {int(limit)}""", params)
 
 
+def markets_stoch_rsi(con, asset_class: str, symbol: str | None = None) -> list[dict]:
+    """The latest Stochastic RSI per instrument (written by python -m markets closes). Separate from markets_quotes, so
+    the prices still show if this table isn't there yet."""
+    where, params = "asset_class = %s", [asset_class]
+    if symbol:
+        where, params = where + " and symbol = %s", [asset_class, symbol]
+    return rows(con, f"""select symbol, stoch_rsi, pct_k, pct_d, zone, last_close, to_char(last_day, 'YYYY-MM-DD') as last_day,
+        closes_used, closes_needed, status, message, source, {_pg_ts('computed_at')} as computed_at
+        from markets.stoch_rsi where {where}""", params)
+
+
 def history_points(con, asset_class: str, symbol: str, days: int = 90) -> list[dict]:
     """Price history, oldest first: [{"t": ISO time, "price": p}, ...].
 

@@ -87,6 +87,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .badge.new { background: var(--ok-soft); color: var(--ok); }
 .badge.topic { border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
 .badge.young { background: var(--warn-soft); color: var(--warn); }
+.badge.overbought { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.badge.oversold { border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
 .tag { display: inline-block; background: var(--bg); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; font-size: 12px; margin: 2px 4px 2px 0; }
 .tag.click { cursor: pointer; }
 .tag.click:hover { border-color: var(--accent); color: var(--accent); }
@@ -108,7 +110,7 @@ th.sort { cursor: pointer; user-select: none; }
 th.sort:hover { color: var(--fg); }
 th.sorted { color: var(--accent); }
 td.pc { text-align: right; white-space: nowrap; }
-td.coin { white-space: nowrap; }
+td.coin { white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }     /* a few coins have very long names; the side panel gives the whole name */
 td.coin img { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; border-radius: 50%; }
 .tablewrap { max-height: calc(100vh - 220px); min-height: 300px; overflow: auto; }
 .tablewrap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; box-shadow: 0 1px 0 var(--line); }

@@ -2,17 +2,21 @@
 
 from django.shortcuts import render
 
+from markets.indicators import MIN_CLOSES
+
 from . import charts, queries
 from .common import Reader, list_response, may_open, page, tab_required, text_param, url_with
 from .templatetags.insights_ui import ago, when
 
 CLASSES = (("index", "Indices"), ("stock_us", "US stocks"), ("stock_lk", "Sri Lanka (CSE)"), ("crypto", "Crypto top 100"),
            ("metals", "Gold, silver & oil"), ("fx", "Exchange rates"))
-COLUMNS = {"crypto": (("rank", "#"), ("name", "Coin"), ("price", "Price (USD)"), ("pct_1h", "1h"), ("change_pct", "24h"), ("pct_7d", "7d"), ("market_cap", "Market cap"), ("volume", "Volume 24h")),
-           "stock_lk": (("symbol", "Symbol"), ("name", "Company"), ("price", "Price (LKR)"), ("change", "Change"), ("change_pct", "%"), ("volume", "Volume"), ("turnover", "Turnover"), ("market_cap", "Market cap")),
+STOCH_COLUMNS = (("stoch_rsi", "Stoch RSI"), ("pct_k", "%K"), ("pct_d", "%D"), ("last_day", "Last close"))
+STOCH_CLASSES = {"crypto": "Powered by CoinPaprika, the price at 00:00 UTC each day", "stock_lk": "From cse.lk, one close per day the share traded"}
+COLUMNS = {"crypto": (("rank", "#"), ("name", "Coin"), ("price", "Price (USD)"), ("pct_1h", "1h"), ("change_pct", "24h"), ("pct_7d", "7d"), *STOCH_COLUMNS, ("market_cap", "Market cap"), ("volume", "Volume 24h")),
+           "stock_lk": (("symbol", "Symbol"), ("name", "Company"), ("price", "Price (LKR)"), ("change", "Change"), ("change_pct", "%"), *STOCH_COLUMNS, ("volume", "Volume"), ("turnover", "Turnover"), ("market_cap", "Market cap")),
            "stock_us": (("symbol", "Symbol"), ("name", "Name"), ("price", "Price"), ("change", "Change"), ("change_pct", "%"), ("volume", "Volume"), ("as_of", "As of")),
            "default": (("name", "Name"), ("symbol", "Symbol"), ("price", "Price"), ("currency", ""), ("change", "Change"), ("change_pct", "%"), ("as_of", "As of"))}
-NUMERIC = {"price", "change", "change_pct", "pct_1h", "pct_7d", "volume", "market_cap", "turnover", "rank"}
+NUMERIC = {"price", "change", "change_pct", "pct_1h", "pct_7d", "volume", "market_cap", "turnover", "rank", "stoch_rsi", "pct_k", "pct_d"}
 TEXT_FIRST = {"name", "symbol", "currency"}             # the first click on these sorts A to Z; on numbers, biggest first
 SHORT_NAMES = {"^GSPC": "S&P 500", "^IXIC": "Nasdaq", "^DJI": "Dow", "^NDX": "Nasdaq 100", "^RUT": "Russell 2000", "^VIX": "VIX", "GC=F": "Gold", "SI=F": "Silver",
                "CL=F": "WTI oil", "BZ=F": "Brent oil", "PL=F": "Platinum", "LKR=X": "USD/LKR", "GOLD24K_LKR_PAWN": "Gold pawn (LKR)", "ASPI": "ASPI",
@@ -142,11 +146,31 @@ def _map_tiles(rows: list[dict]) -> list[dict]:
     return tiles
 
 
+def _no_history() -> dict:
+    """A row that has no Stochastic RSI row yet: nothing has been collected for it, and that's what it says."""
+    return {"stoch_rsi": None, "pct_k": None, "pct_d": None, "zone": None, "last_day": None, "closes_used": 0, "closes_needed": MIN_CLOSES,
+            "status": "short", "message": f"not enough history yet (0 of {MIN_CLOSES} days)"}
+
+
+def _with_stoch_rsi(db, cls: str, rows: list[dict]) -> str:
+    """Adds the indicator to each price row, and returns the line under the table that says what the numbers are."""
+    found = {r["symbol"]: r for r in db.get(queries.markets_stoch_rsi, cls, default=[])}
+    for r in rows:
+        r.update(found.get(r["symbol"]) or _no_history())
+    zones = [r["zone"] for r in rows]
+    missing = sum(1 for r in rows if r["status"] != "ok")
+    days = [r["last_day"] for r in rows if r.get("last_day")]
+    return (f"Stochastic RSI on a 0-100 scale: RSI 14, Stochastic 14, %K 3, %D 3, on daily closes. %K above 80 is marked overbought, below 20 oversold: "
+            f"{zones.count('overbought')} overbought, {zones.count('oversold')} oversold, {missing} without a value. Closes up to {max(days) if days else 'none yet'}. "
+            f"{STOCH_CLASSES[cls]}. Numbers only, not advice.")
+
+
 def _prices_context(db, f: dict, sort: str, direction: int) -> dict:
     classes = ("commodity", "commodity_lkr") if f["cls"] == "metals" else (f["cls"],)
     rows = []
     for cls in classes:
         rows += db.get(queries.markets_quotes, cls, f["q"] or None, default=[])
+    stoch_note = _with_stoch_rsi(db, f["cls"], rows) if f["cls"] in STOCH_CLASSES else ""
     columns = []
     for k, label in COLUMNS.get(f["cls"], COLUMNS["default"]):
         next_dir = -direction if sort == k else (1 if k in TEXT_FIRST else -1)
@@ -159,13 +183,13 @@ def _prices_context(db, f: dict, sort: str, direction: int) -> dict:
     note = (f"LKR gold/silver: {notes[0]}." if notes else
             "Gold and silver in USD per troy ounce (COMEX futures from Yahoo, or spot price from Stooq; click a row to see the source)." if f["cls"] == "metals" else "")
     return {"rows": _sorted(rows, sort, direction), "columns": columns, "f": f, "note": note, "title": dict(CLASSES)[f["cls"]],
-            "tiles": _map_tiles(rows) if f["mode"] == "map" else [], "gainers": [r for r in movers if r["change_pct"] > 0][:6],
+            "stoch_note": stoch_note, "tiles": _map_tiles(rows) if f["mode"] == "map" else [], "gainers": [r for r in movers if r["change_pct"] > 0][:6],
             "losers": [r for r in reversed(movers) if r["change_pct"] < 0][:6]}
 
 
 def _sort_args(request) -> tuple[str, int]:
     sort = request.GET.get("sort") or ""
-    return (sort if sort in NUMERIC | TEXT_FIRST | {"as_of"} else ""), (1 if request.GET.get("dir") == "1" else -1)
+    return (sort if sort in NUMERIC | TEXT_FIRST | {"as_of", "last_day"} else ""), (1 if request.GET.get("dir") == "1" else -1)
 
 
 @tab_required("markets")
@@ -218,6 +242,9 @@ def symbol_view(request):
     days = int(days) if days.isdigit() and int(days) in dict(SYMBOL_DAYS) else 30
     with Reader() as db:
         d = db.get(queries.markets_history, cls, symbol, 100, default={})
+        stoch = None
+        if cls in STOCH_CLASSES:
+            stoch = next(iter(db.get(queries.markets_stoch_rsi, cls, symbol, default=[])), None) or _no_history()
     q = d.get("quote") or {}
     since = charts.last_moment(days)
     points = [p for p in d.get("points") or [] if p["price"] is not None and p["t"] >= since]
@@ -230,6 +257,6 @@ def symbol_view(request):
     if len(values) >= 2 and values[0]:
         stats = {"points": len(values), "high": max(values), "low": min(values), "change": (values[-1] / values[0] - 1) * 100}
     return render(request, "insights/_mk_symbol.html", {
-        "q": q, "cls": cls, "symbol": symbol, "name": display_name(q) or symbol, "figure": figure, "stats": stats, "days": days,
+        "q": q, "cls": cls, "symbol": symbol, "name": display_name(q) or symbol, "figure": figure, "stats": stats, "days": days, "stoch": stoch, "stoch_source": STOCH_CLASSES.get(cls),
         "ranges": [{"days": n, "label": label, "on": n == days} for n, label in SYMBOL_DAYS], "banner": db.error,
         "row": {"asset_class": cls, "symbol": symbol}})

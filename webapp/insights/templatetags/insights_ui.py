@@ -245,7 +245,28 @@ def quote_cell(row, key):
         return format_html('<td class="num muted">{}</td>', "" if value is None else value)
     if key == "symbol":
         return format_html('<td class="nowrap"><b>{}</b></td>', value or "")
+    if key in ("stoch_rsi", "pct_k", "pct_d"):
+        return _stoch_cell(row, key)
+    if key == "last_day":
+        if not value:
+            return format_html('<td class="nowrap muted small">{}</td>', "–")
+        short = value[5:] if value[:4] == str(timezone.localdate().year) else value      # the table is tight for room
+        return format_html('<td class="nowrap muted small" title="{}">{}</td>', value, short)
     return format_html("<td>{}</td>", "" if value is None else value)
+
+
+def _stoch_cell(row, key):
+    """With no number at all, one cell across the three columns says why. Never a made-up number."""
+    numbers = (row.get("stoch_rsi"), row.get("pct_k"), row.get("pct_d"))
+    if all(n is None for n in numbers):
+        if key != "stoch_rsi":
+            return ""
+        return format_html('<td class="muted small" colspan="3">{}</td>', row.get("message") or "")
+    value = row.get(key)
+    text = "–" if value is None else f"{value:.1f}"
+    if key == "pct_k" and row.get("zone") in ("overbought", "oversold"):
+        return format_html('<td class="num nowrap"><span class="badge {0}">{0}</span>{1}</td>', row["zone"], text)
+    return format_html('<td class="num">{}</td>', text)
 
 
 @register.filter

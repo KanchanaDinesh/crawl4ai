@@ -5,6 +5,11 @@
     show     [--class index|stock_us|stock_lk|commodity|commodity_lkr|fx|crypto] [--limit N]
              latest saved prices
     history  SYMBOL [--days 30]                saved prices of one instrument over time
+    closes   [--only lk,crypto] [--max-minutes 20]
+             daily closes for the CSE and crypto from public sources, then the Stochastic RSI (first time ~10 minutes;
+             stop it any time, the next run continues; later runs take seconds to a few minutes)
+    stochrsi [--class stock_lk|crypto] [--zone overbought|oversold|short] [--limit N]
+             the latest Stochastic RSI (0-100). Numbers only, not advice
 
 Settings (watchlists, crypto top N): markets/config/settings.json
 """
@@ -15,6 +20,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 from .collect import GROUPS, run_collection
 from .store import MarketStore
@@ -120,6 +126,48 @@ def cmd_history(args) -> None:
         print(f"{when}  {fmt(price):>16} {cur or ''}  {pct(chg)}")
 
 
+def cmd_closes(args) -> None:
+    from .closes import sync_all
+    settings = json.load(open(args.config or CONFIG))
+    only = [g.strip() for g in args.only.split(",")] if args.only else ["lk", "crypto"]
+    if set(only) - {"lk", "crypto"}:
+        sys.exit("--only takes: lk, crypto")
+    store = MarketStore(data_dir())
+    if not store.known_symbols("stock_lk") and not store.known_symbols("crypto"):
+        store.close()
+        sys.exit("No prices saved yet, so there's no list of shares and coins. Run first:  uv run python -m markets run")
+    started = time.monotonic()
+    results = asyncio.run(sync_all(store, settings, only, args.max_minutes))
+    counts = store.update_stoch_rsi()
+    store.close()
+    for r in results:
+        print(f"{r['source']:<12} {r['fetched']} fetched, {r['appended']} closes added from one call, {r['errors']} errors, {r['left']} left"
+              + (f", refused: {r['refused']}" if r["refused"] else ""))
+    print(f"Stochastic RSI: {counts['ok']} with a value, {counts['short']} without enough history, {counts['flat']} flat. "
+          f"Took {time.monotonic() - started:.0f}s.")
+    if any(r["left"] for r in results):
+        print("Not finished: run the same command again and it continues.")
+
+
+def cmd_stochrsi(args) -> None:
+    con = _open_read_only()
+    where, params = ["true"], []
+    if args.asset_class:
+        where.append("asset_class = %s"); params.append(args.asset_class)
+    if args.zone == "short":
+        where.append("status <> 'ok'")
+    elif args.zone:
+        where.append("zone = %s"); params.append(args.zone)
+    rows = con.execute(f"""select asset_class, symbol, name, stoch_rsi, pct_k, pct_d, zone, last_day, closes_used, message from markets.stoch_rsi
+        where {' and '.join(where)} order by pct_k desc nulls last, symbol limit {int(args.limit)}""", params).fetchall()
+    con.close()
+    if not rows:
+        print("Nothing to show. Run:  uv run python -m markets closes")
+    for cls, sym, name, raw, k, d, zone, day, used, message in rows:
+        numbers = f"{raw:6.1f} {k:6.1f} {d:6.1f}  {zone or '':<10} {day}  {used} closes" if message is None else message
+        print(f"{cls:<9} {sym:<14} {(name or '')[:28]:<28} {numbers}")
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m markets", description="Stocks, indices, metals, FX and crypto prices.")
     p.add_argument("--config", help="A different settings.json")
@@ -133,12 +181,23 @@ def main(argv=None) -> None:
     h = sub.add_parser("history")
     h.add_argument("symbol")
     h.add_argument("--days", type=int, default=30)
+    c = sub.add_parser("closes")
+    c.add_argument("--only", help="Comma-separated: lk, crypto")
+    c.add_argument("--max-minutes", type=float, default=20)
+    r = sub.add_parser("stochrsi")
+    r.add_argument("--class", dest="asset_class", choices=("stock_lk", "crypto"))
+    r.add_argument("--zone", choices=("overbought", "oversold", "short"))
+    r.add_argument("--limit", type=int, default=60)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
     try:
         if args.command in ("run", "check"):
             asyncio.run(cmd_run(args, save=args.command == "run"))
+        elif args.command == "closes":
+            cmd_closes(args)
+        elif args.command == "stochrsi":
+            cmd_stochrsi(args)
         elif args.command == "show":
             cmd_show(args)
         else:
