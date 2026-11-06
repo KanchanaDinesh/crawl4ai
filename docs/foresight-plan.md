@@ -1,6 +1,6 @@
 # Foresight, the prediction module: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06).** Decided: a separate module, and the first version runs **without AI**._
+_Written 2026-11-06 with Kanchana. Status: **phases 1 and 2 built (2026-11-06).** Decided: a separate module, and the first version runs **without AI**._
 
 ## What it is for
 
@@ -107,6 +107,16 @@ What happened in the 7 days after each zone:
 - It's one year, mostly falling, so this doesn't prove the indicator never works. It does mean nothing here supports trusting it.
 - **Live forecasts started:** 359 on 2026-11-06 (283 CSE shares, 76 coins), checked from 2026-11-13. Odds stay within about 4 points of normal, and `show` says to read them that way.
 - **Tests that guard this:** changing the future doesn't change past zones, bands or odds (and that test fails when a leak is put in on purpose); pure noise never gets "better"; a real planted pattern is found.
+
+## Phase 2 results (2026-11-06)
+
+**World news is built and saving, with no odds yet, because no story's date has come around.** That's the rule working, not a gap.
+
+- **Questions:** will a story be bigger, still going, or faded in 3 and 7 days; will it spread to more countries in 7 days; will a topic's share rise or fall in 7 days. Each is checked from our own headlines.
+- **Saved so far:** 80 stories (40 a day, on 4 and 5 November) and 15 topics a day. The stories are real: the US Congress result, the Russell Brand verdict, Paraguay's president resigning.
+- **Traps handled:** a day with nothing collected is never counted as "faded" (it's kept on the record as `no_data`, without a score); the first day's backlog and unfinished days aren't used; saved stories don't change when headlines are cleaned. Tests for the first two were checked by putting each mistake in on purpose: they fail.
+- **First odds, with daily runs:** stories around 20-24 November, topics around early December. The verdict against the simple guess needs 8 weeks.
+- **Not done:** only six source countries count for "spread" (US, IN, LK, AU, CA, CN), since GLOBAL, TECH and the others aren't countries. Word matching can join two similar stories or miss a reworded one, and the live record will show the effect.
 
 ## Things to watch
 

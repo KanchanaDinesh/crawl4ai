@@ -15,5 +15,23 @@
     "recent_days": 30,
     "min_recent_closes": 5,
     "fresh_days": 3
+  },
+  "news": {
+    "enabled": true,
+    "window_days": 2,
+    "top_stories": 30,
+    "top_lk_stories": 10,
+    "min_story_words": 3,
+    "min_match_words": 3,
+    "old_after_days": 3,
+    "min_cases": 60,
+    "min_weeks": 3,
+    "shrink": 20,
+    "topic_window_days": 7,
+    "topic_min_headlines": 100,
+    "topic_min_run_days": 3,
+    "topic_band_moves": 7,
+    "topic_band_days": 60,
+    "fresh_days": 3
   }
 }

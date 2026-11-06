@@ -33,6 +33,22 @@ create table if not exists foresight.outcomes (
     normal_score  double precision not null    -- the same for the simple guess
 );
 
+-- a forecast whose date passed with nothing collected can't be scored, and can't be dropped either: actual = no_data, no score
+alter table foresight.outcomes alter column score drop not null;
+alter table foresight.outcomes alter column normal_score drop not null;
+
+-- what was seen each day, saved once: later runs don't have to work it out again, and it can't shift when
+-- headlines are cleaned afterwards
+create table if not exists foresight.signals (
+    section   text not null,
+    kind      text not null,        -- story, topic
+    day       date not null,
+    subject   text not null,
+    payload   jsonb not null,
+    saved_at  timestamptz not null default now(),
+    primary key (section, kind, day, subject)
+);
+
 -- a test on past data: useful to learn if a method has any value, and kept apart from the live record
 create table if not exists foresight.backtests (
     id              bigserial primary key,
@@ -80,8 +96,9 @@ create or replace trigger outcomes_no_truncate before truncate on foresight.outc
 
 -- the live track record: only forecasts saved before their outcome, never tests on the past
 create or replace view foresight.v_track_record as
-    select f.section, f.grp, f.question, f.method, f.method_version, count(*) as checked,
+    select f.section, f.grp, f.question, f.method, f.method_version, count(o.score) as checked,
            avg(o.score) as score, avg(o.normal_score) as normal_score,
-           case when avg(o.normal_score) > 0 then 1 - avg(o.score) / avg(o.normal_score) end as skill
+           case when avg(o.normal_score) > 0 then 1 - avg(o.score) / avg(o.normal_score) end as skill,
+           count(*) filter (where o.score is null) as not_checkable
     from foresight.forecasts f join foresight.outcomes o on o.forecast_id = f.id
     group by f.section, f.grp, f.question, f.method, f.method_version;

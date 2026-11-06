@@ -11,10 +11,11 @@ uv run python -m foresight test                     # how the method would have 
 uv run python -m foresight run                      # check what's due, then make today's forecasts (once per day; ./run_all.sh foresight)
 uv run python -m foresight show --subject BTC       # the latest forecast, with its reasons, and how far to trust it
 uv run python -m foresight show --zone oversold     # also: overbought, middle
+uv run python -m foresight show --section news      # the stories being watched, and how far from odds
 uv run python -m foresight score                    # the live record: only forecasts saved before their outcome
 ```
 
-Markets needs the daily closes first: `uv run python -m markets closes`.
+Markets needs the daily closes first (`uv run python -m markets closes`), and news needs headlines (`uv run python -m worldnews run`). **News only builds up on days the collector runs.**
 
 ## What the result means so far
 
@@ -40,3 +41,20 @@ part today is each instrument's **usual 7-day move**. Forecasts keep being saved
   adjusted for splits and rights; smaller bonus issues can still slip through).
 - **The check** uses the last close on or before the check date, however late the check runs. A share with no trade stands at its last price.
 - **Limits:** one year of data, in which prices mostly fell; instruments that exist today only (the failed ones are missing); coins mostly move together, which is why whole weeks are resampled.
+
+## World news
+
+**Without AI this is about how the coverage behaves, not what happens in the world.** Everything here can be checked from our own headlines.
+
+| Question | Scenarios | Compared with |
+|---|---|---|
+| `story_3d`, `story_7d` | Bigger (as many sources as now, or more), still going (2 or more), faded (under 2), counted over the check date and the day before | Past stories of the same size: 2-3, 4-7, 8+ sources |
+| `story_spread_7d` | Reported from more countries than now, or not | Past stories from as many countries |
+| `topic_7d` | The topic's share of a week's headlines up, within or down by its own usual move | Past days of topics moving the same way |
+
+- **A story** is the same words in headlines from different sources over two days (`worldnews.analysis.stories`). Each day keeps the 30 biggest and 10 more from Sri Lankan sources. Later coverage means **new** headlines sharing 3 of its key words.
+- **Saved once, as signals** (`foresight.signals`), because re-clustering every past day gets slow and `worldnews clean` can rewrite old headlines.
+- **Nothing collected isn't "faded".** Runs are by hand, so with no run around the check date a past case is left out, and a saved forecast goes on the record as `no_data`, not scored and not dropped (`score` counts them).
+- **Not normal days:** the first day of collecting (a backlog), the newest run's day (may not be over), and headlines published over 3 days before we first saw them.
+- **Odds need** 60 settled cases from 3 separate weeks, per group. Then the verdict against the simple guess needs 8 weeks.
+- **When:** with daily runs, stories' first odds come around 20-24 November, topics' around early December (they need 3 weeks before their first case). Missed days push this back.

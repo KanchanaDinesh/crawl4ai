@@ -294,3 +294,215 @@ def test_it_writes_only_to_its_own_schema(tmp_path, pg):
     assert market.con.execute("select count(*), max(fetched_at) from markets.daily_closes").fetchone() == before
     for c in (market, store, reader):
         c.close()
+
+
+# ── world news ───────────────────────────────────────────────────────────────────────────────────────────────────
+from datetime import datetime  # noqa: E402
+
+from foresight.analysts.news import Case as NewsCase, NewsAnalyst, QUESTIONS, coverage, make_data, size_zone, spread_outcome, story_outcome  # noqa: E402
+
+NEWS_CFG = json.loads((Path(__file__).parent.parent / "foresight" / "config" / "settings.json").read_text())["news"]
+D0 = date(2026, 9, 1)
+
+
+def at(day, hour=12):
+    return datetime(day.year, day.month, day.day, hour)
+
+
+def headline(day, title, source, group="US", published=None, summary=""):
+    return {"url": f"u/{source}/{title}/{day}", "title": title, "summary": summary, "source": source, "group_code": group, "first_seen_at": at(day), "published_at": published}
+
+
+def every_day(n=30):
+    return {D0 + timedelta(days=i) for i in range(n)}
+
+
+STORY = "volcano erupts iceland flights cancelled reykjavik"
+
+
+def story_rows(day, sources=5, groups=("US", "IN")):
+    return [headline(day, f"Volcano erupts in Iceland as flights cancelled Reykjavik {s}", f"src{s}", groups[s % len(groups)]) for s in range(sources)]
+
+
+def remembered(rows, runs=None, cfg=NEWS_CFG):
+    class Store:
+        def save_signals(self, section, r):
+            return len(r)
+    analyst = NewsAnalyst(cfg)
+    data = make_data(rows, runs if runs is not None else every_day(), [], cfg["old_after_days"])
+    analyst.remember(data, Store())
+    return analyst, data
+
+
+def test_story_outcomes_by_hand():
+    assert (story_outcome(1, 5), story_outcome(0, 2), story_outcome(2, 5), story_outcome(4, 5), story_outcome(5, 5), story_outcome(9, 5)) == ("faded", "faded", "going", "going", "bigger", "bigger")
+    assert (spread_outcome(5, 3, 2), spread_outcome(5, 2, 2), spread_outcome(1, 5, 0)) == ("spread", "no_spread", "no_spread")
+    assert (size_zone(2), size_zone(3), size_zone(4), size_zone(7), size_zone(8)) == ("2-3 sources", "2-3 sources", "4-7 sources", "4-7 sources", "8+ sources")
+
+
+def test_first_day_is_a_backlog_and_todays_news_isnt_finished():
+    rows = [r for i in range(6) for r in story_rows(D0 + timedelta(days=i))]
+    analyst, data = remembered(rows, {D0 + timedelta(days=i) for i in range(6)})
+    assert data.last_complete == D0 + timedelta(days=4)             # the newest run's day may not be over
+    assert min(data.signals["story"]) == D0 + timedelta(days=2)     # needs two days after the first one
+    assert min(data.signals["topic"]) == D0 + timedelta(days=1)
+    assert max(data.signals["story"]) == data.last_complete
+
+
+def test_old_articles_arent_new_coverage():
+    day = D0 + timedelta(days=5)
+    old = headline(day, "Volcano erupts in Iceland as flights cancelled", "a", published=at(day) - timedelta(days=9))
+    new = headline(day, "Volcano erupts in Iceland as flights cancelled", "b", published=at(day) - timedelta(hours=2))
+    assert [i["source"] for i in make_data([old, new], every_day(), []).items[day]] == ["b"]
+
+
+def test_coverage_counts_new_headlines_around_the_check_date():
+    check = D0 + timedelta(days=10)
+    rows = story_rows(check, 3, ("US", "IN", "LK")) + story_rows(check - timedelta(days=1), 2) + story_rows(check - timedelta(days=2), 9)
+    rows += [headline(check, "Iceland football team wins cup", "src8")]     # one shared word isn't this story
+    data = make_data(rows, every_day(), [])
+    key = ["volcano", "erupts", "iceland", "flights", "cancelled"]
+    assert coverage(data, key, check, NEWS_CFG) == (3, 3)                   # src0-2; the day before adds no new source; older ones don't count
+
+
+def test_nothing_collected_is_never_counted_as_faded():
+    """Runs are by hand. If nobody ran it on the check date, the story didn't fade: we just didn't look."""
+    start = D0 + timedelta(days=3)
+    rows = story_rows(start) + story_rows(start - timedelta(days=1))
+    runs = {D0 + timedelta(days=i) for i in range(5)} | {D0 + timedelta(days=20)}   # nothing around day 6 or 10
+    analyst, data = remembered(rows, runs)
+    assert start in data.signals["story"]
+    for question in ("story_3d", "story_7d", "story_spread_7d"):
+        assert [c for c in analyst.story_cases(data, question) if c.actual and c.day == start] == []
+    subject = next(iter(data.signals["story"][start]))
+    p = data.signals["story"][start][subject]
+    row = {"id": 1, "subject": f"story:{subject}", "question": "story_7d", "check_on": start + timedelta(days=7), "start_value": p["sources"],
+           "signals": {"key_words": p["key_words"], "sources": p["sources"], "countries": p["countries"]},
+           "scenarios": [{"key": k, "probability": 1 / 3, "normal": 1 / 3} for k in ("bigger", "going", "faded")]}
+    out = analyst.check(row, data)
+    assert (out["actual"], out["score"], out["normal_score"]) == ("no_data", None, None)
+    # with a run on those days and no matching headline, it really did fade
+    analyst2, data2 = remembered(rows, every_day())
+    assert analyst2.check(row, data2)["actual"] == "faded"
+
+
+def test_a_story_that_keeps_going_is_scored_as_going():
+    start = D0 + timedelta(days=3)
+    rows = story_rows(start, 6) + story_rows(start + timedelta(days=7), 3)
+    analyst, data = remembered(rows)
+    actual = {c.day: c.actual for c in analyst.story_cases(data, "story_7d")}
+    assert actual[start] == "going"
+
+
+def test_saved_signals_dont_change_when_headlines_are_rewritten():
+    start = D0 + timedelta(days=3)
+    rows = story_rows(start, 6)
+    analyst, data = remembered(rows)
+    saved = [("story", d, s, p) for d, found in data.signals["story"].items() for s, p in found.items()]
+    cleaned = [{**r, "title": "something else entirely"} for r in rows]
+    again = make_data(cleaned, every_day(), saved)
+    analyst.remember(again, type("S", (), {"save_signals": lambda self, s, r: len(r)})())
+    assert again.signals["story"][start] == data.signals["story"][start]
+
+
+def _topic_rows(days, share_of_day, per_day=40):
+    rows = []
+    for i in range(days):
+        day = D0 + timedelta(days=i)
+        for n in range(per_day):
+            title = "Parliament election vote today" if n < share_of_day(i) * per_day else f"Weather stays mild number {n}"
+            rows.append(headline(day, title, f"s{n % 5}"))
+    return rows
+
+
+def test_topic_move_uses_its_own_usual_move_and_only_the_past():
+    wobble = lambda i: 0.25 + 0.05 * ((i // 7) % 2)              # noqa: E731
+    rows = _topic_rows(60, wobble)
+    analyst, data = remembered(rows, every_day(60))
+    cases = [c for c in analyst.topic_cases(data) if c.subject == "politics"]
+    assert cases and all(c.facts["band_pct"] >= 1 for c in cases)
+    first = {c.day: (c.zone, c.facts["band_pct"]) for c in cases if c.day < D0 + timedelta(days=40)}
+    later = _topic_rows(40, wobble) + _topic_rows(60, lambda i: 0.9)[40 * 40:]       # change the future
+    analyst2, data2 = remembered(later, every_day(60))
+    second = {c.day: (c.zone, c.facts["band_pct"]) for c in analyst2.topic_cases(data2) if c.subject == "politics" and c.day < D0 + timedelta(days=40)}
+    assert first == second and first
+
+
+def test_topic_needs_enough_collected_to_mean_anything():
+    rows = _topic_rows(30, lambda i: 0.3, per_day=2)              # 14 headlines a week
+    analyst, data = remembered(rows)
+    assert analyst.topic_cases(data) == []
+
+
+def test_no_news_odds_without_enough_settled_cases():
+    rows = [r for i in range(1, 12) for r in story_rows(D0 + timedelta(days=i))]
+    analyst, data = remembered(rows, every_day(12))
+    made, not_made = analyst.forecast(data, D0 + timedelta(days=11))
+    assert made == [] and not_made["too few past cases"] >= 1
+    lines = analyst.progress(data)
+    assert any("no odds yet" in line for line in lines) and any("Watching" in line for line in lines)
+
+
+def _many_stories(days=60, keep_going=True):
+    """A different story each day, some of them told again a week later."""
+    rows = []
+    rng = random.Random(3)
+    words = [f"word{chr(97 + i)}{chr(97 + j)}" for i in range(26) for j in range(26)]
+    for i in range(days):
+        day = D0 + timedelta(days=i)
+        for s in range(6):
+            key = rng.sample(words, 5)
+            rows += [headline(day, " ".join(key) + f" {src}", f"src{src}", ("US", "IN", "LK")[src % 3]) for src in range(3 + s % 4)]
+            if keep_going and rng.random() < 0.5 and i + 7 < days:
+                rows += [headline(day + timedelta(days=7), " ".join(key) + f" later {src}", f"src{src}") for src in range(3)]
+    return rows
+
+
+def test_news_forecasts_appear_once_there_is_history_and_get_checked():
+    rows = _many_stories()
+    analyst, data = remembered(rows, every_day(60))
+    today = D0 + timedelta(days=59)
+    made, _ = analyst.forecast(data, today)
+    assert {m["question"] for m in made} >= {"story_3d", "story_7d", "story_spread_7d"}
+    m = next(x for x in made if x["question"] == "story_7d")
+    assert m["subject"].startswith("story:") and m["as_of"] == data.last_complete and m["check_on"] == data.last_complete + timedelta(days=7)
+    assert [s["key"] for s in m["scenarios"]] == ["bigger", "going", "faded"] and sum(s["probability"] for s in m["scenarios"]) == pytest.approx(1, abs=0.001)
+    assert m["cases"] >= NEWS_CFG["min_cases"] and m["separate_weeks"] >= NEWS_CFG["min_weeks"]
+    assert all(word not in " ".join(m["reasons"]).lower() for word in ("buy", "sell"))
+    results = analyst.test(data)
+    assert {r["question"] for r in results} == set(QUESTIONS) and all(r["verdict"] in ("better", "worse", "no_difference", "too_little") for r in results)
+    assert next(r for r in results if r["question"] == "story_7d")["details"]["zones"]["all"]["cases"] > 100
+
+
+def test_news_end_to_end_saves_signals_and_keeps_no_data_on_the_record(tmp_path, pg):
+    from foresight.cli import run_section
+    from foresight.store import ForesightStore
+    from warehouse import postgres
+    from warehouse.postgres import connect
+    postgres.migrate()
+    store, reader = ForesightStore(), connect("reader", autocommit=True)
+    writer = store.con
+    rows = _many_stories(40)
+    writer.cursor().executemany("insert into news.news_items (url, title, summary, source, group_code, first_seen_at) values (%s, %s, %s, %s, %s, %s)",
+                                [(r["url"], r["title"], "", r["source"], r["group_code"], at(r["first_seen_at"].date()).strftime("%Y-%m-%d %H:%M:%S+00")) for r in rows])
+    runs = [(d,) for d in sorted({r["first_seen_at"].date() for r in rows})]
+    writer.cursor().executemany("insert into news.news_runs (run_at) values (%s)", [(f"{d[0]} 12:00:00+00",) for d in runs])
+    analyst = NewsAnalyst(NEWS_CFG)
+    today = D0 + timedelta(days=40)
+    first = run_section(analyst, store, reader, today)
+    assert first["progress"]
+    saved = writer.execute("select count(*), count(distinct day) from foresight.signals where section = 'news' and kind = 'story'").fetchone()
+    assert saved[0] > 50 and saved[1] > 30
+    assert run_section(analyst, store, reader, today)["made"] == 0                  # a second run adds nothing
+    assert writer.execute("select count(*) from foresight.signals where section = 'news' and kind = 'story'").fetchone()[0] == saved[0]
+    made = writer.execute("select count(*) from foresight.forecasts where section = 'news'").fetchone()[0]
+    assert made == first["made"] and made > 0
+    # the check date passes, later runs exist, but nothing was collected around it
+    writer.cursor().executemany("insert into news.news_runs (run_at) values (%s)", [(f"{D0 + timedelta(days=60)} 12:00:00+00",)])
+    run_section(analyst, store, reader, D0 + timedelta(days=61))
+    kinds = dict(writer.execute("select o.actual, count(*) from foresight.outcomes o join foresight.forecasts f on f.id = o.forecast_id group by 1").fetchall())
+    assert kinds.get("no_data", 0) > 0
+    record = writer.execute("select sum(not_checkable) from foresight.v_track_record where section = 'news'").fetchone()[0]
+    assert record == kinds["no_data"]
+    store.close()
+    reader.close()

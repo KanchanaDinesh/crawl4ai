@@ -35,7 +35,7 @@ class ForesightStore:
         return made
 
     def due(self, section: str, today) -> list[dict]:
-        cur = self.con.execute("""select f.id, f.subject, f.as_of, f.check_on, f.start_value, f.scenarios, f.signals from foresight.forecasts f
+        cur = self.con.execute("""select f.id, f.subject, f.question, f.as_of, f.check_on, f.start_value, f.scenarios, f.signals from foresight.forecasts f
             left join foresight.outcomes o on o.forecast_id = f.id
             where f.section = %s and f.check_on <= %s and o.forecast_id is null order by f.check_on, f.id""", [section, today])
         cols = [c.name for c in cur.description]
@@ -46,6 +46,14 @@ class ForesightStore:
             self.con.cursor().executemany("""insert into foresight.outcomes (forecast_id, end_value, end_day, move_pct, actual, score, normal_score)
                 values (%s, %s, %s, %s, %s, %s, %s) on conflict (forecast_id) do nothing""",
                                           [(r["forecast_id"], r["end_value"], r["end_day"], r["move_pct"], r["actual"], r["score"], r["normal_score"]) for r in rows])
+        return len(rows)
+
+    def save_signals(self, section: str, rows: list[tuple]) -> int:
+        """rows: (kind, day, subject, payload). What's saved stays as it was first seen."""
+        if rows:
+            with self.con.transaction():
+                self.con.cursor().executemany("""insert into foresight.signals (section, kind, day, subject, payload) values (%s, %s, %s, %s, %s)
+                    on conflict do nothing""", [(section, k, d, s, json.dumps(p)) for k, d, s, p in rows])
         return len(rows)
 
     def save_backtest(self, r: dict) -> None:

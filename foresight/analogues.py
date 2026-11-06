@@ -4,10 +4,10 @@ Shared by the analysts. Odds are pulled towards the simple guess ("how it goes i
 few cases can't claim much. This counts only what it's told about, so the caller decides what was known at the time.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 
-from .scoring import week_of
+from .scoring import brier, week_of
 
 
 class PastCases:
@@ -42,3 +42,36 @@ class PastCases:
         if n + shrink <= 0:
             return normal
         return {k: (counts[k] + shrink * normal[k]) / (n + shrink) for k in self.outcomes}
+
+
+def walk_forward(cases: list, cfg: dict, outcomes: tuple[str, ...]) -> tuple[list[tuple[date, float, float]], PastCases]:
+    """Go through the days in order. Each day's odds come only from cases whose check date has already arrived, as they would
+    have on that day. A case needs .day, .check_on, .zone (the group it's compared with) and .actual (None if not known yet).
+    Returns the scores, and what's known at the end."""
+    known = PastCases(outcomes)
+    settled = [c for c in cases if c.actual]
+    waiting = sorted(settled, key=lambda c: c.check_on)
+    next_up = 0
+    scored = []
+    for case in sorted(settled, key=lambda c: c.day):
+        while next_up < len(waiting) and waiting[next_up].check_on <= case.day:
+            done = waiting[next_up]
+            known.add(done.zone, done.actual, done.day)
+            next_up += 1
+        if known.enough(case.zone, cfg["min_cases"], cfg["min_weeks"]):
+            scored.append((case.day, brier(known.odds(case.zone, cfg["shrink"]), case.actual), brier(known.normal(), case.actual)))
+    while next_up < len(waiting):
+        done = waiting[next_up]
+        known.add(done.zone, done.actual, done.day)
+        next_up += 1
+    return scored, known
+
+
+def zone_table(cases: list, zones: tuple[str, ...], outcomes: tuple[str, ...]) -> dict:
+    """What actually happened after each group, with no odds involved: the plainest answer there is."""
+    table = {}
+    for name in (*zones, "all"):
+        counts = Counter(c.actual for c in cases if c.actual and (name == "all" or c.zone == name))
+        n = sum(counts.values())
+        table[name] = {"cases": n, **{k: (counts[k] / n if n else None) for k in outcomes}}
+    return table

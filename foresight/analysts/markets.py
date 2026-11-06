@@ -20,8 +20,9 @@ from statistics import median
 
 from markets.indicators import MIN_CLOSES, stoch_rsi_series, zone
 
+from .. import analogues
 from ..analogues import PastCases
-from ..scoring import VERDICTS, brier, judge
+from ..scoring import brier, judge
 
 OUTCOMES = ("up", "flat", "down")
 METHOD = "stochrsi_zone"
@@ -115,34 +116,11 @@ def build_cases(symbol: str, history: list[tuple[date, float]], cfg: dict, group
 
 
 def walk_forward(cases: list[Case], cfg: dict) -> tuple[list[tuple[date, float, float]], PastCases]:
-    """Go through the days in order. Each day's odds come only from cases whose check date has already arrived, as they would
-    have on that day. Returns the scores, and what's known at the end."""
-    known = PastCases(OUTCOMES)
-    waiting = sorted((c for c in cases if c.actual), key=lambda c: c.check_on)
-    next_up = 0
-    scored = []
-    for case in sorted((c for c in cases if c.actual), key=lambda c: c.day):
-        while next_up < len(waiting) and waiting[next_up].check_on <= case.day:
-            done = waiting[next_up]
-            known.add(done.zone, done.actual, done.day)
-            next_up += 1
-        if known.enough(case.zone, cfg["min_cases"], cfg["min_weeks"]):
-            scored.append((case.day, brier(known.odds(case.zone, cfg["shrink"]), case.actual), brier(known.normal(), case.actual)))
-    while next_up < len(waiting):
-        done = waiting[next_up]
-        known.add(done.zone, done.actual, done.day)
-        next_up += 1
-    return scored, known
+    return analogues.walk_forward(cases, cfg, OUTCOMES)
 
 
 def zone_table(cases: list[Case]) -> dict:
-    """What actually happened after each zone, with no odds involved: the plainest answer there is."""
-    table = {}
-    for name in ("oversold", "middle", "overbought", "all"):
-        counts = Counter(c.actual for c in cases if c.actual and (name == "all" or c.zone == name))
-        n = sum(counts.values())
-        table[name] = {"cases": n, **{k: (counts[k] / n if n else None) for k in OUTCOMES}}
-    return table
+    return analogues.zone_table(cases, ("oversold", "middle", "overbought"), OUTCOMES)
 
 
 class MarketsAnalyst:
@@ -241,8 +219,7 @@ class MarketsAnalyst:
             everything = [c for cases in by_symbol.values() for c in cases]
             scored, _ = walk_forward(everything, self.cfg)
             results.append({"section": self.section, "grp": grp, "label": self.cfg["groups"][grp]["label"], "question": self.question,
-                            "method": METHOD, "method_version": METHOD_VERSION, **judge(scored), "details": {"zones": zone_table(everything), "symbols": len(by_symbol)}})
+                            "method": METHOD, "method_version": METHOD_VERSION, **judge(scored), "details": {"zones": zone_table(everything), "labels": {"up": "up", "flat": "within", "down": "down"},
+                                                                                            "note": f"{len(by_symbol)} instruments"}})
         return results
 
-
-__all__ = ["MarketsAnalyst", "VERDICTS"]

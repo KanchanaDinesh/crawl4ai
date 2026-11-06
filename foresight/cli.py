@@ -1,8 +1,8 @@
 """python -m foresight <command>
 
-    run    [--section markets]   check the forecasts that are due, then make today's (at most one per question per day)
-    test   [--section markets]   how the method would have done on the past, against a normal-week guess
-    show   [--section markets] [--subject BTC] [--zone oversold] [--limit 30]   the latest forecasts and how far to trust them
+    run    [--section markets|news]   check the forecasts that are due, then make today's (at most one per question per day)
+    test   [--section markets|news]   how the method would have done on the past, against the simple guess
+    show   [--section markets|news] [--subject BTC] [--zone oversold] [--limit 30]   the latest forecasts and how far to trust them
     score                        the live track record: only forecasts saved before their outcome
 
 Scenarios with odds, not promises, and numbers only: never advice to buy or sell. Settings: foresight/config/settings.json.
@@ -49,20 +49,23 @@ def _load(analyst, reader):
     try:
         return analyst.load(reader)
     except psycopg.errors.UndefinedTable:
-        sys.exit(f"{analyst.section} has no data yet. For markets, run:  uv run python -m markets closes")
+        sys.exit(f"{analyst.section} has no data yet. Run its collector first (markets: python -m markets closes, news: python -m worldnews run).")
 
 
 def run_section(analyst, store: ForesightStore, reader, today: date) -> dict:
     """Checks first, so a forecast made today can't be mistaken for a checked one, and the record is up to date."""
     data = _load(analyst, reader)
+    if hasattr(analyst, "remember"):
+        analyst.remember(data, store)
     outcomes = [o for row in store.due(analyst.section, today) if (o := analyst.check(row, data))]
     store.save_outcomes(outcomes)
     rows, not_made = analyst.forecast(data, today)
     made = store.save_forecasts(rows)
     stale = [g for g, d in data.last_day.items() if d < today - timedelta(days=STALE_DAYS)]
-    note = f"prices are old for: {', '.join(stale)}" if stale else None
+    note = f"data is old for: {', '.join(stale)}" if stale else None
     store.save_run(analyst.section, made, len(outcomes), dict(not_made), note)
-    return {"section": analyst.section, "made": made, "checked": len(outcomes), "not_made": dict(not_made), "stale": stale}
+    return {"section": analyst.section, "made": made, "checked": len(outcomes), "not_made": dict(not_made), "stale": stale,
+            "progress": analyst.progress(data) if hasattr(analyst, "progress") else []}
 
 
 def cmd_run(args) -> None:
@@ -72,8 +75,10 @@ def cmd_run(args) -> None:
         print(f"{r['section']}: {r['made']} new forecasts, {r['checked']} checked.")
         for why, n in sorted(r["not_made"].items(), key=lambda x: -x[1]):
             print(f"  no forecast for {n}: {why}")
+        for line in r["progress"]:
+            print(f"  {line}")
         if r["stale"]:
-            print(f"  The prices are more than {STALE_DAYS} days old for {', '.join(r['stale'])}. Run first:  uv run python -m markets closes")
+            print(f"  The data is more than {STALE_DAYS} days old for {', '.join(r['stale'])}. Run its collector first.")
     store.close()
     reader.close()
 
@@ -85,16 +90,19 @@ def _pct(v) -> str:
 def cmd_test(args) -> None:
     store, reader = ForesightStore(), _reader()
     for analyst in _analysts(args):
-        for r in analyst.test(_load(analyst, reader)):
+        data = _load(analyst, reader)
+        if hasattr(analyst, "remember"):
+            analyst.remember(data, store)
+        for r in analyst.test(data):
             store.save_backtest(r)
             print(f"\n{r['label']} ({r['section']}, {r['question']}): {VERDICTS[r['verdict']]}.")
             if r["skill"] is not None:
                 range_text = f", 90% range {r['skill_low'] * 100:+.1f}% to {r['skill_high'] * 100:+.1f}%" if r["skill_low"] is not None else ""
                 print(f"  {r['cases']:,} scored days across {r['weeks']} weeks, {r['first_day']} to {r['last_day']}. "
                       f"Skill {r['skill'] * 100:+.1f}%{range_text}.")
-            print(f"  What happened next, by zone (of {r['details']['symbols']} instruments):")
+            print(f"  What happened next ({r['details']['note']}):")
             for name, z in r["details"]["zones"].items():
-                print(f"    {name:<11} {z['cases']:>7,} days   up {_pct(z['up']):>4}   within {_pct(z['flat']):>4}   down {_pct(z['down']):>4}")
+                print(f"    {name:<14} {z['cases']:>7,} cases   " + "   ".join(f"{label} {_pct(z[k]):>4}" for k, label in r["details"]["labels"].items()))
     print("\nA test on the past can flatter; only the live record counts in the end (python -m foresight score). Not advice.")
     store.close()
     reader.close()
@@ -102,23 +110,32 @@ def cmd_test(args) -> None:
 
 def cmd_score(args) -> None:
     reader = _reader()
-    rows = reader.execute("""select section, grp, question, checked, score, normal_score, skill from foresight.v_track_record order by 1, 2, 3""").fetchall()
+    rows = reader.execute("""select section, grp, question, checked, score, normal_score, skill, not_checkable from foresight.v_track_record order by 1, 2, 3""").fetchall()
     reader.close()
     if not rows:
-        print("No forecast has reached its date yet. The first ones are checked 7 days after the first run.")
-    for section, grp, question, checked, score, normal, skill in rows:
+        print("No forecast has reached its date yet.")
+    for section, grp, question, checked, score, normal, skill, not_checkable in rows:
+        extra = f", {not_checkable:,} couldn't be checked (nothing was collected on the date)" if not_checkable else ""
+        if not checked:
+            print(f"{section} {grp} {question}: none scored yet{extra}.")
+            continue
         word = "better than" if skill > 0 else "worse than" if skill < 0 else "the same as"
-        print(f"{section} {grp} {question}: {checked:,} checked, {abs(skill) * 100:.1f}% {word} the normal-week guess "
-              f"(score {score:.3f}, guess {normal:.3f}). Early numbers can be luck.")
+        print(f"{section} {grp} {question}: {checked:,} checked, {abs(skill) * 100:.1f}% {word} the simple guess "
+              f"(score {score:.3f}, guess {normal:.3f}){extra}. Early numbers can be luck.")
 
 
 def cmd_show(args) -> None:
     reader = _reader()
-    tests = reader.execute("""select distinct on (section, grp) section, grp, verdict, skill from foresight.backtests order by section, grp, run_at desc""").fetchall()
-    for section, grp, verdict, skill in tests:
-        print(f"{section} {grp}: on the past, {VERDICTS[verdict]}" + (f" (skill {skill * 100:+.1f}%)" if skill is not None else "") + ".")
-    if tests and all(t[2] != "better" for t in tests):
-        print("So read the odds below as about the same as a normal week. The useful part is each one's usual move.")
+    tests = reader.execute("""select distinct on (section, grp, question) section, grp, verdict, skill, question from foresight.backtests order by section, grp, question, run_at desc""").fetchall()
+    for section, grp, verdict, skill, question in tests:
+        print(f"{section} {question}: on the past, {VERDICTS[verdict]}" + (f" (skill {skill * 100:+.1f}%)" if skill is not None else "") + ".")
+    market_tests = [t for t in tests if t[0] == "markets"]
+    if market_tests and all(t[2] != "better" for t in market_tests) and args.section in (None, "markets"):
+        print("So read the markets odds below as about the same as a normal week. The useful part is each one's usual move.")
+    for analyst in _analysts(args):
+        if hasattr(analyst, "progress"):
+            for line in analyst.progress(_load(analyst, reader)):
+                print(f"{analyst.section}: {line}")
     where, params = ["true"], []
     if args.section:
         where.append("section = %s"); params.append(args.section)

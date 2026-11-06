@@ -17,8 +17,8 @@ RESAMPLES = 2000
 RANGE = 0.90
 MIN_WEEKS_FOR_VERDICT = 8
 
-VERDICTS = {"better": "better than a normal-week guess", "worse": "worse than a normal-week guess",
-            "no_difference": "no clear difference from a normal-week guess: any gap could be luck",
+VERDICTS = {"better": "better than the simple guess", "worse": "worse than the simple guess",
+            "no_difference": "no clear difference from the simple guess: any gap could be luck",
             "too_little": "too little history to tell"}
 
 
