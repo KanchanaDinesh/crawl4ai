@@ -17,6 +17,7 @@ dependencies = [
     "django-axes>=8.3.1,<9",
     "argon2-cffi>=25.1",
     "openpyxl>=3.1.5,<4",
+    "weasyprint>=66,<71",
 ]
 
 [tool.uv]

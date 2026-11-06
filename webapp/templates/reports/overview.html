@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Reports</h1><p class="muted">A dashboard as a PDF, whenever you ask or on a schedule.</p></div></div>
+<section class="card"><h2>Your reports</h2>
+  {% if reports %}<div class="table-wrap"><table class="list"><thead><tr><th>Report</th><th>Prints</th><th>When</th><th>Who</th></tr></thead><tbody>
+  {% for r in reports %}<tr><td><a href="{% url 'report' r.pk %}">{{ r.name }}</a></td><td class="small">{{ r.dashboard.name }}</td><td class="small">{% if r.schedule == "weekly" %}Every {{ r.get_weekday_name }}{% elif r.schedule == "daily" %}Every day{% elif r.schedule == "monthly" %}Every month{% else %}<span class="muted">When asked</span>{% endif %}</td><td class="small muted">{% if r.owner_id != user.pk %}{{ r.owner.get_username }}{% elif r.shared %}Shared{% else %}Private{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">None yet.</p>{% endif %}</section>
+<form method="post" class="card form">{% csrf_token %}
+  <h2>New report</h2>
+  {% if boards %}{% include "reports/_form_fields.html" %}<div class="form-actions"><button class="btn primary" type="submit">Make the report</button></div>
+  {% else %}<p class="muted">A report prints a dashboard, so make one first, under <a href="{% url 'charts' %}">Charts</a>.</p>{% endif %}
+</form>
+{% endblock %}

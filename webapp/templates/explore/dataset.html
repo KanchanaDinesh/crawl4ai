@@ -20,6 +20,7 @@
     <span class="toolbar-gap"></span>
     {% if ds.record_key %}<a class="btn" href="{% url 'dataset_fields' ds.ref %}">Fields</a>
     <a class="btn" href="{% url 'dataset_changes' ds.ref %}">Changes</a>{% endif %}
+    <a class="btn" id="chartit" href="#" hidden>Chart</a>
     <button class="btn" type="button" id="savetable" hidden>Save as table</button>
     <button class="btn primary" type="button" id="addrow" hidden>Add row</button>
     <button class="btn" type="button" id="clearfilters">Clear filters</button>

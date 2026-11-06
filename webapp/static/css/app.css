@@ -63,7 +63,7 @@ h2 { font-size: 16px; margin: 0 0 8px; }
 .btn.danger { color: var(--bad); }
 .btn.link { border: 0; background: none; padding: 0; color: var(--accent); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
-input[type=text], input[type=search], input[type=email], input[type=password], input[type=date], select, textarea {
+input[type=text], input[type=search], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea {
   font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 0; }
 label { font-weight: 500; }
 .field { display: grid; gap: 4px; }
@@ -71,7 +71,7 @@ label { font-weight: 500; }
 .field ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .field ul label { font-weight: 400; }
 .errorlist { color: var(--bad); margin: 0; padding-left: 18px; font-size: 13px; }
-.form { display: grid; gap: 14px; max-width: 560px; }
+.form { display: grid; gap: 14px; max-width: 560px; align-content: start; }
 .form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
 .toolbar input[type=search] { flex: 1 1 220px; }
@@ -191,3 +191,23 @@ table.matrix .sec td { background: var(--surface-2); font-size: 12px; text-trans
 .nowrap { white-space: nowrap; }
 .hist { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .hist:last-child { border-bottom: 0; }
+
+/* chart colours: checked with the dataviz palette validator in both themes (see webapp/insights/charts.py) */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; } }
+:root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; }
+
+/* charts and dashboards */
+.chart-builder { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .chart-builder { grid-template-columns: minmax(0, 1fr); } }
+.builder-side, #fields { display: grid; gap: 10px; }
+.filters-set { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: grid; gap: 6px; min-width: 0; }
+.filters-set legend { font-weight: 500; font-size: 13px; padding: 0 4px; }
+.filters-set .toolbar select, .filters-set .toolbar input { flex: 1 1 110px; width: 100%; }
+.builder-preview { min-height: 380px; align-content: start; position: sticky; top: 12px; }
+.big-number { font-size: 44px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+@media (max-width: 500px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
+.dash-grid .wide { grid-column: 1 / -1; }
+.tile-tools { margin-top: 8px; }
+

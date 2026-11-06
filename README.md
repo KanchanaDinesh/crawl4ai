@@ -198,6 +198,14 @@ them: text, number, money, date, yes/no, one or several choices, web address, em
 that table gets a column showing what links to each row. A **lookup** shows a field of the linked rows; a **rollup** counts them or adds
 them up. For example: link vehicle ads to a Dealers table, and each dealer shows its ad count and total asking price.
 
+### Charts, dashboards and reports
+
+**Charts:** press **New chart**, or **Chart** on any dataset's page: choose what to group by and what to work out, and the preview
+draws it as you go. Put charts on a **dashboard** (Arrange). Charts are worked out when they're opened, so they're always current.
+
+**Reports:** a dashboard as a PDF, whenever you ask or every day, week or month. Scheduled ones are made by the `reports` step of
+`./run_all.sh`, into `output/reports/`: a run that's missed happens at the next one. PDFs need Pango (`brew install pango`).
+
 ## Testing everything
 
 ```bash
@@ -289,7 +297,7 @@ run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); s
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               PostgreSQL: connections, setup and checks (postgres.py), tables (schema/), the `python -m warehouse` query tool
-webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids, the dashboard, own tables (docs/user-platform-plan.md)
+webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids, the dashboard, own tables, charts, reports (docs/user-platform-plan.md)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)

@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ report.name }}{% endblock %}
+{% block head %}{% include "reports/_style.html" %}<style>.r-sheet { background: #fff; padding: 28px 32px; border-radius: 4px; max-width: 800px; }</style>{% endblock %}
+{% block content %}
+<div class="page-head"><p class="muted">How the PDF will look, with the data you may see.</p><a href="{% url 'report' report.pk %}">Back to the report</a></div>
+<div class="r-sheet r-doc">{% include "reports/_body.html" %}</div>
+{% endblock %}

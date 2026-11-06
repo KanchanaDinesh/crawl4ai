@@ -1,0 +1,5 @@
+{% load insights_ui %}{% if problem %}<div class="muted small">{{ problem }}</div>
+{% elif kind == "number" %}<div class="big-number">{{ number }}</div><div class="muted small">{{ data.measure_label }}</div>
+{% elif kind == "table" %}{% if rows %}<div class="scroll"><table class="plain"><thead><tr>{% for h in heads %}<th{% if not forloop.first %} class="num"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for v in row %}<td{% if not forloop.first %} class="num"{% endif %}>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% else %}<div class="muted small">No rows match.</div>{% endif %}
+{% else %}{% chart figure chart.name %}{% endif %}
+{% if data.note %}<div class="muted small">{{ data.note }}</div>{% endif %}

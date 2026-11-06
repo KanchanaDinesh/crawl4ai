@@ -114,7 +114,7 @@ def dataset_page(request, ref):
         "currentView": current["id"] if current else None, "state": current["state"] if current else None,
         "canExport": rights.can_export(request.user, ds), "exportLimit": export.LIMIT,
         "canEdit": may_edit, "canHide": may_hide, "hasRecords": has_records, "maxBulk": MAX_BULK, "isOwn": ds.is_own,
-        "canMakeTables": can_open(request.user, "my_tables"),
+        "canMakeTables": can_open(request.user, "my_tables"), "canChart": can_open(request.user, "charts"), "chartUrl": reverse("chart_new"),
         "defaultSort": {"field": ds.default_sort_field, "dir": ds.default_sort_dir} if ds.default_sort_field in fields else None,
         "urls": {"rows": reverse("dataset_rows", args=[ds.ref]), "export": reverse("dataset_export", args=[ds.ref, "FMT"]),
                  "save": reverse("dataset_view_save", args=[ds.ref]),

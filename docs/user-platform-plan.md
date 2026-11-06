@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 to 5 built (2026-11-06); grid: Tabulator; phase 6 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 6 built (2026-11-06); grid: Tabulator; phase 7 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -270,6 +270,39 @@ Known limits, for later: a link shows a collected row's name as it was when link
 one dataset, so a Status on Companies isn't on Company records; anyone who can see a dataset sees its own fields; an Excel file's
 first sheet only; a removed field or table has no "bring back" button yet (its data is kept).
 
+## Phase 6 results (2026-11-06)
+
+**The plan's test works:** build charts, put them on a dashboard, make a weekly report of it, and `./run_all.sh reports` writes the PDF
+to `output/reports/`. Running it again the same day makes nothing, because nothing is due. On the real data's copy: 4 A4 pages, 64 KB, 1.5 s.
+
+**Charts** (`webapp/charts/`, menu Charts): choose a dataset, what to group by, an optional split, what to work out (count, sum,
+average, smallest, largest) and filters; a live preview draws it before anything is saved. Columns, bars, line, stacked area, doughnut,
+one number, table. The **Chart** button on a dataset's page starts one with that grid's filters. A chart stores the choices, never SQL or
+numbers: it's worked out when opened, for the person looking, from the same `query.value_expr` as the grid, so own fields, links,
+rollups and hidden rows all behave, and a chart whose data someone may not see says so instead of showing. A list counts once
+per item. At most 8 series (the palette's limit) and the biggest groups, with the rest added into Other where that makes sense (not for averages).
+
+**Dashboards:** charts in a grid, each loading on its own; Arrange adds, orders, widens and removes. Private until shared.
+
+**Reports** (`webapp/reports/`, menu Reports): a dashboard as a PDF: on demand or daily, weekly or monthly, with an opening text and the
+numbers under each chart. WeasyPrint, as planned. **Charts in PDFs are drawn by `charts/svg.py`, not plotly.js**, because a PDF can't
+run a script, and the Plotly route to static pictures needs a browser on the server. They use the same colours and numbers. A
+report fetches nothing from outside (`no_fetching`), so text from collected pages can't make the server go anywhere.
+
+**Schedule:** run_all step `reports` (in the default STEPS), `python -m webapp run_reports`. Because Kanchana runs things by hand, a report
+is made at the first run after it's due: a missed one happens at the next chance, and the first one straight away. It runs with its
+owner's rights; a person who has left gets none. A failure is kept on the report's page, the step fails, and it tries again next time.
+
+**A PDF holds what its maker could see:** someone else can download it only if they may see all of its data.
+
+**Needs Pango** (`brew install pango`, already on the Mac; `apt install libpango-1.0-0 libpangoft2-1.0-0` on a server). The app says so if
+it's missing. Homebrew's folder is added when WeasyPrint loads (`making._weasyprint`), because setting it in the environment doesn't reach
+every way a program gets started here.
+
+Known limits, for later: nothing is emailed yet (the PDFs wait in `output/reports/` and on the report's page); a chart can't be copied into your
+own, only shared; no custom report layouts beyond the dashboard's order; charts can't compare two datasets (a link and a rollup can do part
+of that); the plotly Python package still isn't needed.
+
 ## How it fits together
 
 ```
@@ -449,7 +482,7 @@ only the web app (port 8060).
 | 3 ✅ | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
 | 4 ✅ | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
 | 5 ✅ | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
-| 6 | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |
+| 6 ✅ | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |
 | 7 | **AI assistant:** catalog-only SQL, preview, save as live dataset, limits, logging | "Sri Lankan companies in the news this month with LinkedIn" gives a correct, saved, updating dataset |
 | 8 | **Server:** deployment with HTTPS, two-step login, backups there, monitoring | The team uses it from their own computers |
 

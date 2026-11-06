@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}Charts{% endblock %}
+{% block head %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Charts and dashboards</h1><p class="muted">Build a chart from any dataset you can see, then arrange charts on a dashboard. They're worked out when they're opened, so they're always up to date.</p></div>
+  <a class="btn primary" href="{% url 'chart_new' %}">New chart</a></div>
+<section class="card"><h2>Dashboards</h2>
+  {% if dashboards %}<div class="ds-cards">{% for b in dashboards %}<a class="card ds-card" href="{% url 'dashboard_page' b.pk %}"><strong>{{ b.name }}</strong><span class="muted small">{{ b.description }}</span>
+    <span class="small muted">{% if b.owner_id != user.pk %}From {{ b.owner.get_username }}{% elif b.shared %}Shared{% else %}Private{% endif %}</span></a>{% endfor %}</div>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+  <form method="post" action="{% url 'dashboard_new' %}" class="toolbar">{% csrf_token %}<input type="text" name="name" maxlength="120" placeholder="New dashboard's name" aria-label="New dashboard's name" required><button class="btn" type="submit">Make a dashboard</button></form>
+</section>
+<section class="card"><h2>Charts</h2>
+  {% if charts %}<div class="table-wrap"><table class="list"><thead><tr><th>Chart</th><th>Data</th><th>Who</th></tr></thead><tbody>
+  {% for c in charts %}<tr><td><a href="{% url 'chart' c.pk %}">{{ c.name }}</a></td><td class="small">{{ c.dataset.label }}</td><td class="small muted">{% if c.owner_id != user.pk %}{{ c.owner.get_username }}{% elif c.shared %}Shared{% else %}Private{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">None yet. Press <b>New chart</b>, or <b>Chart</b> on any dataset's page.</p>{% endif %}
+</section>
+{% endblock %}

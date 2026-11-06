@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}{{ saved.name|default:"New chart" }}{% endblock %}
+{% block head %}{% include "charts/_scripts.html" %}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ saved.name|default:"New chart" }}</h1><a href="{% url 'charts' %}">All charts</a></div>
+<form method="post" class="chart-builder" id="builder" hx-get="{% url 'chart_preview' %}" hx-target="#preview" hx-trigger="load, change, input[target.type==='text'] delay:500ms" hx-sync="this:replace" hx-params="not csrfmiddlewaretoken">{% csrf_token %}
+  <div class="card builder-side">
+    <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" value="{{ chart.name|default:'' }}" maxlength="120" placeholder="e.g. Ads per day"></div>
+    <div class="field"><label for="dataset">Data</label><select id="dataset" name="dataset" hx-get="{% url 'chart_fields' %}" hx-target="#fields" hx-trigger="change" hx-include="this"><option value="">Choose a dataset</option>
+      {% regroup datasets by schema as groups %}{% for g in groups %}<optgroup label="{{ g.grouper }}">{% for d in g.list %}<option value="{{ d.ref }}"{% if d.pk == ds.pk %} selected{% endif %}>{{ d.label }}</option>{% endfor %}</optgroup>{% endfor %}</select></div>
+    <div id="fields">{% include "charts/_builder_fields.html" %}</div>
+    <div class="form-actions"><button class="btn primary" type="submit">{% if saved %}Save{% else %}Save the chart{% endif %}</button></div>
+  </div>
+  <div class="card builder-preview"><h2>Preview</h2><div id="preview" class="muted">Choose a dataset and what to group by.</div></div>
+</form>
+{% if saved %}<form method="post" action="{% url 'chart_delete' saved.pk %}" class="toolbar">{% csrf_token %}<button class="btn link danger" type="submit">Delete this chart</button></form>{% endif %}
+{% endblock %}

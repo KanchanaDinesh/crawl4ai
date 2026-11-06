@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}{{ board.name }}{% endblock %}
+{% block head %}{% include "charts/_scripts.html" %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ board.name }}</h1><p class="muted">{{ board.description }}</p></div>
+  <div class="toolbar">{% if may_change %}{% if arranging %}<a class="btn primary" href="{% url 'dashboard_page' board.pk %}">Done</a>{% else %}<a class="btn" href="?arrange=1">Arrange</a>{% endif %}{% endif %}<a href="{% url 'charts' %}">All charts</a></div></div>
+{% if arranging %}<div class="card"><div class="grid-2">
+  <form method="post" action="{% url 'dashboard_change' board.pk %}" class="form">{% csrf_token %}<input type="hidden" name="action" value="details">
+    <div class="field"><label for="bname">Name</label><input type="text" id="bname" name="name" value="{{ board.name }}" maxlength="120"></div>
+    <div class="field"><label for="bdesc">What it's for</label><input type="text" id="bdesc" name="description" value="{{ board.description }}" maxlength="300"></div>
+    <label class="small" style="font-weight:400"><input type="checkbox" name="shared"{% if board.shared %} checked{% endif %}> Share with everyone who has Charts</label>
+    <span class="help">Each person only sees the charts whose data they may see.</span>
+    <div class="form-actions"><button class="btn" type="submit">Save</button></div></form>
+  <form method="post" action="{% url 'dashboard_change' board.pk %}" class="form">{% csrf_token %}<input type="hidden" name="action" value="add">
+    <div class="field"><label for="addchart">Add a chart</label><select id="addchart" name="chart" required><option value="">Choose a chart</option>{% for c in choices %}<option value="{{ c.pk }}">{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-actions"><button class="btn" type="submit">Add</button><a class="btn" href="{% url 'chart_new' %}">New chart</a></div></form>
+</div></div>{% endif %}
+<div class="dash-grid">
+  {% for item in items %}<section class="panel{% if item.wide %} wide{% endif %}">
+    <h3><span>{% if may_change %}<a href="{% url 'chart' item.chart.pk %}">{{ item.chart.name }}</a>{% else %}{{ item.chart.name }}{% endif %}</span><small>{{ item.chart.dataset.label }}</small></h3>
+    <div hx-get="{% url 'chart_tile' item.chart.pk %}" hx-trigger="load"><div class="muted small">Working it out…</div></div>
+    {% if arranging %}<form method="post" action="{% url 'dashboard_change' board.pk %}" class="toolbar tile-tools">{% csrf_token %}<input type="hidden" name="item" value="{{ item.pk }}">
+      <button class="btn" name="action" value="up" type="submit"{% if forloop.first %} disabled{% endif %}>Earlier</button><button class="btn" name="action" value="down" type="submit"{% if forloop.last %} disabled{% endif %}>Later</button>
+      <button class="btn" name="action" value="wide" type="submit">{% if item.wide %}Half width{% else %}Full width{% endif %}</button><button class="btn danger" name="action" value="remove" type="submit">Take off</button></form>{% endif %}
+  </section>{% empty %}<div class="card muted">No charts on this dashboard yet.{% if may_change and not arranging %} Press <b>Arrange</b> to add some.{% endif %}</div>{% endfor %}
+</div>
+{% if arranging %}<form method="post" action="{% url 'dashboard_delete' board.pk %}" class="toolbar">{% csrf_token %}<button class="btn link danger" type="submit">Delete this dashboard</button></form>{% endif %}
+{% endblock %}

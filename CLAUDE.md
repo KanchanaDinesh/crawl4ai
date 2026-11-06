@@ -43,7 +43,8 @@ warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schem
 webapp/          the user platform (Django + HTMX): python -m webapp runserver 8060; its tables in schema `app`.
                  catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them;
                  insights/ = the dashboard's five tabs (queries.py is the SQL, also used by the tools' `show` commands);
-                 userdata/ = own tables, own fields, links, imports (schema `userdata`, values in JSONB)
+                 userdata/ = own tables, own fields, links, imports (schema `userdata`, values in JSONB);
+                 charts/ = chart builder, dashboards; reports/ = PDFs (WeasyPrint needs Pango: brew install pango)
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
 automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Open issues")

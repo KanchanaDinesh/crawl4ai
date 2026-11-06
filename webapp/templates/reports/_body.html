@@ -1,0 +1,11 @@
+<header class="r-head"><h1>{{ report.name }}</h1><p class="r-meta">{{ report.dashboard.name }} · {{ made_at|date:"j F Y, H:i" }}</p></header>
+{% for p in paragraphs %}<p class="r-intro">{{ p }}</p>{% endfor %}
+{% for s in sections %}<section class="r-section">
+  <h2>{{ s.name }}</h2><p class="r-source">{{ s.dataset }}</p>
+  {% if s.problem %}<p class="r-note">{{ s.problem }}</p>
+  {% elif s.number %}<p class="r-number">{{ s.number }}</p><p class="r-source">{{ s.measure }}</p>
+  {% else %}{% if s.svg %}<div class="r-chart">{{ s.svg|safe }}</div>{% endif %}{% if s.empty %}<p class="r-note">No rows match.</p>{% endif %}
+    {% if s.rows %}<table class="r-table"><thead><tr>{% for h in s.heads %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>{% for row in s.rows %}<tr>{% for v in row %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+    {% if s.more %}<p class="r-note">And {{ s.more }} more rows.</p>{% endif %}{% endif %}{% endif %}
+  {% if s.note %}<p class="r-note">{{ s.note }}</p>{% endif %}
+</section>{% empty %}<p class="r-note">This dashboard has no charts yet.</p>{% endfor %}

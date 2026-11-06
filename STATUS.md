@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 282 tests pass.
+All 333 tests pass.
 
 ## Parts and how to run them
 
@@ -30,7 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-5: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), and own tables, own fields, links, lookups, rollups and imports. Django; schema `app`. The server restarts by itself after a code change |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-5: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, and charts, dashboards and PDF reports. Django; schema `app`. The server restarts by itself after a code change |
 | Dashboard | In the web app: http://localhost:8060/dashboard/ (`webapp/insights/`) | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. Charts in Plotly. `python -m dashboard` (the old aiohttp page on port 8050) only says where it went |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -432,6 +432,13 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       Company websites, Tech companies). Fixed for the grid and exports.
     - Checked on a temporary copy of the database, then deleted: the real database has none of the test tables.
     - **Next: phase 6** (charts, dashboards, PDF reports).
+52. **User platform phase 6 built (2026-11-06): charts, dashboards, PDF reports.** `webapp/charts/` (a builder with a live preview over any
+    dataset; columns, bars, line, area, doughnut, one number, table; dashboards that arrange them) and `webapp/reports/` (a dashboard as a
+    PDF, on demand or daily/weekly/monthly). New run_all step `reports` (in the default STEPS), writing to `output/reports/`. WeasyPrint needs
+    Pango (`brew install pango`, already on this Mac). Details: `docs/user-platform-plan.md` → "Phase 6 results".
+    - PDFs draw their own charts as SVG (`charts/svg.py`), since a PDF can't run plotly.js. Same colours, same numbers.
+    - Checked on a temporary copy of the database with `./run_all.sh reports`, then deleted: the real database has no test charts.
+    - **Next: phase 7** (AI assistant: catalog-only SQL, preview, save as live dataset, limits, logging).
 
 ## Open issues and things to watch
 
@@ -480,7 +487,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phases 1-5 are built; phase 6 is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-6 are built; phase 7 is next. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).

@@ -47,6 +47,11 @@ def _layout(height: int, legend: bool) -> dict:
     return layout
 
 
+def base_layout(height: int, legend: bool) -> dict:
+    """The axes, hover and colours every chart in the app shares."""
+    return _layout(height, legend)
+
+
 def day_columns(rows, total: str, part: str | None = None, part_label: str = "", rest_label: str = "",
                 height: int = 150) -> dict:
     """Columns for the last 14 days; `part` of each day's `total` is stacked at the bottom in its own colour."""

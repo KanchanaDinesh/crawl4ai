@@ -98,6 +98,15 @@
     } catch (err) { status(err.message, true); }
   });
 
+  // ── a chart of what's on screen: the same filters come along ──
+  $("chartit").hidden = !config.canChart;
+  $("chartit").addEventListener("click", (e) => {
+    const qs = new URLSearchParams({ dataset: config.ref });
+    const filters = grid.params().filters;
+    if (filters) qs.set("filters", filters);
+    e.currentTarget.href = `${config.chartUrl}?${qs}`;
+  });
+
   // ── own tables: a new row; any rows: a copy as a table of one's own ──
   $("addrow").hidden = !(config.isOwn && config.canEdit);
   $("addrow").addEventListener("click", async () => {

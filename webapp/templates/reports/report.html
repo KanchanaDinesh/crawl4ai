@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load tz %}{% block title %}{{ report.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ report.name }}</h1><p class="muted">Prints <a href="{% url 'dashboard_page' report.dashboard_id %}">{{ report.dashboard.name }}</a>{% if report.owner_id != user.pk %}, from {{ report.owner.get_username }}{% endif %}.</p></div>
+  <div class="toolbar"><a class="btn" href="{% url 'report_preview' report.pk %}">See it on screen</a>
+    <form method="post" action="{% url 'report_make' report.pk %}">{% csrf_token %}<button class="btn primary" type="submit">Make the PDF now</button></form><a href="{% url 'reports' %}">All reports</a></div></div>
+<section class="card"><h2>PDFs made</h2>
+  {% if runs %}<div class="table-wrap"><table class="list"><thead><tr><th>When</th><th>Made</th><th>By</th><th>File</th></tr></thead><tbody>
+  {% for r in runs %}<tr><td class="nowrap small">{{ r.made_at|localtime|date:"Y-m-d H:i" }}</td><td class="small">{% if r.scheduled %}On schedule{% else %}Asked for{% endif %}</td><td class="small">{{ r.made_by.get_username }}</td>
+    <td class="small">{% if r.problem %}<span class="pill bad">failed</span> {{ r.problem }}{% elif may_download or r.made_by_id == user.pk %}<a href="{% url 'report_download' report.pk r.pk %}">{{ r.filename }}</a> <span class="muted">{{ r.size|filesizeformat }}</span>{% else %}<span class="muted">Holds data your roles don't include</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">None yet.</p>{% endif %}</section>
+{% if may_change %}<form method="post" class="card form">{% csrf_token %}<h2>Settings</h2>{% include "reports/_form_fields.html" %}<div class="form-actions"><button class="btn" type="submit">Save</button></div></form>
+<form method="post" action="{% url 'report_delete' report.pk %}" class="toolbar">{% csrf_token %}<button class="btn link danger" type="submit">Delete this report</button></form>{% endif %}
+{% endblock %}
