@@ -29,8 +29,8 @@ def iso(dt: datetime | None) -> str | None:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
 
 
-def parse_date(value) -> str | None:
-    """Many date formats -> ISO UTC string ('2026-11-02T08:15:00Z'), or None."""
+def parse_date(value, naive_zone=timezone.utc) -> str | None:
+    """Many date formats -> ISO UTC string ('2026-11-02T08:15:00Z'), or None. naive_zone: what a date with no time zone means (see collect.source_zone)."""
     if not value:
         return None
     if hasattr(value, "tm_year"):  # time.struct_time from feedparser (UTC)
@@ -40,7 +40,7 @@ def parse_date(value) -> str | None:
         try:
             dt = parser(text)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=naive_zone)
             return iso(dt)
         except (ValueError, TypeError, IndexError):
             continue
@@ -188,7 +188,7 @@ def selector_headlines(html: str, home_url: str, selectors: dict) -> list[dict]:
 
 
 # ── article pages ─────────────────────────────────────────────────────────
-def article_meta(html: str) -> dict:
+def article_meta(html: str, naive_zone=timezone.utc) -> dict:
     soup = BeautifulSoup(html, "html.parser")
 
     def meta(*names):
@@ -217,7 +217,7 @@ def article_meta(html: str) -> dict:
         time_tag = soup.find("time", datetime=True)
         published = time_tag["datetime"] if time_tag else None
     return {
-        "published_at": parse_date(published),
+        "published_at": parse_date(published, naive_zone),
         "summary": clean_text(meta("og:description", "description", "twitter:description")),
         "image": meta("og:image", "twitter:image"),
     }

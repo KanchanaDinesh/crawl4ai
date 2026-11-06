@@ -71,6 +71,30 @@ class NewsStore:
                 group_code, topics, tech_terms, image, first_seen_at, last_seen_at, times_seen)
                 values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on conflict (url) do nothing""", rows)
 
+    def clean_saved(self) -> dict:
+        """Applies cleaning's rules to everything already saved, in one transaction. Safe to repeat: the second time changes nothing."""
+        from warehouse.postgres import clean_text as t
+
+        from .cleaning import clean_item
+        rows = self.con.execute("select url, title, summary, published_at from news.news_items").fetchall()
+        changes, counts, examples = [], {"titles": 0, "summaries": 0, "dates": 0}, []
+        for url, title, summary, published in rows:
+            item = clean_item({"title": title, "summary": summary, "published_at": published})
+            new_date = item["published_at"] if published is None else None
+            if item["title"] == (title or "") and item["summary"] == (summary or "") and new_date is None:
+                continue
+            counts["titles"] += item["title"] != (title or "")
+            counts["summaries"] += item["summary"] != (summary or "")
+            counts["dates"] += new_date is not None
+            if item["title"] != (title or "") and len(examples) < 5:
+                examples.append((title, item["title"]))
+            changes.append((t(item["title"]), t(item["summary"]), new_date, url))
+        if changes and not self.dry_run:
+            with self.con.transaction():
+                self.con.cursor().executemany("""update news.news_items set title = %s, summary = %s,
+                    published_at = coalesce(published_at, %s::timestamptz) where url = %s""", changes)
+        return {"rows": len(rows), "changed": len(changes), **counts, "examples": examples}
+
     # snapshots -------------------------------------------------------------
     def save_snapshot(self, snapshot: dict) -> Path:
         from warehouse.postgres import clean_text as t

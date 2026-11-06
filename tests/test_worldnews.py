@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from test_pipeline_e2e import Site   # tiny threaded HTTP server per fake site
-from worldnews import extract
-from worldnews.collect import run_collection, sort_latest
+from worldnews import cleaning, extract
+from worldnews.collect import run_collection, sort_latest, source_zone
 from worldnews.report import write_report
 from worldnews.settings import CONFIG_DIR, load_settings
 from worldnews.store import NewsStore
@@ -289,3 +289,95 @@ def test_a_refusing_site_is_not_opened_in_the_browser(news_env, monkeypatch):
         store.close()
     result = snap["sources"][0]
     assert opened == [] and result["status"] == "failed" and "refuses us" in result["error"]
+
+
+# ── cleaning ─────────────────────────────────────────────────────────
+@pytest.mark.parametrize("messy, clean", [
+    ("Trust Bill Passed 06-11-2026 | 7:10 AM Read more", "Trust Bill Passed"),
+    ("05-11-2026 | 12:37 PM Rain Hits the South COLOMBO (News 1st); Heavy rain fell across the...", "Rain Hits the South"),
+    ("02-11-2026 | 9:18 AM Showers Expected COLOMBO(News 1st): According to the Department of ...", "Showers Expected"),
+    ("02-11-2026 | 9:18 AM Showers Expected KANDY - (News 1st) - According to the...", "Showers Expected"),
+    ("New Village Project COLOMBO (News 1st): The laying of the stone at a ... 06-11-2026 | 7:06 AM Read more", "New Village Project"),
+])
+def test_titles_with_a_card_stuck_to_them(messy, clean):
+    assert cleaning.clean_title(messy) == clean
+    assert cleaning.clean_title(clean) == clean
+
+
+@pytest.mark.parametrize("title", ["Why you should read more", "U.S. markets fell.", "Fed holds rates | Markets rise", "Colombo stocks close 2-3-4 higher", "Why you should read more books", "Stocks fall... again", "Dow down 1,800 points"])
+def test_ordinary_headlines_are_left_alone(title):
+    assert cleaning.clean_title(title) == title
+
+
+def test_a_title_is_never_cleaned_away():
+    assert cleaning.clean_title("06-11-2026 | 7:10 AM Read more") == "06-11-2026 | 7:10 AM Read more"
+
+
+def test_the_date_on_a_card_is_sri_lankan_time():
+    assert cleaning.card_date("05-11-2026 | 12:37 PM Rain") == "2026-11-05T07:07:00Z"
+    assert cleaning.card_date("Rain 06-11-2026 | 7:10 AM Read more") == "2026-11-06T01:40:00Z"
+    assert cleaning.card_date("31-02-2026 | 7:10 AM Rain") is None and cleaning.card_date("Rain") is None
+    assert cleaning.clean_item({"title": "Rain falls hard 06-11-2026 | 7:10 AM", "published_at": "2026-01-01T00:00:00Z"})["published_at"] == "2026-01-01T00:00:00Z"
+
+
+@pytest.mark.parametrize("messy, clean", [
+    ("Comments", ""),
+    ("COLOMBO (News 1st): The bill passed yesterday.Through this, all trusts will become m - Get the latest breaking news and top stories from Sri Lanka, the latest political news", "The bill passed yesterday. Through this, all trusts will become…"),
+    ("COLOMBO (News 1st); The bill passed. - Get the latest breaking news and top stories from Sri Lanka…", "The bill passed."),
+    ("Tax delayed again. Read the full story on CryptoSlate Understand the crypto stories that matter. Get The Catalyst in your inbox", "Tax delayed again."),
+    ("Miners earn more. The post Miners Earn More first appeared on Bitcoin Magazine and is written by A Writer .", "Miners earn more."),
+    ("The post Only This first appeared on Bitcoin Magazine and is written by A Writer .", ""),
+])
+def test_summaries_lose_slogans(messy, clean):
+    assert cleaning.clean_summary(messy) == clean
+    assert cleaning.clean_summary(clean) == clean
+
+
+@pytest.mark.parametrize("text", ["The post office closed. Comments were sought.", "Readers left comments on the plan.", "Get the latest figures from Sri Lanka - a report.", "Read the full report here."])
+def test_ordinary_summaries_are_left_alone(text):
+    assert cleaning.clean_summary(text) == text
+
+
+def test_saved_headlines_can_be_cleaned_and_it_is_safe_to_repeat(news_env):
+    from warehouse import postgres
+    store = NewsStore(load_settings(news_env).data_dir)
+    store.append_items([
+        {"url": "https://n.lk/a", "title": "05-11-2026 | 12:37 PM Rain Hits the South COLOMBO (News 1st); Heavy rain...", "summary": "COLOMBO (News 1st): Heavy rain. - Get the latest breaking news and top stories from Sri Lanka", "collected_at": "2026-11-05T10:00:00Z"},
+        {"url": "https://hn/b", "title": "A plain story", "summary": "Comments", "published_at": "2026-11-05T09:00:00Z", "collected_at": "2026-11-05T10:00:00Z"},
+        {"url": "https://x/c", "title": "Nothing wrong here", "summary": "All fine.", "collected_at": "2026-11-05T10:00:00Z"}])
+    looked = NewsStore(store.root, dry_run=True)
+    assert looked.clean_saved()["changed"] == 2
+    assert store.con.execute("select title from news.news_items where url = 'https://n.lk/a'").fetchone()[0].startswith("05-11-2026")   # a dry run saves nothing
+    looked.close()
+    done = store.clean_saved()
+    assert (done["changed"], done["titles"], done["summaries"], done["dates"]) == (2, 1, 2, 1)
+    with postgres.connect("reader", autocommit=True) as con:
+        rows = {r[0]: r[1:] for r in con.execute("select url, title, summary, published_at from news.news_items")}
+    assert rows["https://n.lk/a"][:2] == ("Rain Hits the South", "Heavy rain.")
+    assert rows["https://n.lk/a"][2] == datetime(2026, 11, 5, 7, 7, tzinfo=timezone.utc)
+    assert rows["https://hn/b"][1] == "" and rows["https://x/c"] == ("Nothing wrong here", "All fine.", None)
+    assert store.clean_saved()["changed"] == 0
+    store.close()
+
+
+def test_a_run_saves_clean_headlines_with_the_date_from_the_card(news_env):
+    settings = load_settings(news_env)
+    home = "<html><body>" + "".join(f'<a href="/2026/11/0{i}/story-about-thing-{i}-here">0{i}-11-2026 | 9:0{i} AM Story about thing {i} here COLOMBO (News 1st): Words words...</a>' for i in (1, 2, 3)) + "</body></html>"
+    site = Site({"/": home})
+    store = NewsStore(settings.data_dir)
+    snapshot = asyncio.run(run_collection(settings, store, [{"name": "Newsfirst", "group": "LK", "homepage": f"http://{site.domain}/", "feeds": []}], 5, article_meta=False, use_browser=False))
+    saved = store.con.execute("select title, published_at from news.news_items order by published_at desc").fetchall()
+    store.close()
+    items = snapshot["sources"][0]["items"]
+    assert [i["title"] for i in items] == ["Story about thing 3 here", "Story about thing 2 here", "Story about thing 1 here"]      # newest first, from the card's date
+    assert items[0]["published_at"] == "2026-11-03T03:33:00Z"
+    assert saved[0] == ("Story about thing 3 here", datetime(2026, 11, 3, 3, 33, tzinfo=timezone.utc))
+
+
+def test_a_sri_lankan_site_writes_its_own_time():
+    page = "<meta itemprop='datePublished' content='2026-11-06 07:50:25'>"
+    assert extract.article_meta(page, source_zone({"group": "LK", "homepage": "https://x.lk/"}))["published_at"] == "2026-11-06T02:20:25Z"
+    assert extract.article_meta(page, source_zone({"group": "MARKETS", "homepage": "https://www.ft.lk/business/34"}))["published_at"] == "2026-11-06T02:20:25Z"
+    assert extract.article_meta(page, source_zone({"group": "US", "homepage": "https://x.com/"}))["published_at"] == "2026-11-06T07:50:25Z"
+    with_zone = "<meta itemprop='datePublished' content='2026-11-06T07:50:25+00:00'>"       # a date that says its zone keeps it
+    assert extract.article_meta(with_zone, source_zone({"group": "LK", "homepage": "https://x.lk/"}))["published_at"] == "2026-11-06T07:50:25Z"

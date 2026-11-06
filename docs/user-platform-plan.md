@@ -319,7 +319,7 @@ Someone else can download a PDF only if they may see all the datasets in it. Tex
 **The real thing:** all five ready-made ones on a copy of the real data: 0.2-1.9 s, 46-65 KB, 3 pages for Daily news.
 
 **Known limits:**
-- **Data quality shows.** Newsfirst's titles hold the date and first sentence, its summaries end in the site's own slogan, and Hacker News's summary is the word "Comments". That's the news collector's to fix.
+- **Data quality shows** in a PDF. The worst of the news collector's text was cleaned the same day (`worldnews/cleaning.py`): Newsfirst's titles and slogans, Hacker News's "Comments", CryptoSlate's and WordPress's trailing lines.
 - Nothing is emailed yet: PDFs wait in `output/reports/` and on the report's page.
 - Stories aren't merged: the same story from several sources appears each time. `worldnews analyze` already finds these and could feed a "biggest stories" section.
 - These are for people inside the team. The business plan's rule still holds for anything published: our own analysis, not sources' text.

@@ -21,8 +21,9 @@ import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
-from . import extract
+from . import cleaning, extract
 from .http import Http
 from .store import NewsStore
 from .tagging import TopicTagger
@@ -92,7 +93,14 @@ async def _from_feeds(ctx: Context, urls: list[str], home: str) -> tuple[list[di
     return [], None, "; ".join(errors) or None
 
 
-async def _add_article_meta(ctx: Context, items: list[dict]) -> None:
+def source_zone(source: dict):
+    """What a date with no time zone means on this site. Sri Lankan sites write their own time ("2026-11-06 07:50:25"); read as UTC, that was 5½ hours ahead, in the future. Others are left as UTC."""
+    if source.get("group") == "LK" or urlsplit(source.get("homepage", "")).netloc.endswith(".lk"):
+        return cleaning.CARD_TIME_ZONE
+    return timezone.utc
+
+
+async def _add_article_meta(ctx: Context, items: list[dict], naive_zone=timezone.utc) -> None:
     sem = asyncio.Semaphore(int(ctx.fetch_cfg.get("article_meta_concurrency", 6)))
 
     async def one(item):
@@ -101,7 +109,7 @@ async def _add_article_meta(ctx: Context, items: list[dict]) -> None:
                 return
             r = await ctx.http.get(item["url"])
             if r.ok and r.text:
-                meta = extract.article_meta(r.text)
+                meta = extract.article_meta(r.text, naive_zone)
                 item["published_at"] = item.get("published_at") or meta["published_at"]
                 item["summary"] = item.get("summary") or meta["summary"]
                 item["image"] = item.get("image") or meta["image"]
@@ -177,9 +185,11 @@ async def collect_source(ctx: Context, source: dict, limit: int) -> dict:
         if items and report["via"] and report["via"].startswith(("homepage", "selectors")):
             candidates = items[: max(limit * 2, limit + 5)]
             if ctx.article_meta and ctx.fetch_cfg.get("fetch_article_meta", True):
-                await _add_article_meta(ctx, candidates)
+                await _add_article_meta(ctx, candidates, source_zone(source))
             items = candidates
 
+    for item in items:
+        cleaning.clean_item(item)       # before sorting: a date can come out of the title
     items = sort_latest(items)[:limit]
     collected = utc_now()
     for rank, item in enumerate(items, 1):

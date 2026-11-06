@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 439 tests pass.
+All 466 tests pass.
 
 ## Parts and how to run them
 
@@ -453,8 +453,14 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     Sections of a dataset's latest rows: articles or a table, filters, period, sorting, bars of the most common values. `webapp/reports/newsletter.py`, `sections.py`; details: `docs/user-platform-plan.md` → "Newsletter reports".
     - **Decision (Kanchana, 2026-11-06): the AI feature comes last.** Item 53 is in the code and stays off until a key is added. Nothing more on it for now.
     - Checked on a copy of the real data on a temporary PostgreSQL on the external drive (the Mac's drive had only ~350 MB free), then deleted: nothing went into the real database except the new empty table.
-    - Found: Newsfirst's titles and summaries are messy (date and first sentence in the title, the site's slogan in the summary), and Hacker News's summary is "Comments". It shows in the PDF; the news collector should clean it.
     - **Next:** Kanchana tries the PDFs and says what to change.
+55. **News text cleaned (Kanchana, 2026-11-06), found through the newsletter's PDFs.** `worldnews/cleaning.py`, applied to every headline before it's saved:
+    - **Newsfirst:** its homepage cards stick the date and the article's first words to the title. Now just the headline, and the card's date becomes `published_at` (it had none, so its stories sank to the end of anything sorted by date). Its summaries lose the site's slogan.
+    - **Hacker News:** the summary "Comments" is dropped. **CryptoSlate and WordPress sites:** "Read the full story on..." and "The post ... first appeared on..." are cut.
+    - `uv run python -m worldnews clean [--dry-run]` applies the rules to what's saved (safe to repeat). Run on the real database after a backup: 197 of 5,239 headlines changed (58 titles, 197 summaries, 58 dates). URLs and counts are unchanged.
+    - **Sri Lankan dates were 5½ hours ahead:** Daily Mirror and Daily FT write their own time with no zone, and it was read as UTC. A date with no zone from a `.lk` or LK site now means Sri Lankan time (`collect.source_zone`). The saved rows of those two sources were moved back once by hand.
+    - Left as they are: 2 old Newsfirst titles in other wordings ("COLOMBO, SRI LANKA | ...", "By Dr. ..."); The Island gives only a day, so its stories show 05:30; other countries' dates with no zone can't be told apart, and stay UTC.
+
 
 ## Open issues and things to watch
 

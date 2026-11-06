@@ -151,3 +151,15 @@ us (HTTP 401/403/429) is never retried in the browser, and sources that keep ref
   `check` after updating and fix or remove any that fail. Sites without a working feed still
   work through the homepage method.
 - Some sites (Reuters, for example) block automated access. They'll show under "Sources with no headlines".
+
+## Cleaning
+
+`cleaning.py` tidies every headline before it's saved: dates and teasers stuck to a title, sites' slogans in summaries. A new pattern goes there, written for the exact wording seen, with a test that an ordinary headline stays as it is. Then apply it to what's saved:
+
+```bash
+uv run python -m worldnews clean --dry-run
+```
+
+```bash
+uv run python -m worldnews clean
+```

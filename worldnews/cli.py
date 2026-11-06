@@ -6,6 +6,7 @@
     report                                 rebuild the report from the last run
     analyze [--days N] [--group LK ...]    our own analysis of the saved headlines: biggest stories, topics,
                                            names, countries, rising words, tone, Sri Lanka (offline)
+    clean   [--dry-run]                    tidy the headlines already saved (site slogans, dates in titles); safe to repeat
     list    [--group ...]                  show the configured sources
     add     HOMEPAGE --name NAME --group CODE [--feed URL ...]   add a news site to sources.json
 
@@ -106,6 +107,20 @@ def cmd_analyze(settings, args) -> None:
     print(f"\nReport: {paths['html']}\n        (also {paths['latest']})")
 
 
+def cmd_clean(settings, args) -> None:
+    store = NewsStore(settings.data_dir, dry_run=args.dry_run)
+    try:
+        done = store.clean_saved()
+    finally:
+        store.close()
+    verb = "Would change" if args.dry_run else "Changed"
+    print(f"{verb} {done['changed']:,} of {done['rows']:,} saved headlines: {done['titles']:,} titles, {done['summaries']:,} summaries, {done['dates']:,} dates found in titles.")
+    for before, after in done["examples"]:
+        print(f"  - {before[:110]}\n  + {after[:110]}")
+    if args.dry_run and done["changed"]:
+        print("Nothing was saved. To do it:  uv run python -m worldnews clean")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m worldnews", description="Daily world + tech news collector.")
     p.add_argument("--config", help="Folder with settings.json and sources.json (default: worldnews/config)")
@@ -125,6 +140,8 @@ def build_parser() -> argparse.ArgumentParser:
     an = sub.add_parser("analyze", help="Analyse the saved headlines: stories, topics, names, countries, tone")
     an.add_argument("--days", type=float, help="Period to analyse (default: analysis.default_days, 1)")
     an.add_argument("--group", action="append", help="Only these groups, e.g. LK (repeatable)")
+    cl = sub.add_parser("clean", help="Tidy the headlines already saved")
+    cl.add_argument("--dry-run", action="store_true", help="Only say what would change")
     ls = sub.add_parser("list", help="Show configured sources")
     ls.add_argument("--group", action="append")
     add = sub.add_parser("add", help="Add a news site")
@@ -150,6 +167,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_report(settings, args)
     elif args.command == "analyze":
         cmd_analyze(settings, args)
+    elif args.command == "clean":
+        cmd_clean(settings, args)
     else:
         try:
             asyncio.run(cmd_run(settings, args, check=args.command == "check"))
