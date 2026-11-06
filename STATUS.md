@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-06. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-07. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 592 tests pass.
+All 641 tests pass.
 
 ## Parts and how to run them
 
@@ -26,6 +26,7 @@ Run every command from the project folder, after `source env.sh`.
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
+| Articles | `uv run python -m articles run`, `show`, `stats`, `retag`, `companies`, `feeds`, `collect` | New 2026-11-07. Articles and blogs of the most valuable companies (US, GB, IN, AU, CA), tagged by service, linked to each company. **PostgreSQL** (schema `articles`) |
 | Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
@@ -507,6 +508,13 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Migrated on the Mac after a backup (`accounts.0010`), catalog scanned, and checked in the browser on the real data: no console errors.
     - **Next:** tech and vehicles once they have enough history; AI last. To let a role see it: Roles and rights, then the catalog for the datasets.
 
+63. **Articles, a new section (Kanchana, 2026-11-07).** `python -m articles run`, schema `articles`, run_all step `articles`. Articles and blogs from the most valuable companies of the US, UK, India, Australia and Canada, each linked to its company, tagged by service (cloud, ai, email, web_services, security, data, developer, business_apps, networking, payments, ecommerce, chips), with the source's own date. Sri Lanka will be separate. Details: `articles/README.md`.
+    - **The company list is each country's main index** (S&P 100, FTSE 100, Nifty 50, S&P/ASX 50, S&P/TSX 60: 358 companies from Wikipedia's API, websites from Wikidata) plus 15 service companies added by hand. Exact rankings were checked and not used: Wikidata's values only work for the US (India has 2 companies), and companiesmarketcap.com's terms need permission for this reuse.
+    - **First real runs:** 1,220 articles, all with a date, 1,174 with full text, 7 MB. An article with no tag isn't kept (about half of what the feeds offered). `articles retag` applies changed word lists to what's saved.
+    - **Stored for our own analysis, never republished.** robots.txt respected, no browser, and refusals are left alone.
+    - Real data found: Wikidata writes year-only dates as 2023-00-00; the same feed at /feed/ and /rss/; comment feeds; job ads in feeds; "outlook" meaning a forecast. All fixed, with tests.
+    - **Next:** cover more companies (see Open issues), and a page of its own if Kanchana wants one. It's in Datasets as Tech articles for now.
+
 ## Open issues and things to watch
 
 - **CoinGecko, for Kanchana to decide (found 2026-11-06, nothing changed).** Its API terms discourage storing data and bar deriving from it, except under conditions (refresh at least every 24 hours, strong encryption, delete on request). They also require a "Powered by CoinGecko" credit, and `api.coingecko.com/robots.txt` disallows `/api/v3`. `markets run` has stored its prices since 2026-11-03 and shows no credit. Options: add the credit and accept the risk for personal use, take a free key under their Demo plan and re-read the terms, or make CoinPaprika the main source (fewer calls allowed, but its `/v1/tickers` is one call for all coins).
@@ -535,6 +543,11 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
   - **Fix tried (item 22):** every browser starts with `--in-process-gpu`, and doctor.py has a "graphics page"
     check, with and without the flag. **Not confirmed on the Mac yet:** Kanchana runs `uv run python doctor.py`
     and then `./run_all.sh tech_update`. If the graphics check still fails: CHROMIUM_ARGS in automation.conf.
+
+- **Articles only reach a small share of the companies (2026-11-07).** With a working feed: US 32 of 110, Canada 10 of 61, Australia 9 of 51, UK 6 of 99, India 3 of 52. Most big companies have no public feed. OpenAI alone is half of all articles (its feed has 1,368 items).
+  - **These answer 403 to our honest user agent, and are left alone:** Oracle, ServiceNow, AT&T, T-Mobile, Infosys, TCS, Vodafone, Telus, Applied Materials. Don't work around it.
+  - Next step if wanted: read the sitemaps sites publish in robots.txt, which lists their articles with dates.
+  - The `email` tag is the loosest: articles that merely show an email example three times get it. `ai` is on most articles because it's on most tech writing now.
 
 - **Scheduling is on hold (Kanchana's choice, 2026-11-03); runs are by hand with `./run_all.sh`.** If it's
   wanted again: `./schedule.sh recommended` from Terminal, then

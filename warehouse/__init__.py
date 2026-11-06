@@ -6,6 +6,7 @@
     vehicles    vehicle ads over time, price changes (vehicles)
     companies   company directory: names, websites, countries, website facts (companies)
     scrapers    every output of the older scrapers (Sri Lankan news, products, CSE, IMDb)
+    articles    articles and blogs from the most valuable companies, tagged by service (articles)
     foresight   forecasts saved before their outcome, and how they scored (foresight)
 
 Until 2026-11-06 each tool had its own DuckDB file in data/<tool>/, which let only one program use it at a time;

@@ -9,6 +9,7 @@ The parts:
 - **`worldnews/`**: the latest headlines from major news sites in the US, India, Sri Lanka, Australia,
   Canada, China, plus world and technology news, in one daily report.
   See [worldnews/README.md](worldnews/README.md). Quick start: `uv run python -m worldnews run`.
+- **`articles/`**: articles and blogs from the most valuable companies of the US, UK, India, Australia and Canada, tagged by service (cloud, AI, email, web, ...). See [articles/README.md](articles/README.md).
 - **`foresight/`**: for each section, scenarios with odds and reasons, saved before the outcome and scored afterwards. See [foresight/README.md](foresight/README.md).
 - **`markets/`**: Sri Lankan and US stocks and indices, gold, silver, oil, exchange rates and the crypto top 100,
   with price history. See [markets/README.md](markets/README.md). Quick start: `uv run python -m markets run`.
@@ -64,7 +65,7 @@ small program (`~/.local/bin/uv`) stays on the main drive.
 ./run_all.sh --status              # the last runs
 ```
 
-**Steps:** `markets`, `markets_closes` (daily closes for the CSE and crypto, then their Stochastic RSI), `foresight` (forecasts with odds, saved first and scored afterwards), `news`, `news_analyze` (biggest stories, topics, names, countries and tone from the saved headlines), `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
+**Steps:** `markets`, `markets_closes` (daily closes for the CSE and crypto, then their Stochastic RSI), `foresight` (forecasts with odds, saved first and scored afterwards), `articles` (tech articles and blogs, tagged by service), `news`, `news_analyze` (biggest stories, topics, names, countries and tone from the saved headlines), `tech_collect` (find and store new tech sites, fast, no browser), `tech_company`
 (company facts from each site's own pages: social links, people, employees, GitHub), `tech_update`
 (profile new sites and re-check known ones, with the browser), `tech` (both in one step), `tech_quick` (new domains → qualify →
 registration dates), `vehicles` (ikman.lk + riyasewana), `companies_collect` (add companies from open data, continues

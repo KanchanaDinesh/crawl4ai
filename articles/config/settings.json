@@ -1,0 +1,379 @@
+{
+  "fetch": {
+    "user_agent": "personal-tech-articles-bot/1.0 (https://github.com/KanchanaDinesh/crawl4ai) aiohttp",
+    "timeout_seconds": 25,
+    "concurrency": 6,
+    "gap_seconds": 1.0
+  },
+  "indexes": [
+    {
+      "country": "US",
+      "name": "S&P 100",
+      "page": "S&P_100",
+      "at_least": 90
+    },
+    {
+      "country": "GB",
+      "name": "FTSE 100",
+      "page": "FTSE_100_Index",
+      "at_least": 90
+    },
+    {
+      "country": "IN",
+      "name": "Nifty 50",
+      "page": "NIFTY_50",
+      "at_least": 45
+    },
+    {
+      "country": "AU",
+      "name": "S&P/ASX 50",
+      "page": "S&P/ASX_50",
+      "at_least": 40
+    },
+    {
+      "country": "CA",
+      "name": "S&P/TSX 60",
+      "page": "S&P/TSX_60",
+      "at_least": 50
+    }
+  ],
+  "extra_companies": [
+    {
+      "name": "OpenAI",
+      "country": "US",
+      "website": "https://openai.com",
+      "sector": "AI",
+      "feeds": [
+        "https://openai.com/news/rss.xml"
+      ]
+    },
+    {
+      "name": "Anthropic",
+      "country": "US",
+      "website": "https://www.anthropic.com",
+      "sector": "AI"
+    },
+    {
+      "name": "Cloudflare",
+      "country": "US",
+      "website": "https://www.cloudflare.com",
+      "sector": "Web services",
+      "feeds": [
+        "https://blog.cloudflare.com/rss/"
+      ]
+    },
+    {
+      "name": "Twilio",
+      "country": "US",
+      "website": "https://www.twilio.com",
+      "sector": "Email and messaging"
+    },
+    {
+      "name": "Mailchimp",
+      "country": "US",
+      "website": "https://mailchimp.com",
+      "sector": "Email"
+    },
+    {
+      "name": "DigitalOcean",
+      "country": "US",
+      "website": "https://www.digitalocean.com",
+      "sector": "Cloud"
+    },
+    {
+      "name": "GoDaddy",
+      "country": "US",
+      "website": "https://www.godaddy.com",
+      "sector": "Web services"
+    },
+    {
+      "name": "Snowflake",
+      "country": "US",
+      "website": "https://www.snowflake.com",
+      "sector": "Data"
+    },
+    {
+      "name": "Datadog",
+      "country": "US",
+      "website": "https://www.datadoghq.com",
+      "sector": "Cloud"
+    },
+    {
+      "name": "GitHub",
+      "country": "US",
+      "website": "https://github.blog",
+      "sector": "Developer tools",
+      "feeds": [
+        "https://github.blog/feed/"
+      ]
+    },
+    {
+      "name": "Zoho",
+      "country": "IN",
+      "website": "https://www.zoho.com",
+      "sector": "Business apps"
+    },
+    {
+      "name": "Freshworks",
+      "country": "IN",
+      "website": "https://www.freshworks.com",
+      "sector": "Business apps"
+    },
+    {
+      "name": "Atlassian",
+      "country": "AU",
+      "website": "https://www.atlassian.com",
+      "sector": "Developer tools"
+    },
+    {
+      "name": "Canva",
+      "country": "AU",
+      "website": "https://www.canva.com",
+      "sector": "Web services"
+    },
+    {
+      "name": "Hootsuite",
+      "country": "CA",
+      "website": "https://www.hootsuite.com",
+      "sector": "Business apps"
+    }
+  ],
+  "known_feeds": {
+    "apple": [
+      "https://www.apple.com/newsroom/rss-feed.rss"
+    ],
+    "alphabet": [
+      "https://blog.google/rss/",
+      "https://cloudblog.withgoogle.com/rss/"
+    ],
+    "amazon": [
+      "https://aws.amazon.com/blogs/aws/feed/",
+      "https://aws.amazon.com/blogs/machine-learning/feed/",
+      "https://aws.amazon.com/blogs/security/feed/"
+    ],
+    "microsoft": [
+      "https://blogs.microsoft.com/feed/",
+      "https://azure.microsoft.com/en-us/blog/feed/",
+      "https://www.microsoft.com/en-us/security/blog/feed/"
+    ],
+    "nvidia": [
+      "https://blogs.nvidia.com/feed/",
+      "https://nvidianews.nvidia.com/releases.xml"
+    ],
+    "meta": [
+      "https://engineering.fb.com/feed/"
+    ],
+    "salesforce": [
+      "https://www.salesforce.com/blog/feed/",
+      "https://engineering.salesforce.com/feed/"
+    ],
+    "ibm": [
+      "https://research.ibm.com/rss"
+    ],
+    "advanced micro devices": [
+      "https://ir.amd.com/rss/news-releases.xml"
+    ],
+    "dell": [
+      "https://www.dell.com/en-us/blog/feed/"
+    ],
+    "godaddy": [
+      "https://www.godaddy.com/resources/feed"
+    ],
+    "shopify": [
+      "https://shopify.engineering/blog.atom",
+      "https://www.shopify.com/news/feed"
+    ],
+    "atlassian": [
+      "https://www.atlassian.com/blog/rss"
+    ],
+    "canva": [
+      "https://www.canva.dev/blog/engineering/feed.xml"
+    ],
+    "hootsuite": [
+      "https://blog.hootsuite.com/feed/"
+    ],
+    "bt group": [
+      "https://newsroom.bt.com/feed/"
+    ],
+    "sage": [
+      "https://www.sage.com/en-gb/blog/feed/"
+    ],
+    "rogers": [
+      "https://about.rogers.com/feed/"
+    ],
+    "netflix": [
+      "https://netflixtechblog.com/feed"
+    ],
+    "twilio": [
+      "https://www.twilio.com/en-us/blog/feed"
+    ]
+  },
+  "discovery": {
+    "paths": [
+      "/blog/",
+      "/blog/feed/",
+      "/feed/",
+      "/rss/",
+      "/rss.xml",
+      "/feed.xml",
+      "/news/",
+      "/news/rss/",
+      "/newsroom/",
+      "/insights/"
+    ],
+    "subdomains": [
+      "blog",
+      "blogs",
+      "news",
+      "newsroom"
+    ],
+    "max_feeds": 3,
+    "max_requests": 14,
+    "again_after_days": 30
+  },
+  "collect": {
+    "feed_every_hours": 6,
+    "refused_wait_days": 14,
+    "enough_feed_text": 1200,
+    "keep_text_chars": 100000,
+    "body_hits_needed": 3,
+    "min_free_gb": 0.5
+  },
+  "tags": {
+    "cloud": [
+      "cloud",
+      "cloud computing",
+      "aws",
+      "azure",
+      "google cloud",
+      "multicloud",
+      "hybrid cloud",
+      "data center",
+      "data centre",
+      "serverless",
+      "kubernetes",
+      "virtual machine"
+    ],
+    "ai": [
+      "AI",
+      "artificial intelligence",
+      "machine learning",
+      "generative ai",
+      "genai",
+      "llm",
+      "large language model",
+      "neural network",
+      "chatbot",
+      "copilot",
+      "ai agent",
+      "ai agents",
+      "agentic",
+      "deep learning"
+    ],
+    "email": [
+      "email service",
+      "email marketing",
+      "email security",
+      "email deliverability",
+      "e-mail",
+      "inbox",
+      "gmail",
+      "microsoft outlook",
+      "smtp",
+      "spam filter",
+      "phishing",
+      "email"
+    ],
+    "web_services": [
+      "web hosting",
+      "website builder",
+      "domain name",
+      "cdn",
+      "content delivery",
+      "web server",
+      "dns",
+      "web app",
+      "web application",
+      "web services",
+      "browser"
+    ],
+    "security": [
+      "cybersecurity",
+      "cyber security",
+      "ransomware",
+      "malware",
+      "zero trust",
+      "data breach",
+      "vulnerability",
+      "encryption",
+      "firewall",
+      "threat detection"
+    ],
+    "data": [
+      "database",
+      "data warehouse",
+      "data lake",
+      "big data",
+      "data analytics",
+      "data platform",
+      "business intelligence"
+    ],
+    "developer": [
+      "API",
+      "SDK",
+      "open source",
+      "devops",
+      "developer tools",
+      "github",
+      "software development",
+      "programming language"
+    ],
+    "business_apps": [
+      "saas",
+      "software as a service",
+      "crm",
+      "erp",
+      "workflow automation",
+      "low-code",
+      "no-code",
+      "microsoft 365",
+      "google workspace"
+    ],
+    "networking": [
+      "5g",
+      "6g",
+      "broadband",
+      "fibre network",
+      "fiber network",
+      "sd-wan",
+      "satellite internet",
+      "vpn"
+    ],
+    "payments": [
+      "digital payments",
+      "payment platform",
+      "online payments",
+      "fintech",
+      "digital wallet",
+      "mobile banking",
+      "stablecoin"
+    ],
+    "ecommerce": [
+      "e-commerce",
+      "ecommerce",
+      "online store",
+      "online marketplace",
+      "online shopping"
+    ],
+    "chips": [
+      "semiconductor",
+      "gpu",
+      "gpus",
+      "chipmaker",
+      "ai chip",
+      "ai chips",
+      "accelerator chip",
+      "chip foundry"
+    ]
+  }
+}
