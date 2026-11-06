@@ -525,6 +525,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
+- **Foresight, the prediction module** (`docs/foresight-plan.md`, plan only, 2026-11-06): a separate module giving each section scenarios with odds and reasons, saved before the outcome and scored afterwards. Kanchana decided: no AI in the first version; Markets first, then World news. Waiting on Kanchana's read of the plan and its three open questions.
 - **The user platform** (`docs/user-platform-plan.md`): phases 1-7 and newsletter reports are built; the AI assistant is switched on last, and phase 8 (the server) waits for Kanchana's go. Open questions are
   listed at the end of the plan.
 
