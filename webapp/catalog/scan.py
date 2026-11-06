@@ -239,7 +239,7 @@ def _new_dataset(schema: str, name: str, kind: str, primary_key: list[str]) -> D
         schema=schema, name=name, kind=kind, label=(known or {}).get("label") or humanize(name.removeprefix("v_")),
         description=(known or {}).get("description", ""), enabled=not (known or {}).get("off", False),
         key_columns=primary_key or (known or {}).get("key", []), default_sort_field=sort[0], default_sort_dir=sort[1])
-    if known and not known.get("off"):      # datasets we know start with the plan's rights; unknown ones with none
+    if known and not known.get("off") and not known.get("private"):      # datasets we know start with the plan's rights; unknown ones with none
         for group in Group.objects.filter(name__in=STARTING_ROLES_VIEW):
             edit = group.name in STARTING_ROLES_EDIT
             DatasetRight.objects.create(dataset=ds, group=group, can_view=True, can_edit=edit and ds.record_key is not None,

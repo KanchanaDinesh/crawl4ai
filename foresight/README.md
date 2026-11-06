@@ -17,6 +17,8 @@ uv run python -m foresight score                    # the live record: only fore
 
 Markets needs the daily closes first (`uv run python -m markets closes`), and news needs headlines (`uv run python -m worldnews run`). **News only builds up on days the collector runs.**
 
+**In the web app:** menu Foresight, http://localhost:8060/foresight/ (administrators for now; grant it on Roles and rights). Also in the grid as the dataset Forecasts, and in reports.
+
 ## What the result means so far
 
 **On the past year, Stochastic RSI zones gave no edge** (see the plan's "Phase 1 results"). So the odds are about the same as a normal week, and `show` says so. The useful

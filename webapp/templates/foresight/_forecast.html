@@ -1,0 +1,12 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
+<h2>{{ r.name }}</h2><div class="muted">{{ question }} · from {{ r.as_of }} to {{ r.check_on }}</div>
+<h4>The odds</h4>
+<table class="plain"><thead><tr><th>Scenario</th><th class="num">Odds</th><th class="num">Normal</th></tr></thead><tbody>
+{% for c in r.scenarios %}<tr><td>{{ c.label }}</td><td class="num"><b>{% widthratio c.probability 1 100 %}%</b></td><td class="num muted">{% widthratio c.normal 1 100 %}%</td></tr>{% endfor %}</tbody></table>
+<h4>Why</h4><ul class="small">{% for line in r.reasons %}<li>{{ line }}</li>{% endfor %}</ul>
+<h4>What happened</h4>
+{% if not_checkable %}<div class="muted">Couldn't be checked: nothing was collected around {{ r.check_on }}. It stays on the record, without a score.</div>
+{% elif actual %}<div><b>{{ actual|capfirst }}</b>{% if r.move_pct != None %} ({{ r.move_pct|floatformat:1 }}%){% endif %}. Score {{ r.score|floatformat:3 }} against the simple guess's {{ r.normal_score|floatformat:3 }} (lower is better).</div>
+{% else %}<div class="muted">Checked on {{ r.check_on }}, once the data reaches that day.</div>{% endif %}
+{% if history %}<h4>Earlier forecasts on this</h4><table class="plain small"><tbody>{% for h in history %}<tr><td class="muted nowrap">{{ h.as_of }}</td><td>{{ h.cells|join:" · " }}</td><td>{{ h.actual }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+<div class="muted small">Saved before the outcome, and never changed. From {{ r.cases|num }} past cases across {{ r.separate_weeks }} separate weeks. Not advice.</div>

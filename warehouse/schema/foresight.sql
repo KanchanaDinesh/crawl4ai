@@ -80,6 +80,8 @@ create table if not exists foresight.runs (
     note         text
 );
 
+alter table foresight.runs add column if not exists progress jsonb;
+
 -- Rule 1 of the plan: a forecast can't be changed or removed after it's saved, including the embarrassing ones.
 create or replace function foresight.refuse_change() returns trigger language plpgsql as $$
 begin
@@ -102,3 +104,16 @@ create or replace view foresight.v_track_record as
            count(*) filter (where o.score is null) as not_checkable
     from foresight.forecasts f join foresight.outcomes o on o.forecast_id = f.id
     group by f.section, f.grp, f.question, f.method, f.method_version;
+
+-- one flat row per forecast, for the grid, exports and reports
+create or replace view foresight.v_forecasts as
+    select f.id, f.made_at, f.section, f.grp, f.question, f.subject, f.subject_name, f.as_of, f.check_on,
+           f.signals ->> 'zone' as zone,
+           (select string_agg(s ->> 'label' || ': ' || round((s ->> 'probability')::numeric * 100) || '% (normal '
+                              || round((s ->> 'normal')::numeric * 100) || '%)', '; ' order by n)
+            from jsonb_array_elements(f.scenarios) with ordinality as t (s, n)) as odds,
+           (select string_agg(r, ' ' order by n) from jsonb_array_elements_text(f.reasons) with ordinality as t (r, n)) as reasons,
+           f.cases, f.separate_weeks, f.method, f.method_version,
+           case when o.forecast_id is null then 'open' when o.score is null then 'could not be checked' else 'checked' end as status,
+           o.actual, o.move_pct, o.score, o.normal_score, o.checked_at
+    from foresight.forecasts f left join foresight.outcomes o on o.forecast_id = f.id;

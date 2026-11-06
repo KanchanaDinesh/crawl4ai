@@ -1,0 +1,52 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}Foresight{% endblock %}
+{% block tab %}
+<p class="muted small">Foresight: what could happen next, with odds and reasons. Every forecast is saved before the outcome is known, never changed, and checked on its date. Scenarios with odds, not promises. Numbers only, not advice.</p>
+{% if section.why_not %}
+<div class="panel"><div class="empty">{{ section.why_not }}</div></div>
+{% else %}
+{% if not s.open and not s.checked and not s.not_checkable and not run %}
+<div class="panel"><div class="empty">No forecasts yet.<br>Run <code>uv run python -m foresight run</code>, then refresh this page.</div></div>
+{% else %}
+{% include "insights/_kpis.html" %}
+<div class="ins-layout">
+  <div>
+    {% if section.code == "markets" and no_edge %}<div class="banner"><b>This method hasn't shown any edge.</b> On the past year, Stochastic RSI zones were no better than guessing a normal week, so read these odds as about the same as normal. The useful part is each one's usual move.</div>{% endif %}
+    {% if not_ready %}<div class="panel"><h3>Not ready yet <small>odds appear on their own once enough cases have run their course</small></h3>
+      <ul class="small">{% if watching_line %}<li>{{ watching_line }}</li>{% endif %}{% for line in not_ready %}<li>{{ line }}</li>{% endfor %}</ul>
+      <div class="muted small">News only builds up on days the collector runs. Topics take longest: they need three weeks of headlines before their first case.</div></div>{% endif %}
+    {% if question_chips %}
+    <form class="filters" id="filters" method="get" action="{% url section.url_name %}" hx-get="{% url 'foresight_rows' section.code %}" hx-target="#rows" hx-sync="this:replace" hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+      {% if question_chips|length > 1 %}{% include "insights/_chips.html" with chips=question_chips name="question" value=f.question %}{% else %}<input type="hidden" name="question" value="{{ f.question }}">{% endif %}
+      {% if group_chips %}{% include "insights/_chips.html" with chips=group_chips name="grp" value=f.grp %}{% endif %}
+      {% if zone_chips %}{% include "insights/_chips.html" with chips=zone_chips name="zone" value=f.zone %}{% endif %}
+      <input type="search" name="q" value="{{ f.q }}" placeholder="Search…" aria-label="Search forecasts">
+    </form>
+    <div class="panel"><h3><span>Open forecasts <small data-count>{{ count }}</small></span><small>each % is the odds, with what's normal under it</small></h3>
+      <div id="rows">{% include "foresight/_rows.html" %}</div>
+      {% if section.code == "markets" %}<div class="muted small">Up or down means by more than that one's own usual 7-day move. CSE closes from cse.lk; crypto closes powered by CoinPaprika.</div>{% endif %}</div>
+    {% endif %}
+    {% if watching.stories %}<div class="panel"><h3>Stories being watched <small>{{ watching.day }}</small></h3><div class="scroll"><table class="dense"><thead><tr><th>Story</th><th class="num">Sources</th><th class="num">Countries</th><th>Key words</th></tr></thead>
+      <tbody>{% for s in watching.stories %}<tr><td>{{ s.headline }}</td><td class="num">{{ s.sources }}</td><td class="num">{{ s.countries }}</td><td class="muted small">{{ s.key_words|join:", " }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+    {% if recent %}<div class="panel"><h3>Recently checked</h3><div class="scroll"><table class="dense"><thead><tr><th>What</th><th>Asked</th><th>Checked on</th><th>What happened</th></tr></thead>
+      <tbody>{% for r in recent %}<tr class="click" tabindex="0" hx-get="{% url 'foresight_forecast' r.id %}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']"><td>{{ r.name }}</td><td class="muted small">{{ r.as_of }}</td><td class="muted small">{{ r.check_on }}</td><td><b>{{ r.actual_label }}</b></td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+  </div>
+  <aside>
+    <div class="panel"><h3>Live record <small>forecasts saved before their outcome</small></h3>
+      {% for r in record %}<div class="fs-verdict"><b>{{ r.group }}: {{ r.label }}</b>
+        {% if r.checked %}<span>{{ r.checked|num }} checked, {{ r.skill_pct|floatformat:1 }}% {{ r.word }} the simple guess. Early numbers can be luck.</span>{% else %}<span class="muted">None scored yet.</span>{% endif %}
+        {% if r.not_checkable %}<span class="muted small">{{ r.not_checkable|num }} couldn't be checked: nothing was collected around the date.</span>{% endif %}</div>
+      {% empty %}<div class="muted">{% if s.next_check %}No forecast has reached its date yet. First check: {{ s.next_check }}.{% else %}No forecast has reached its date yet.{% endif %}</div>{% endfor %}</div>
+    <div class="panel"><h3>Test on the past <small>can flatter; the live record counts in the end</small></h3>
+      {% for t in tests %}<div class="fs-verdict"><b>{{ t.group }}: {{ t.label }}</b><span>{{ t.text|capfirst }}{% if t.skill_pct != None %} (skill {{ t.skill_pct|floatformat:1 }}%{% if t.low_pct != None %}, range {{ t.low_pct|floatformat:1 }}% to {{ t.high_pct|floatformat:1 }}%{% endif %}){% endif %}.</span>
+        {% if t.cases %}<span class="muted small">{{ t.cases|num }} scored cases across {{ t.weeks }} weeks.</span>{% endif %}
+        {% if t.zones.0.cases or t.zones.3.cases %}<table class="plain small"><thead><tr><th>Then</th>{% for o in t.zones.0.odds %}<th class="num">{{ o.label }}</th>{% endfor %}<th class="num">Cases</th></tr></thead><tbody>{% for z in t.zones %}<tr><td>{{ z.name }}</td>{% for o in z.odds %}<td class="num">{% if o.pct != None %}{{ o.pct|floatformat:0 }}%{% else %}–{% endif %}</td>{% endfor %}<td class="num muted">{{ z.cases|num }}</td></tr>{% endfor %}</tbody></table>{% endif %}</div>
+      {% empty %}<div class="muted">Not tested yet. Run <code>uv run python -m foresight test</code>.</div>{% endfor %}</div>
+    {% if topics %}<div class="panel"><h3>Topics now <small>share of headlines, a plain count</small></h3><table class="plain small"><tbody>{% for t in topics %}<tr><td>{{ t.topic|cut:"_"|capfirst }}</td><td class="num">{{ t.share|floatformat:1 }}%</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if run %}<div class="muted small">Last run {{ run.run_at|when }}: {{ run.made }} new, {{ run.checked }} checked.{% if run.note %} {{ run.note }}.{% endif %}</div>{% endif %}
+  </aside>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

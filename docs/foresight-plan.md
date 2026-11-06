@@ -1,6 +1,6 @@
 # Foresight, the prediction module: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 and 2 built (2026-11-06).** Decided: a separate module, and the first version runs **without AI**._
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 3 built (2026-11-06).** Decided: a separate module, and the first version runs **without AI**._
 
 ## What it is for
 
@@ -117,6 +117,17 @@ What happened in the 7 days after each zone:
 - **Traps handled:** a day with nothing collected is never counted as "faded" (it's kept on the record as `no_data`, without a score); the first day's backlog and unfinished days aren't used; saved stories don't change when headlines are cleaned. Tests for the first two were checked by putting each mistake in on purpose: they fail.
 - **First odds, with daily runs:** stories around 20-24 November, topics around early December. The verdict against the simple guess needs 8 weeks.
 - **Not done:** only six source countries count for "spread" (US, IN, LK, AU, CA, CN), since GLOBAL, TECH and the others aren't countries. Word matching can join two similar stories or miss a reworded one, and the live record will show the effect.
+
+## Phase 3 results (2026-11-06)
+
+**The page is in: menu Foresight, in the web app at `/foresight/`.** Administrators only for now (a right on Roles and rights, like any other menu), and each tab also follows the rights of the data behind it, so it can't be a way around the catalog.
+
+- **Markets and World news tabs:** counts, the plain warning when a method has no edge, open forecasts with odds and what's normal under them, filters and sorting, a side panel with the reasons and what happened, recently checked, the live record kept apart from the test on the past.
+- **World news** also shows how far each question is from odds, the stories being watched and each topic's share.
+- **Tech intel, Vehicles, Companies** say why they have no forecasts yet.
+- **Catalog:** datasets Forecasts (`foresight.v_forecasts`, one flat row each), Forecast track record and Forecast tests on the past, with administrators until granted. A report can have a Forecasts section with no choices needed.
+- **The page never makes or changes a forecast.** It reads what `python -m foresight run` saved, including the progress lines.
+- **Found on the way:** JSONB sorts keys, so the zone table came out in the wrong order. And a new report on forecasts was empty, because reports guessed the date from `checked_at`.
 
 ## Things to watch
 

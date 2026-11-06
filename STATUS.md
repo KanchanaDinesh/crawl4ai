@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 576 tests pass.
+All 592 tests pass.
 
 ## Parts and how to run them
 
@@ -26,7 +26,7 @@ Run every command from the project folder, after `source env.sh`.
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
-| Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-2: Markets and World news, no AI. News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
+| Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
@@ -503,6 +503,10 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - The step `foresight` moved after `news` in the default STEPS, so it sees the day's headlines.
     - **Next: phase 3, the page** (menu Foresight).
 
+62. **Foresight phase 3: the page (Kanchana, 2026-11-06).** Menu Foresight, `/foresight/` (`webapp/foresight/`, queries in `foresight/queries.py`). Administrators only for now; each tab also follows the rights of its section's data. Markets and World news show odds next to what's normal, reasons, the live record and the test on the past, and say plainly when a method has no edge. Other tabs say why they have nothing yet. New datasets: Forecasts, Forecast track record, Forecast tests on the past. Details: `docs/foresight-plan.md` -> "Phase 3 results".
+    - Migrated on the Mac after a backup (`accounts.0010`), catalog scanned, and checked in the browser on the real data: no console errors.
+    - **Next:** tech and vehicles once they have enough history; AI last. To let a role see it: Roles and rights, then the catalog for the datasets.
+
 ## Open issues and things to watch
 
 - **CoinGecko, for Kanchana to decide (found 2026-11-06, nothing changed).** Its API terms discourage storing data and bar deriving from it, except under conditions (refresh at least every 24 hours, strong encryption, delete on request). They also require a "Powered by CoinGecko" credit, and `api.coingecko.com/robots.txt` disallows `/api/v3`. `markets run` has stored its prices since 2026-11-03 and shows no credit. Options: add the credit and accept the risk for personal use, take a free key under their Demo plan and re-read the terms, or make CoinPaprika the main source (fewer calls allowed, but its `/v1/tickers` is one call for all coins).
@@ -554,7 +558,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **Foresight** (`docs/foresight-plan.md`): phases 1 and 2 are built (items 60, 61). Next the page, then tech and vehicles; AI last. Open questions for Kanchana are at the end of the plan.
+- **Foresight** (`docs/foresight-plan.md`): phases 1 to 3 are built (items 60-62). Next tech and vehicles once they have enough history; AI last. Open questions for Kanchana are at the end of the plan.
 - **The user platform** (`docs/user-platform-plan.md`): phases 1-7 and newsletter reports are built; the AI assistant is switched on last, and phase 8 (the server) waits for Kanchana's go. Open questions are
   listed at the end of the plan.
 

@@ -1,0 +1,10 @@
+{% load insights_ui %}<div class="scroll">{% if rows %}<table class="dense"><thead><tr>{% for h in heads %}<th class="sort{% if h.sorted %} sorted{% endif %}{% if h.numeric %} num{% endif %}" hx-get="{{ h.url }}" hx-target="#rows" hx-trigger="click, keyup[key=='Enter']" tabindex="0">{{ h.label }}{% if h.arrow %} {{ h.arrow }}{% endif %}</th>{% endfor %}</tr></thead>
+<tbody>{% for r in rows %}<tr class="click" tabindex="0" hx-get="{% url 'foresight_forecast' r.id %}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">
+  <td>{{ r.name }}</td>
+  <td>{% if r.zone == "overbought" or r.zone == "oversold" %}<span class="badge {{ r.zone }}">{{ r.zone }}</span>{% else %}<span class="muted small">{{ r.zone|default:"" }}</span>{% endif %}</td>
+  <td class="muted small nowrap">{{ r.going_on }}</td>
+  {% if show_band %}<td class="num">{{ r.band|floatformat:1 }}%</td>{% endif %}
+  {% for c in r.cells %}<td class="num fs-odds" title="{{ c.label }}"><b>{{ c.pct|floatformat:0 }}%</b><small>{{ c.normal|floatformat:0 }}%</small></td>{% endfor %}
+  <td class="num">{{ r.gap|floatformat:0 }} pts</td>
+  <td class="muted small nowrap">{{ r.check_on }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<div class="empty">No open forecasts match.</div>{% endif %}</div>

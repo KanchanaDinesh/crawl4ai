@@ -8,10 +8,10 @@ from webapp.explore import query
 from .models import Report, ReportSection
 
 MAX_SECTIONS = 20
-TITLE_NAMES = ("title", "name", "headline", "subject")
-TEXT_NAMES = ("summary", "description", "about", "snippet", "details", "reason", "notes")
+TITLE_NAMES = ("title", "name", "headline", "subject_name", "subject")
+TEXT_NAMES = ("summary", "description", "about", "snippet", "details", "reason", "notes", "odds")
 LINK_NAMES = ("url", "website", "link", "final_url", "homepage")
-DATE_NAMES = ("first_seen_at", "first_seen", "created_at", "created", "published_at", "saved_at", "run_at", "checked_at", "date")
+DATE_NAMES = ("first_seen_at", "first_seen", "created_at", "created", "published_at", "saved_at", "run_at", "made_at", "checked_at", "date")
 SCHEDULE_DAYS = {Report.DAILY: 1, Report.WEEKLY: 7, Report.MONTHLY: 30}
 NEWS, COMPANIES, ADS, MARKETS = "news.news_items", "companies.v_companies", "vehicles.v_vehicle_ads_latest", "markets.v_latest"
 

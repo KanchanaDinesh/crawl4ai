@@ -13,6 +13,7 @@ urlpatterns = [
     path("datasets/", include("webapp.explore.urls")),
     path("admin/catalog/", include("webapp.catalog.urls")),
     path("dashboard/", include("webapp.insights.urls")),
+    path("foresight/", include("webapp.foresight.urls")),
     # pages of later phases: the menu items exist now, so rights can be set up front
     path("my-tables/", include("webapp.userdata.urls")),
     path("charts/", include("webapp.charts.urls")),

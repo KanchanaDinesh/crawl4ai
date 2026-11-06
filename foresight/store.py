@@ -63,9 +63,9 @@ class ForesightStore:
                          [r["section"], r["grp"], r["question"], r["method"], r["method_version"], r["first_day"], r["last_day"], r["cases"], r["weeks"],
                           r["score"], r["normal_score"], r["skill"], r["skill_low"], r["skill_high"], r["verdict"], json.dumps(r["details"])])
 
-    def save_run(self, section: str, made: int, checked: int, not_made: dict, note: str | None = None) -> None:
-        self.con.execute("insert into foresight.runs (section, made, checked, not_made, note) values (%s, %s, %s, %s, %s)",
-                         [section, made, checked, json.dumps(not_made), note])
+    def save_run(self, section: str, made: int, checked: int, not_made: dict, note: str | None = None, progress: list[str] | None = None) -> None:
+        self.con.execute("insert into foresight.runs (section, made, checked, not_made, note, progress) values (%s, %s, %s, %s, %s, %s)",
+                         [section, made, checked, json.dumps(not_made), note, json.dumps(progress or [])])
 
     def close(self) -> None:
         self.con.close()

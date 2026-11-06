@@ -5,6 +5,7 @@ off: internal bookkeeping (cursors, run logs) or the raw table behind a typed vi
 key: what identifies a row in a view (tables use their primary key).
 sort: the first order people want.
 hide: columns that are in the way at first (they stay under Columns).
+private: known, but stays with administrators until a role is granted it.
 """
 
 STARTING_ROLES_VIEW = ("Editor", "Analyst", "Viewer")
@@ -47,6 +48,13 @@ KNOWN = {
     "markets.history_refusals": dict(label="Daily closes refusals", off=True),
     "markets.runs": dict(label="Market runs", off=True),
     "markets.source_runs": dict(label="Market source health", off=True),
+    "foresight.v_forecasts": dict(label="Forecasts", description="Scenarios with odds, saved before the outcome and scored afterwards. Not promises, and not advice.",
+                                  key=["id"], sort=("as_of", "desc"), hide=["method", "method_version", "reasons", "made_at", "normal_score"], private=True),
+    "foresight.v_track_record": dict(label="Forecast track record", description="Live forecasts only: how they scored against the simple guess. Skill above 0 beats it.",
+                                     key=["section", "grp", "question", "method", "method_version"], private=True),
+    "foresight.backtests": dict(label="Forecast tests on the past", description="How each method would have done on past data. Kept apart from the live record, because a test can flatter.",
+                                sort=("run_at", "desc"), hide=["details", "id"], private=True),
+    **{f"foresight.{t}": dict(off=True) for t in ("forecasts", "outcomes", "signals", "runs")},
     "vehicles.v_vehicle_ads_latest": dict(label="Vehicle ads", description="One row per ad: latest details, first seen, times seen.",
                                           key=["url"], sort=("first_seen", "desc")),
     "vehicles.v_vehicle_price_changes": dict(label="Vehicle price changes", description="Ads whose price changed between runs.",

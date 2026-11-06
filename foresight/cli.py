@@ -63,9 +63,9 @@ def run_section(analyst, store: ForesightStore, reader, today: date) -> dict:
     made = store.save_forecasts(rows)
     stale = [g for g, d in data.last_day.items() if d < today - timedelta(days=STALE_DAYS)]
     note = f"data is old for: {', '.join(stale)}" if stale else None
-    store.save_run(analyst.section, made, len(outcomes), dict(not_made), note)
-    return {"section": analyst.section, "made": made, "checked": len(outcomes), "not_made": dict(not_made), "stale": stale,
-            "progress": analyst.progress(data) if hasattr(analyst, "progress") else []}
+    progress = analyst.progress(data) if hasattr(analyst, "progress") else []
+    store.save_run(analyst.section, made, len(outcomes), dict(not_made), note, progress)       # the page reads this, without re-working it out
+    return {"section": analyst.section, "made": made, "checked": len(outcomes), "not_made": dict(not_made), "stale": stale, "progress": progress}
 
 
 def cmd_run(args) -> None:

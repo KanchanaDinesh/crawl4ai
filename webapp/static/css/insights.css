@@ -89,6 +89,9 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .badge.young { background: var(--warn-soft); color: var(--warn); }
 .badge.overbought { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .badge.oversold { border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
+.fs-odds small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+.fs-verdict { display: grid; gap: 3px; }
+.fs-verdict + .fs-verdict { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .tag { display: inline-block; background: var(--bg); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; font-size: 12px; margin: 2px 4px 2px 0; }
 .tag.click { cursor: pointer; }
 .tag.click:hover { border-color: var(--accent); color: var(--accent); }
