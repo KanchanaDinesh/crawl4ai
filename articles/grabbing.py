@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlsplit
 import feedparser
 from bs4 import BeautifulSoup
 
+from worldnews.cleaning import clean_summary
 from worldnews.extract import article_meta, clean_text, discover_feeds, looks_like_feed, parse_date
 from worldnews.http import Http
 
@@ -94,7 +95,7 @@ def parse_items(xml: str, base_url: str = "") -> list[dict]:
             if content.get("value") and len(content["value"]) > len(body):
                 body = content["value"]
         summary_html = entry.get("summary") or entry.get("description") or ""
-        items.append({"url": urljoin(base_url, link).split("#")[0], "title": title, "summary": clean_text(BeautifulSoup(summary_html, "html.parser").get_text(" ", strip=True), 600),
+        items.append({"url": urljoin(base_url, link).split("#")[0], "title": title, "summary": clean_text(clean_summary(BeautifulSoup(summary_html, "html.parser").get_text(" ", strip=True)), 600),
                       "body_html": body if _words(body) >= _words(summary_html) else summary_html, "author": clean_text(entry.get("author"), 120) or None,
                       "published_at": parse_date(entry.get("published_parsed") or entry.get("updated_parsed") or entry.get("published") or entry.get("updated"))})
     return items

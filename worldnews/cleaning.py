@@ -17,7 +17,7 @@ NEWS_1ST_DATELINE = re.compile(r"^[A-Z]{3,}\s*[-â€“]?\s*\(News\s*1st\)\s*[:;,.â€
 NEWS_1ST_SLOGAN = re.compile(r"\s+-\s+Get the latest breaking news and top stories from Sri Lanka.*$", re.S)
 SITE_TRAILERS = (
     re.compile(r"\s*Read the full story on \S+.*$", re.S),                 # CryptoSlate
-    re.compile(r"\s*\bThe post .{0,300}? first appeared on .*$", re.S),    # WordPress's own line, at the end of many feeds
+    re.compile(r"\s*\bThe post .{0,300}? (?:first appeared|appeared first) on .*$", re.S),    # WordPress's own line, at the end of many feeds
 )
 EMPTY_SUMMARIES = {"comments"}                                             # Hacker News's feed has only a link to the comments
 MIN_TITLE_WORDS = 2

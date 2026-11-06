@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 641 tests pass.
+All 654 tests pass.
 
 ## Parts and how to run them
 
@@ -26,7 +26,7 @@ Run every command from the project folder, after `source env.sh`.
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
-| Articles | `uv run python -m articles run`, `show`, `stats`, `retag`, `companies`, `feeds`, `collect` | New 2026-11-07. Articles and blogs of the most valuable companies (US, GB, IN, AU, CA), tagged by service, linked to each company. **PostgreSQL** (schema `articles`) |
+| Articles | `uv run python -m articles run`, `show`, `stats`, `retag`, `companies`, `feeds`, `collect` | New 2026-11-07. Articles and blogs of the most valuable companies (US, GB, IN, AU, CA), tagged by service, linked to each company. Page at http://localhost:8060/articles/. **PostgreSQL** (schema `articles`) |
 | Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
@@ -513,7 +513,9 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **First real runs:** 1,220 articles, all with a date, 1,174 with full text, 7 MB. An article with no tag isn't kept (about half of what the feeds offered). `articles retag` applies changed word lists to what's saved.
     - **Stored for our own analysis, never republished.** robots.txt respected, no browser, and refusals are left alone.
     - Real data found: Wikidata writes year-only dates as 2023-00-00; the same feed at /feed/ and /rss/; comment feeds; job ads in feeds; "outlook" meaning a forecast. All fixed, with tests.
-    - **Next:** cover more companies (see Open issues), and a page of its own if Kanchana wants one. It's in Datasets as Tech articles for now.
+    - **The page (Kanchana, 2026-11-07):** menu Articles, `/articles/` (`webapp/articles/`, queries in `articles/queries.py`). Read and filter by tag, country, company, date and words in the text; the full text opens in a side panel, with a link to the original. A Companies tab shows who we can't reach. It goes to whoever has Datasets, and follows the rights of the dataset Tech articles. Migrated after a backup (`accounts.0011`), checked in the browser on the real data, including at phone width.
+    - `worldnews/cleaning.py` now also cuts WordPress's default "The post ... appeared first on ...". It only caught the other wording before. Run `python -m worldnews clean` to apply it to saved headlines.
+    - **Next:** cover more companies (see Open issues).
 
 ## Open issues and things to watch
 

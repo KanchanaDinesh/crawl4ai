@@ -151,3 +151,6 @@ table.dense svg.spark { height: 26px; margin: 0; }
 .people-list div { margin: 2px 0; }
 /* Plotly puts a white line behind the crosshair, which glares on the dark theme */
 .plot .spikeline[stroke-width="3"] { display: none; }
+.art-text p { margin: 0 0 10px; line-height: 1.55; }
+.art-more { padding: 5px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.art-more:hover { color: var(--accent); }

@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "webapp.explore",
     "webapp.insights",
     "webapp.foresight",
+    "webapp.articles",
     "webapp.userdata",
     "webapp.charts",
     "webapp.reports",

@@ -1,0 +1,10 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}{% if a %}
+<h2>{{ a.title }}</h2>
+<div class="muted">{% if a.published_at %}{{ a.published_at|slice:":10" }}{% else %}no date given{% endif %} · <b>{{ a.company }}</b> · {{ countries }}{% if a.author %} · {{ a.author }}{% endif %}</div>
+<p>{% for t in a.tag_names %}<span class="badge topic">{{ t }}</span>{% empty %}<span class="muted small">No tag</span>{% endfor %}</p>
+<p>{% outlink a.url "Read the original" %}</p>
+{% if a.summary and not paragraphs %}<p>{{ a.summary }}</p>{% endif %}
+<div class="art-text">{% for p in paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+<div class="muted small">{{ status }}{% if a.word_count %}, {{ a.word_count|num }} words{% endif %}. For our own analysis, never republished.</div>
+{% if a.more %}<h4>More from {{ a.company }}</h4><div class="small">{% for m in a.more %}<div class="art-more" role="button" tabindex="0" hx-get="{% url 'articles_read' %}?url={{ m.url|urlencode:'' }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']"><span class="muted">{{ m.published_at|slice:":10" }}</span> {{ m.title }}</div>{% endfor %}</div>{% endif %}
+{% endif %}

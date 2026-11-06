@@ -217,6 +217,11 @@ def test_parse_items_body_author_and_date():
     assert items[1]["url"] == "https://x.com/b" and items[1]["published_at"] is None
 
 
+def test_wordpress_boilerplate_comes_off_the_summary():
+    items = parse_items(feed({"title": "A", "url": "https://x.com/a", "summary": "The real summary. The post A appeared first on Some Blog."}, {"title": "B", "url": "https://x.com/b", "summary": "Another one. The post B first appeared on Other Blog."}))
+    assert items[0]["summary"] == "The real summary." and items[1]["summary"] == "Another one."
+
+
 class Hits:
     def __init__(self, body):
         self.body, self.count = body, 0

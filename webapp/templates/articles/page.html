@@ -1,0 +1,27 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}Articles{% endblock %}
+{% block tab %}
+{% if not s %}
+<div class="panel"><div class="empty">No articles yet.<br>Run <code>uv run python -m articles run</code>, then refresh this page.</div></div>
+{% else %}
+{% include "insights/_kpis.html" %}
+<form class="filters" id="filters" method="get" action="{% url 'articles' %}" hx-get="{% url 'articles_rows' %}" hx-target="#list" hx-sync="this:replace" hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+  {% include "insights/_chips.html" with chips=tag_chips name="tag" value=f.tag %}
+  {% include "insights/_chips.html" with chips=country_chips name="country" value=f.country %}
+  <select name="company" title="Company" aria-label="Company"><option value="">All companies</option>{% for c in companies %}<option value="{{ c.id }}"{% if c.id == f.company %} selected{% endif %}>{{ c.name }} · {{ c.n|num }}</option>{% endfor %}</select>
+  <select name="days" title="Period" aria-label="Period"><option value="">Any date</option>{% for d, l in periods %}<option value="{{ d }}"{% if d|stringformat:"s" == f.days %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search titles and the articles' text…" aria-label="Search articles">
+</form>
+<div class="ins-layout">
+  <div><div class="panel"><h3><span>Newest first <small data-count>{{ count }}</small></span></h3><div id="list">{% include "articles/_items.html" %}</div></div></div>
+  <aside>
+    <div class="panel"><h3>Top companies <small>click to filter</small></h3>{% include "insights/_bars.html" with rows=top_companies clickable=True %}</div>
+    <div class="panel"><h3>What we can reach <small><a href="{% url 'articles_companies' %}">all companies</a></small></h3>
+      <table class="plain small"><thead><tr><th>Country</th><th class="num">On the list</th><th class="num">With a feed</th><th class="num">With articles</th></tr></thead><tbody>{% for r in coverage %}<tr><td>{{ r.name }}</td><td class="num">{{ r.companies|num }}</td><td class="num">{{ r.with_feed|num }}</td><td class="num">{{ r.with_articles|num }}</td></tr>{% endfor %}</tbody></table>
+      <div class="muted small">Most big companies have no public feed we can read, so this isn't the whole picture of any company or country.</div></div>
+    <div class="muted small">From each company's own site, with the date it gave. Tags come from word lists, so they can be wrong. For our own analysis, never republished: the text is the companies' work.</div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

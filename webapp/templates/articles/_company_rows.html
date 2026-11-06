@@ -1,0 +1,7 @@
+{% load insights_ui %}{% for r in rows %}<tr>
+  <td class="nm">{% if r.articles %}<a href="{{ r.articles_url }}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}{% if r.ticker %} <span class="muted small">{{ r.ticker }}</span>{% endif %}</td>
+  <td class="nowrap">{{ r.countries|join:", " }}</td><td class="small muted">{{ r.indexes|join:", " }}</td><td class="small">{{ r.sector|default:"" }}</td>
+  <td class="num">{{ r.working_feeds }}</td><td class="num">{{ r.articles|num }}</td><td class="muted small nowrap">{{ r.latest_article|slice:":10" }}</td>
+  <td class="small">{% if r.website %}{% outlink r.website r.site %}{% endif %}</td><td class="muted small">{{ r.feeds_note|default:"" }}</td></tr>
+{% empty %}<tr><td colspan="9"><div class="empty">No companies match these filters.</div></td></tr>{% endfor %}
+{% if more %}<tr class="more-row" hx-get="{{ more }}" hx-trigger="click, loadmore" hx-swap="outerHTML" hx-sync="this:drop"><td colspan="9"><button class="btn" type="button">Load more</button></td></tr>{% endif %}
