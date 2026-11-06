@@ -1,5 +1,7 @@
 from django.urls import path
 
+from webapp.userdata import views as own
+
 from . import views
 
 urlpatterns = [
@@ -17,4 +19,16 @@ urlpatterns = [
     path("<str:ref>/restore/", views.restore, name="dataset_restore"),
     path("<str:ref>/review/", views.review, name="dataset_review"),
     path("<str:ref>/changes/", views.changes, name="dataset_changes"),
+    path("<str:ref>/fields/", own.fields_page, name="dataset_fields"),
+    path("<str:ref>/fields/options/", own.field_options, name="dataset_field_options"),
+    path("<str:ref>/fields/<int:pk>/", own.field_change, name="dataset_field_change"),
+    path("<str:ref>/link-options/", own.link_options, name="dataset_link_options"),
+    path("<str:ref>/link-values/", own.link_values, name="dataset_link_values"),
+    path("<str:ref>/links/", own.set_links, name="dataset_links"),
+    path("<str:ref>/choice/", own.add_choice, name="dataset_choice"),
+    path("<str:ref>/add-row/", own.add_row, name="dataset_add_row"),
+    path("<str:ref>/save-as-table/", own.save_as_table, name="dataset_save_table"),
+    path("<str:ref>/share/", own.share, name="dataset_share"),
+    path("<str:ref>/delete-table/", own.delete_table, name="dataset_delete_table"),
+    path("<str:ref>/add-from-file/", own.add_from_file, name="dataset_add_from_file"),
 ]

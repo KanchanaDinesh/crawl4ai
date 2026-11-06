@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 228 tests pass.
+All 282 tests pass.
 
 ## Parts and how to run them
 
@@ -30,7 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-4: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, and correcting companies and vehicle ads (history, rule A, hide). Django; schema `app`. The server restarts by itself after a code change |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-5: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), and own tables, own fields, links, lookups, rollups and imports. Django; schema `app`. The server restarts by itself after a code change |
 | Dashboard | In the web app: http://localhost:8060/dashboard/ (`webapp/insights/`) | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. Charts in Plotly. `python -m dashboard` (the old aiohttp page on port 8050) only says where it went |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -422,6 +422,16 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       login, which can't read the web app's schema, so no backup was made after 01:06 on 2026-11-06. It now uses the
       administrator's login (`CRAWL4AI_ADMIN_URL`), and includes users, the audit log and corrections. A new backup was made.
     - **Next: phase 5** (Airtable-like: choice fields, links between tables, lookups, own tables, imports).
+51. **User platform phase 5 built (2026-11-06): own tables, own fields, links.** Menu My tables (`webapp/userdata/`): make a table,
+    import CSV/Excel, or Save as table from any dataset; private until shared with a role. A Fields page on every dataset whose rows
+    have a key: text, number, money, date, yes/no, one or several choices, web address, email, link to another table (the other table
+    gets a column too), lookup, rollup. Own fields on collected data are never touched by collectors. The plan's test passes: ads
+    linked to a Dealers table, with ad count and total asking price per dealer. Details: `docs/user-platform-plan.md` → "Phase 5 results".
+    - New schema `userdata` (owned by the web app's login). **On a new server: `warehouse setup` before `webapp migrate`.**
+    - **Bug found, there since phase 2:** a JSON list reached the grid as text and left the whole grid blank (Tech site profiles,
+      Company websites, Tech companies). Fixed for the grid and exports.
+    - Checked on a temporary copy of the database, then deleted: the real database has none of the test tables.
+    - **Next: phase 6** (charts, dashboards, PDF reports).
 
 ## Open issues and things to watch
 
@@ -470,7 +480,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phases 1-4 are built; phase 5 is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-5 are built; phase 6 is next. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).

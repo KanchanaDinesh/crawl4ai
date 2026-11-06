@@ -12,11 +12,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from webapp.accounts.rights import menu_required
+from webapp.accounts.rights import can_open, menu_required
 from webapp.audit.log import record
 from webapp.catalog import rights
 from webapp.catalog.models import Dataset, Field
 from warehouse import edits
+
+from webapp.userdata import store
 
 from . import editing, export, query
 from .models import SavedView
@@ -49,19 +51,39 @@ def _dataset(request, ref: str) -> Dataset:
     return ds
 
 
+def _own_column(col: dict, f: Field, may_edit: bool) -> dict:
+    """Columns people added, for the grid."""
+    if f.kind == Field.RECORDS:
+        col.update(type="records", noun="row", filter="text", single=f.link_single and not f.is_reverse_link)
+        if may_edit:
+            col["can_link"] = True
+    elif f.kind == Field.OWN:
+        if may_edit:
+            col["editable"] = True
+        if f.type in (Field.CHOICE, Field.MULTI):
+            col.update(choices=list(f.values), filter_choices=[query.EMPTY, *f.values], allow_new=f.allow_new and may_edit, filter="choice", noun="choice")
+    return col
+
+
 def _column(f: Field, first: set[str], may_edit: bool = False) -> dict:
     col = {"field": f.path, "title": f.label, "type": f.type, "shown": f.path in first, "description": f.description,
            "noun": "value", "filter": "text"}
-    if may_edit and f.editable and not f.json_key:
+    if f.is_mine:
+        col["mine"] = True
+    if f.kind == Field.DATA and may_edit and f.editable and not f.json_key:
         col["editable"] = True
         if f.values:
             col["edit_choices"] = list(f.values)
-    if f.type == Field.NUMBER:
+    if f.base == Field.NUMBER:
         col["filter"] = "number"
-    elif f.type == Field.DATETIME:
+    elif f.base in (Field.DATETIME, Field.DATE):
         col["filter"] = "date"
-    elif f.type == Field.BOOL:
+    elif f.base == Field.BOOL:
         col.update(filter="choice", choices=["yes", "no"])
+    if f.kind in (Field.RECORDS, Field.OWN):
+        return _own_column(col, f, may_edit)
+    if f.base in (Field.NUMBER, Field.DATETIME, Field.DATE, Field.BOOL):
+        pass
     elif f.values:
         col.update(filter="choice", choices=list(f.values))
     if col.get("choices") and f.fill_pct < 100:
@@ -78,24 +100,30 @@ def _views_for(request, ds: Dataset) -> list[dict]:
 @menu_required("datasets")
 def dataset_page(request, ref):
     ds = _dataset(request, ref)
-    fields = query.usable_fields(ds)
+    fields = query.usable_fields(ds, request.user)
     views = _views_for(request, ds)
     first = {f.path for f in query.shown_first(fields)}
     may_edit, may_hide = rights.can_edit(request.user, ds), rights.can_hide(request.user, ds)
     target = ds.edit_target
     wanted = request.GET.get("view", "")
+    has_records = _has_key(ds)
     current = next((v for v in views if str(v["id"]) == wanted), None)
     config = {
-        "ref": ds.ref, "columns": [_column(f, first, may_edit and bool(target) and f.column in target.columns) for f in fields.values()], "views": views,
+        "ref": ds.ref, "columns": [_column(f, first, may_edit and (f.is_mine or (bool(target) and f.column in target.columns))) for f in fields.values()],
+        "views": views,
         "currentView": current["id"] if current else None, "state": current["state"] if current else None,
         "canExport": rights.can_export(request.user, ds), "exportLimit": export.LIMIT,
-        "canEdit": may_edit, "canHide": may_hide, "hasRecords": bool(target), "maxBulk": MAX_BULK,
+        "canEdit": may_edit, "canHide": may_hide, "hasRecords": has_records, "maxBulk": MAX_BULK, "isOwn": ds.is_own,
+        "canMakeTables": can_open(request.user, "my_tables"),
         "defaultSort": {"field": ds.default_sort_field, "dir": ds.default_sort_dir} if ds.default_sort_field in fields else None,
         "urls": {"rows": reverse("dataset_rows", args=[ds.ref]), "export": reverse("dataset_export", args=[ds.ref, "FMT"]),
                  "save": reverse("dataset_view_save", args=[ds.ref]),
                  "delete": reverse("dataset_view_delete", args=[ds.ref, 0]), "page": reverse("dataset", args=[ds.ref]),
                  "edit": reverse("dataset_edit_cell", args=[ds.ref]), "bulk": reverse("dataset_edit_bulk", args=[ds.ref]),
-                 "hide": reverse("dataset_hide", args=[ds.ref]), "history": reverse("dataset_history", args=[ds.ref])},
+                 "hide": reverse("dataset_hide", args=[ds.ref]), "history": reverse("dataset_history", args=[ds.ref]),
+                 "linkOptions": reverse("dataset_link_options", args=[ds.ref]), "linkValues": reverse("dataset_link_values", args=[ds.ref]),
+                 "links": reverse("dataset_links", args=[ds.ref]), "choice": reverse("dataset_choice", args=[ds.ref]),
+                 "addRow": reverse("dataset_add_row", args=[ds.ref]), "saveTable": reverse("dataset_save_table", args=[ds.ref])},
     }
     return render(request, "explore/dataset.html", {"ds": ds, "config": config})
 
@@ -110,9 +138,13 @@ def _json_param(request, name: str, default):
         raise query.QueryProblem(f"{name} isn't valid") from None
 
 
+def parse_request(request, ds: Dataset) -> dict:
+    return _parse(request, ds)
+
+
 def _parse(request, ds: Dataset) -> dict:
     """What a rows or export request asks for, checked against the catalog."""
-    fields = query.usable_fields(ds)
+    fields = query.usable_fields(ds, request.user)
     wanted = _json_param(request, "cols", None)
     if wanted is None:
         shown = query.shown_first(fields)
@@ -137,8 +169,9 @@ def _problem(e: Exception) -> JsonResponse:
     return JsonResponse({"error": CHANGED}, status=500)
 
 
-def _has_key(ds: Dataset, target: edits.Target) -> bool:
-    return ds.fields.filter(column=target.key, json_key=None, missing=False).exists()
+def _has_key(ds: Dataset) -> bool:
+    key = ds.record_key
+    return bool(key) and ds.fields.filter(column=key, json_key=None, missing=False).exists()
 
 
 def _add_marks(target: edits.Target, found: list[dict]) -> None:
@@ -160,11 +193,10 @@ def rows(request, ref):
         limit = min(MAX_LIMIT, max(1, int(request.GET.get("limit", 100))))
         q = _parse(request, ds)
         total = query.count_rows(ds, q["where"], q["params"])
-        target = ds.edit_target
-        key = target.key if target and _has_key(ds, target) else None
+        key = ds.record_key if _has_key(ds) else None
         found = query.fetch_rows(ds, q["shown"], q["where"], q["params"], q["order"], start, limit, key)
-        if key:
-            _add_marks(target, found)
+        if key and ds.edit_target:
+            _add_marks(ds.edit_target, found)
     except ValueError as e:
         return _problem(e if isinstance(e, query.QueryProblem) else query.QueryProblem("start and limit must be numbers"))
     except DatabaseError as e:
@@ -386,30 +418,38 @@ def unhide_row(request, ref):
 
 
 def _labels(ds: Dataset) -> dict[str, str]:
-    return {f.column: f.label for f in ds.fields.filter(json_key=None)}
+    """Names for what the history calls a field: a column, or an own field's path. Removed fields too: their history stays readable."""
+    return {(f.path if f.is_mine else f.column): f.label for f in ds.fields.filter(Q(json_key=None) | ~Q(kind=Field.DATA))}
 
 
 def _show(value) -> str:
+    if isinstance(value, list):
+        return ", ".join(map(str, value)) or "(empty)"
     return "(empty)" if value in (None, "") else str(value)
 
 
 def _history_context(request, ds: Dataset, record_id: str) -> dict:
     target = ds.edit_target
     labels = _labels(ds)
+    own = {f.path: f for f in ds.fields.filter(kind=Field.OWN, available=True, missing=False)}
     with connection.cursor() as cur:
         if not edits.available(cur):
             raise editing.EditProblem("Editing isn't set up on this database yet. Run: uv run python -m warehouse migrate", 503)
-        entries = edits.history_of(cur, target.table, record_id)
-        corrections = edits.corrections_of(cur, target.table, record_id)
+        entries = edits.history_of(cur, ds.record_table, record_id)
+        corrections = edits.corrections_of(cur, target.table, record_id) if target else {}
         current = {}
-        for column in edits.protected_columns(target):
+        for column in edits.protected_columns(target) if target else ():
             current[column] = editing._current_plain(cur, target, column, record_id)
+        for path, f in own.items():
+            current[path] = store.current_value(cur, ds, f, record_id)[1]
+    correctable = (target.columns if target else ())
     for e in entries:
+        restorable = (e["field"] in correctable or e["field"] in own) and e["origin"] not in ("linked", "link")
         e.update(label=labels.get(e["field"], e["field"]), old_text=_show(e["old"]), new_text=_show(e["new"]),
-                 can_restore=e["field"] in target.columns and e["origin"] != "linked" and not edits.same(current.get(e["field"]), e["old"]))
+                 can_restore=restorable and not edits.same(current.get(e["field"]), e["old"]))
     fields = [{"field": c, "label": labels.get(c, c), "now": _show(current.get(c)), "source": _show(corrections[c]["source"]),
                "by": corrections[c].get("by"), "pending": _show(corrections[c]["pending"]) if corrections[c]["pending"] is not None else None}
-              for c in target.columns if c in corrections]
+              for c in correctable if c in corrections]
     return {"ds": ds, "record": record_id, "entries": entries, "corrected": fields, "may_edit": rights.can_edit(request.user, ds)}
 
 
@@ -417,7 +457,7 @@ def _history_context(request, ds: Dataset, record_id: str) -> dict:
 def history(request, ref):
     """One record's panel: what's corrected, what waits for review, and every change, each with a way back."""
     ds = _dataset(request, ref)
-    if ds.edit_target is None:
+    if ds.record_key is None:
         raise Http404("This dataset has no history")
     try:
         context = _history_context(request, ds, request.GET.get("id", ""))
@@ -445,10 +485,9 @@ def restore(request, ref):
         entry_id = int(request.POST.get("entry", ""))
     except ValueError:
         raise Http404("No such change") from None
-    target = ds.edit_target
     try:
         with transaction.atomic(), connection.cursor() as cur:
-            entry = edits.history_entry(cur, target.table, record_id, entry_id)
+            entry = edits.history_entry(cur, ds.record_table, record_id, entry_id)
             if entry is None:
                 raise Http404("No such change")
             f = editing.editable_field(ds, entry["field"])
@@ -471,6 +510,8 @@ def review(request, ref):
     record_id, column, choice = request.POST.get("record", ""), request.POST.get("field", ""), request.POST.get("choice", "")
     target = ds.edit_target
     changes = {}
+    if target is None:
+        raise Http404("Nothing to review here")
     try:
         f = editing.editable_field(ds, column)
         with transaction.atomic(), connection.cursor() as cur:
@@ -496,12 +537,12 @@ def _changes_context(request, ds: Dataset) -> dict:
     target = ds.hide_target
     labels = _labels(ds)
     with connection.cursor() as cur:
-        ready = target is not None and edits.available(cur)
-        entries = edits.history_of(cur, target.table) if ready else []
-        hidden = edits.hidden_list(cur, target.table) if ready else []
+        ready = edits.available(cur)
+        entries = edits.history_of(cur, ds.record_table) if ready else []
+        hidden = edits.hidden_list(cur, target.table) if ready and target else []
     for e in entries:
         e.update(label=labels.get(e["field"], e["field"]), old_text=_show(e["old"]), new_text=_show(e["new"]))
-    return {"ds": ds, "entries": entries, "hidden": hidden, "may_hide": rights.can_hide(request.user, ds)}
+    return {"ds": ds, "entries": entries, "hidden": hidden, "may_hide": rights.can_hide(request.user, ds), "can_have_hidden": target is not None}
 
 
 def _changes_response(request, ds: Dataset):
@@ -512,6 +553,6 @@ def _changes_response(request, ds: Dataset):
 def changes(request, ref):
     """Everything people changed in this dataset, newest first, and what they hid."""
     ds = _dataset(request, ref)
-    if ds.hide_target is None:
+    if ds.record_key is None and ds.hide_target is None:
         raise Http404("This dataset has no changes")
     return _changes_response(request, ds)

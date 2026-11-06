@@ -367,9 +367,8 @@ def test_columns_outside_the_list_cant_be_edited_even_if_ticked(editor):
 
 def test_other_datasets_cant_be_edited(client, data):
     client.force_login(make_user("ada", "Administrator"))
-    assert client.post(reverse("dataset_edit_cell", args=["companies.sites"]), "{}", content_type="application/json").status_code == 403
-    assert client.get(reverse("dataset_history", args=["companies.sites"]), {"id": "x"}).status_code == 404
-    assert client.get(reverse("dataset_changes", args=["companies.sites"])).status_code == 404
+    assert client.post(reverse("dataset_edit_cell", args=["companies.sites"]), json.dumps({"field": "status", "id": "x"}), content_type="application/json").status_code == 403
+    assert client.get(reverse("dataset_history", args=["vehicles.ads"]), {"id": "x"}).status_code == 404   # its rows have no key
     config = client.get(reverse("dataset", args=["vehicles.ads"])).context["config"]    # a list of the same ads, read-only
     assert config["canEdit"] is False and config["hasRecords"] is False
 
@@ -379,7 +378,7 @@ def test_a_new_scan_gives_editors_the_right_and_nobody_else(data):
     rights = {r.group.name: (r.can_view, r.can_edit, r.can_hide) for r in ds.rights.select_related("group")}
     assert rights == {"Editor": (True, True, True), "Analyst": (True, False, False), "Viewer": (True, False, False)}
     read_only = Dataset.objects.get(schema="companies", name="sites")
-    assert not read_only.rights.filter(can_edit=True).exists() and not read_only.fields.filter(editable=True).exists()
+    assert not read_only.rights.filter(can_hide=True).exists() and not read_only.fields.filter(editable=True).exists()
     assert ds.fields.get(path="name").editable and not ds.fields.get(path="source").editable
 
 
@@ -416,8 +415,8 @@ def test_the_rights_page_sets_edit_and_hide(client, data):
     assert ">Edit<" in client.get(reverse("dataset_rights")).content.decode()
     form = {f"v_{r.dataset_id}_{r.group_id}": "on" for r in DatasetRight.objects.filter(can_view=True)}
     form[f"c_{ds.pk}_{viewer.pk}"] = "on"
-    other = Dataset.objects.get(schema="companies", name="sites")
-    form[f"c_{other.pk}_{viewer.pk}"] = "on"                                               # can't be corrected at all: ignored
+    other = Dataset.objects.get(schema="vehicles", name="ads")
+    form[f"c_{other.pk}_{viewer.pk}"] = "on"                                               # its rows have no key: ignored
     assert client.post(reverse("dataset_rights"), form).status_code == 302
     right = DatasetRight.objects.get(dataset=ds, group=viewer)
     assert right.can_edit and not right.can_hide and not DatasetRight.objects.get(dataset=other, group=viewer).can_edit

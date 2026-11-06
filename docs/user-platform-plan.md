@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 to 4 built (2026-11-06); grid: Tabulator; phase 5 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 5 built (2026-11-06); grid: Tabulator; phase 6 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -232,6 +232,44 @@ Known limits, for later: a corrected price counts in "price changes", as a real 
 is selected on opening, so the selection bar shows "1 row selected" straight away; a role can be given Edit per dataset,
 not per column.
 
+## Phase 5 results (2026-11-06)
+
+**The plan's test works:** make a Dealers table (or import it), add a **Dealer** link on Vehicle ads, pick dealers in the grid or
+for many ads at once, and add a rollup on Dealers: each dealer shows its ad count and total asking price, live. It holds when the
+vehicles collector runs again and a price changes.
+
+**Own tables** (`webapp/userdata/`, menu **My tables**): private to their maker until shared with a role (See and export, or
+Change). Make one, import a CSV or Excel file (columns and types shown before anything is saved), or press **Save as table** on any
+dataset to copy what's on screen (needs the export right; at most 50,000 rows; a copy, it doesn't follow later changes).
+
+**Own fields on anything whose rows have a key**, collected data included: a Status or Tags column on companies, beside the
+collected values, where no collector touches them. Types: text, number, money, date, yes/no, one choice, several choices (people can
+add a choice by typing it, shared with everyone; "Tag" and "tag" are one), web address, email.
+
+**Links, lookups and rollups:** a link goes to rows of another table, and that table gets a column showing what links to each row;
+either side can change it. "One linked row only" moves a row rather than doubling it. A lookup shows a field of the linked rows; a
+rollup counts them, or adds up a number field (sum, average, smallest, largest). Rights follow: a link, lookup or rollup into a
+dataset someone may not see isn't in their columns at all.
+
+**How it's built, and why it needs little code:** a field is one catalog row, and every kind ends as an SQL expression
+(`query.value_expr`), so the grid, filters, sorting, saved views, exports and later charts work with all of them without knowing the
+kind. Values are JSONB, as the plan said, so adding a field changes no table: `userdata.records` (own tables' rows; each table
+has a view, `userdata.t_xxx`), `userdata.extras` (own fields beside collected rows), `userdata.links`. The web app's login owns
+schema `userdata` and made its tables, so **on a new server run `warehouse setup` before `webapp migrate`** (it says so if not).
+Own-table rows and fields use the same history, Put back, conflict check and bulk edit as corrections. Removing a row or a field
+keeps its data.
+
+**Speed on the real data:** with a choice on 606 of the 132,742 companies, the first page takes 0.4 s, filtering by it 0.8 s and
+sorting by it 0.4 s. Checked on a temporary copy of the database (deleted afterwards), with a real vehicles run.
+
+**Found on the way:** on the web app's connection a JSON list arrives as text, and the grid couldn't draw it, which left **the whole
+grid blank**. This had been wrong since phase 2 for any dataset with a list column on screen (Tech site profiles, Company websites,
+Tech companies). Fixed for the grid and exports (`query.shown_value`), with a test.
+
+Known limits, for later: a link shows a collected row's name as it was when linked (own tables' names stay current); own fields belong to
+one dataset, so a Status on Companies isn't on Company records; anyone who can see a dataset sees its own fields; an Excel file's
+first sheet only; a removed field or table has no "bring back" button yet (its data is kept).
+
 ## How it fits together
 
 ```
@@ -258,7 +296,7 @@ not per column.
 |---|---|---|
 | `news`, `tech`, `markets`, `vehicles`, `companies`, `scrapers` | collected data (as now) | collectors; the app only for user edits to editable fields |
 | `app` | Django's own tables: users, roles, permissions, menus, catalog, saved views, charts, dashboards, report definitions | the app |
-| `userdata` | users' own tables, link tables, tags | the app |
+| `userdata` | people's own tables' rows, own fields beside collected rows, links | the app (it owns the schema); the reader can read it |
 | `audit` | field history, what the source last said, hidden records (the sign-in and admin audit log is in `app`) | the app and collectors (and a database trigger as a safety net) |
 
 ### Flexible records
@@ -390,7 +428,7 @@ webapp/                    the Django project (python -m webapp / manage.py)
   accounts/                users, roles, menus, rights, admin screens, login protection
   catalog/                 dataset registry, automatic scan, field settings, dataset rights
   explore/                 dataset pages, grid data, saved views, exports (phase 4 adds editing, history, rule A, hide)
-  userdata/                own tables, imports, tags, links
+  userdata/                own tables, own fields, imports, links
   charts/                  chart builder, dashboards (Plotly)
   reports/                 report templates, PDF (WeasyPrint), schedules
   assistant/               AI assistant (catalog only)
@@ -410,7 +448,7 @@ only the web app (port 8060).
 | 2 ✅ | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
 | 3 ✅ | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
 | 4 ✅ | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
-| 5 | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
+| 5 ✅ | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
 | 6 | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |
 | 7 | **AI assistant:** catalog-only SQL, preview, save as live dataset, limits, logging | "Sri Lankan companies in the news this month with LinkedIn" gives a correct, saved, updating dataset |
 | 8 | **Server:** deployment with HTTPS, two-step login, backups there, monitoring | The team uses it from their own computers |

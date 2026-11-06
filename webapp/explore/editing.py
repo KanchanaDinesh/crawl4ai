@@ -6,6 +6,7 @@ from warehouse import edits
 from warehouse.postgres import clean_text
 from webapp.catalog.models import Dataset, Field
 from webapp.catalog.sqlnames import q, relation
+from webapp.userdata import store
 
 from .query import plain
 
@@ -26,9 +27,12 @@ def _rel(table: str) -> str:
 
 
 def editable_field(ds: Dataset, path: str) -> Field:
+    """A column people may correct, or one of their own fields. Links change through their own endpoint; lookups and rollups are worked out."""
+    f = ds.fields.filter(path=path, available=True, missing=False).first()
+    if f is not None and f.kind == Field.OWN:
+        return f
     target = ds.edit_target
-    f = ds.fields.filter(path=path, available=True, missing=False, editable=True, json_key=None).first()
-    if target is None or f is None or f.column not in target.columns:
+    if target is None or f is None or f.kind != Field.DATA or not f.editable or f.json_key or f.column not in target.columns:
         raise EditProblem("That field can't be edited.", 403)
     return f
 
@@ -111,6 +115,8 @@ def _write(cur, target: edits.Target, column: str, record: str, value) -> None:
 
 def save_cell(cur, ds: Dataset, f: Field, record: str, value, who: str, *, seen=NOT_SEEN, origin="user", note="") -> dict:
     """Call inside a transaction. Returns {"value", "changed", "linked"}; raises EditProblem."""
+    if f.kind == Field.OWN:
+        return _save_own(cur, ds, f, record, value, who, seen, origin, note)
     target = ds.edit_target
     found, before = _current(cur, target, f.column, record)
     if not found:
@@ -135,6 +141,16 @@ def save_cell(cur, ds: Dataset, f: Field, record: str, value, who: str, *, seen=
     return {"value": new, "changed": True, "linked": linked}
 
 
+def _save_own(cur, ds: Dataset, f: Field, record: str, value, who: str, seen, origin: str, note: str) -> dict:
+    """People's own fields keep their values apart from the collected data, so no collector ever touches them."""
+    try:
+        return store.save_value(cur, ds, f, record, value, who, origin=origin, note=note,
+                                seen=store.StoreProblem.NOT_SET if seen is NOT_SEEN else seen)
+    except store.StoreProblem as e:
+        current = NOT_SEEN if e.current is store.StoreProblem.NOT_SET else e.current
+        raise EditProblem(str(e), e.status, current=current) from None
+
+
 def require_ready(cur) -> None:
     if not edits.available(cur):
         raise EditProblem("Editing isn't set up on this database yet. Run: uv run python -m warehouse migrate", 503)
@@ -142,9 +158,8 @@ def require_ready(cur) -> None:
 
 def hide_rows(cur, ds: Dataset, records: list[str], who: str) -> int:
     target = ds.hide_target
-    cur.execute(f"select {q(target.key)}, {q(target.label)} from {_rel(target.table)} where {q(target.key)} = any(%s)", [records])
-    labels = dict(cur.fetchall())
-    return sum(edits.hide(cur, target.table, r, str(labels.get(r) or r)[:200], who) for r in records if r in labels)
+    names = store.row_names(cur, ds, records)
+    return sum(edits.hide(cur, target.table, r, names[r][:200], who) for r in records if r in names)
 
 
 def bump_counts(ds: Dataset) -> None:

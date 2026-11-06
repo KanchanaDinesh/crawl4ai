@@ -18,7 +18,7 @@ from django.utils import timezone
 from warehouse.postgres import SCHEMAS
 
 from .defaults import KNOWN, STARTING_ROLES_EXPORT, STARTING_ROLES_VIEW, STARTING_ROLES_EDIT
-from .models import Dataset, DatasetRight, Field
+from .models import USERDATA, Dataset, DatasetRight, Field
 from .sqlnames import lit, q, relation
 
 logger = logging.getLogger("webapp.catalog")
@@ -228,7 +228,7 @@ def _save_fields(ds: Dataset, specs: list[dict], total: int) -> int:
             f.missing = False
             f.save()
     wanted = {s["path"] for s in specs}
-    ds.fields.exclude(path__in=wanted).update(missing=True)
+    ds.fields.filter(kind=Field.DATA).exclude(path__in=wanted).update(missing=True)     # people's own fields aren't the scan's
     return added
 
 
@@ -241,8 +241,9 @@ def _new_dataset(schema: str, name: str, kind: str, primary_key: list[str]) -> D
         key_columns=primary_key or (known or {}).get("key", []), default_sort_field=sort[0], default_sort_dir=sort[1])
     if known and not known.get("off"):      # datasets we know start with the plan's rights; unknown ones with none
         for group in Group.objects.filter(name__in=STARTING_ROLES_VIEW):
-            edit = group.name in STARTING_ROLES_EDIT and ds.edit_target is not None
-            DatasetRight.objects.create(dataset=ds, group=group, can_view=True, can_edit=edit, can_hide=edit,
+            edit = group.name in STARTING_ROLES_EDIT
+            DatasetRight.objects.create(dataset=ds, group=group, can_view=True, can_edit=edit and ds.record_key is not None,
+                                        can_hide=edit and ds.edit_target is not None,
                                         can_export=group.name in STARTING_ROLES_EXPORT)
     return ds
 
@@ -282,7 +283,7 @@ def scan() -> dict:
             if r["new"]:
                 summary["new"].append(r["ref"])
     seen = {(s, n) for s, n, _ in found}
-    for ds in Dataset.objects.filter(missing=False):
+    for ds in Dataset.objects.filter(missing=False).exclude(schema=USERDATA):      # people's own tables aren't the scan's
         if (ds.schema, ds.name) not in seen:
             ds.missing = True
             ds.save(update_fields=["missing"])

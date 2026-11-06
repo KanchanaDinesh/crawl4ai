@@ -14,7 +14,7 @@ urlpatterns = [
     path("admin/catalog/", include("webapp.catalog.urls")),
     path("dashboard/", include("webapp.insights.urls")),
     # pages of later phases: the menu items exist now, so rights can be set up front
-    path("my-tables/", core.coming("my_tables"), name="my_tables"),
+    path("my-tables/", include("webapp.userdata.urls")),
     path("charts/", core.coming("charts"), name="charts"),
     path("reports/", core.coming("reports"), name="reports"),
     path("assistant/", core.coming("assistant"), name="assistant"),

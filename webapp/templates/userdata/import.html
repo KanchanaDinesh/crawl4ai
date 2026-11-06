@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% load humanize %}{% block title %}Import {{ kept.filename }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ kept.filename }}</h1><p class="muted">{{ rows_count|intcomma }} rows{% if into %}, to add to “{{ into.label }}”{% endif %}. Nothing is saved until you press the button.</p></div>
+  <a href="{% url 'my_tables' %}">Cancel</a></div>
+<form method="post" class="card">{% csrf_token %}
+  {% if not into %}<div class="field" style="max-width:420px"><label for="label">Name of the new table</label><input type="text" id="label" name="label" value="{{ label }}" maxlength="120" required></div>{% endif %}
+  <div class="table-wrap"><table class="list"><thead><tr><th>Column in the file</th><th>Looks like</th>{% if into %}<th>Goes into</th>{% else %}<th>Keep</th><th>Field name</th><th>Type</th>{% endif %}</tr></thead><tbody>
+  {% for c in columns %}<tr><td><b>{{ c.heading }}</b></td><td class="small muted">{{ c.examples|join:" · "|truncatechars:90 }}</td>
+    {% if into %}<td><select name="into_{{ c.index }}" aria-label="Field for {{ c.heading }}"><option value="">(leave out)</option>{% for f in own_fields %}<option value="{{ f.pk }}"{% if f.pk == c.match %} selected{% endif %}>{{ f.label }}</option>{% endfor %}</select></td>
+    {% else %}<td><input type="checkbox" name="use_{{ c.index }}" checked aria-label="Keep {{ c.heading }}"></td>
+    <td><input type="text" name="name_{{ c.index }}" value="{{ c.heading }}" maxlength="120" aria-label="Field name for {{ c.heading }}"></td>
+    <td><select name="type_{{ c.index }}" aria-label="Type of {{ c.heading }}">{% for code, name in types.items %}<option value="{{ code }}"{% if code == c.type %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></td>{% endif %}</tr>{% endfor %}
+  </tbody></table></div>
+  <p class="muted small">A value that doesn't fit its type is left empty, and you're told how many.</p>
+  <div class="form-actions"><button class="btn primary" type="submit">{% if into %}Add {{ rows_count|intcomma }} rows{% else %}Make the table with {{ rows_count|intcomma }} rows{% endif %}</button></div>
+</form>
+{% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Dataset rights{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Dataset rights</h1><p class="muted">Tick what each role may do with each dataset. Administrators can always do everything. Only companies and vehicle ads can be corrected or hidden so far.</p></div>
+<div class="page-head"><div><h1>Dataset rights</h1><p class="muted">Tick what each role may do with each dataset. Administrators can always do everything. Edit: use the fields people added, and correct collected values where that's allowed (companies and vehicle ads). A dash means its rows have no key, or can't be hidden.</p></div>
   <a href="{% url 'roles' %}">Back to roles</a></div>
 <form method="post" class="card">{% csrf_token %}
   <div class="table-wrap"><table class="list matrix">
@@ -15,8 +15,8 @@
         {% for c in row.cells %}
         <td><input type="checkbox" name="v_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may see {{ row.ds.label }}" {% if c.right.can_view %}checked{% endif %}></td>
         <td><input type="checkbox" name="e_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may export {{ row.ds.label }}" {% if c.right.can_export %}checked{% endif %}></td>
-        <td>{% if row.ds.edit_target %}<input type="checkbox" name="c_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may edit {{ row.ds.label }}" {% if c.right.can_edit %}checked{% endif %}>{% else %}<span class="muted">–</span>{% endif %}</td>
-        <td>{% if row.ds.edit_target %}<input type="checkbox" name="h_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may hide rows of {{ row.ds.label }}" {% if c.right.can_hide %}checked{% endif %}>{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td>{% if row.ds.record_key %}<input type="checkbox" name="c_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may edit {{ row.ds.label }}" {% if c.right.can_edit %}checked{% endif %}>{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td>{% if row.ds.edit_target or row.ds.is_own %}<input type="checkbox" name="h_{{ row.ds.pk }}_{{ c.group.pk }}" aria-label="{{ c.group.name }} may hide rows of {{ row.ds.label }}" {% if c.right.can_hide %}checked{% endif %}>{% else %}<span class="muted">–</span>{% endif %}</td>
         {% endfor %}
       </tr>
       {% endfor %}

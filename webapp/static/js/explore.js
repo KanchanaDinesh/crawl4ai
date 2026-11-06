@@ -12,7 +12,10 @@
   $("q").value = state.q || "";
   const grid = DataGrid.create($("grid"), {
     columns: config.columns, rowsUrl: config.urls.rows, headerFilters: true, index: config.hasRecords ? "_id" : "_row",
-    editUrl: config.canEdit ? config.urls.edit : null, undo: false,
+    editUrl: config.canEdit ? config.urls.edit : null, undo: false, choiceUrl: config.urls.choice,
+    links: config.canEdit ? { options: config.urls.linkOptions, values: config.urls.linkValues, save: config.urls.links } : null,
+    // a lookup or rollup in the same row depends on the link just changed
+    onLinked: () => { if (config.columns.some((c) => c.mine && (c.type === "number" || c.type === "list"))) grid.reload(); },
     state, defaultSort: config.defaultSort,
     onSelection: showSelection,
     filters: () => ({ q: $("q").value.trim() }),
@@ -27,7 +30,7 @@
     $("showhistory").hidden = n !== 1;
     $("bulkbar").hidden = !config.canEdit;
     $("hiderows").hidden = !config.canHide;
-    $("hiderows").textContent = `Hide ${n === 1 ? "this row" : `these ${n.toLocaleString("en-US")} rows`}`;
+    $("hiderows").textContent = `${config.isOwn ? "Remove" : "Hide"} ${n === 1 ? "this row" : `these ${n.toLocaleString("en-US")} rows`}`;
     delete $("hiderows").dataset.armed;
   }
   async function post(url, body) {
@@ -36,7 +39,7 @@
     if (!res.ok) throw new Error(data.error || `That didn't work (HTTP ${res.status}).`);
     return data;
   }
-  const editableColumns = config.columns.filter((c) => c.editable);
+  const editableColumns = config.columns.filter((c) => c.editable || c.can_link);
   for (const c of editableColumns) {
     const o = document.createElement("option");
     o.value = c.field; o.textContent = c.title;
@@ -44,8 +47,11 @@
   }
   function fillBulkChoices() {
     const c = editableColumns.find((x) => x.field === $("bulkfield").value);
+    const picksRows = !!(c && c.type === "records");
+    $("bulkvalue").hidden = $("bulkto").hidden = picksRows;       // rows of another table are chosen from a list
+    $("bulkapply").textContent = picksRows ? "Choose rows" : "Apply";
     $("bulkchoices").innerHTML = "";
-    for (const v of (c && c.edit_choices) || []) {
+    for (const v of (c && (c.edit_choices || c.choices)) || []) {
       const o = document.createElement("option");
       o.value = v;
       $("bulkchoices").appendChild(o);
@@ -57,6 +63,17 @@
     const ids = grid.selectedIds(), field = $("bulkfield").value;
     const c = editableColumns.find((x) => x.field === field);
     if (!ids.length || !c) return;
+    if (c.type === "records") {
+      DataGrid.pickRecords($("bulkapply"), { optionsUrl: `${config.urls.linkOptions}?${new URLSearchParams({ field })}`, current: [], single: c.single,
+        onDone: async (rows) => {
+          try {
+            const done = await DataGrid.postLinks(config.urls.links, ids, field, rows.map((r) => r.id));
+            status(`${c.title} set on ${done.changed.toLocaleString("en-US")} row${done.changed === 1 ? "" : "s"}.`);
+            grid.reload();
+          } catch (err) { status(err.message, true); }
+        } });
+      return;
+    }
     try {
       const done = await post(config.urls.bulk, { ids, field, value: $("bulkvalue").value });
       grid.applyValue(ids, field, done.value);
@@ -70,15 +87,41 @@
     if (!ids.length) return;
     if (b.dataset.armed !== "1") {            // asked here rather than in a dialog: one more click, right where they are
       b.dataset.armed = "1";
-      b.textContent = `Really hide ${ids.length.toLocaleString("en-US")}? They can be shown again from Changes`;
+      b.textContent = `Really ${config.isOwn ? "remove" : "hide"} ${ids.length.toLocaleString("en-US")}? They can come back from Changes`;
       return;
     }
     try {
       const done = await post(config.urls.hide, { ids });
-      status(`${done.hidden.toLocaleString("en-US")} row${done.hidden === 1 ? "" : "s"} hidden. Changes lists them, to show them again.`);
+      status(`${done.hidden.toLocaleString("en-US")} row${done.hidden === 1 ? "" : "s"} ${config.isOwn ? "removed" : "hidden"}. Changes lists them, to bring them back.`);
       $("selection").hidden = true;
       grid.reload();
     } catch (err) { status(err.message, true); }
+  });
+
+  // ── own tables: a new row; any rows: a copy as a table of one's own ──
+  $("addrow").hidden = !(config.isOwn && config.canEdit);
+  $("addrow").addEventListener("click", async () => {
+    try {
+      const done = await post(config.urls.addRow, {});
+      grid.addRow(done.row);
+      status("Row added.");
+    } catch (err) { status(err.message, true); }
+  });
+  $("savetable").hidden = !(config.canMakeTables && config.canExport);
+  $("savetable").addEventListener("click", () => {
+    $("tablename").value = ""; $("tableerror").hidden = true;
+    $("tabledialog").showModal();
+  });
+  $("tablecancel").addEventListener("click", () => $("tabledialog").close());
+  $("tableform").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const qs = new URLSearchParams();
+    const p = { ...grid.params(), q: $("q").value.trim() };
+    for (const k in p) if (p[k]) qs.set(k, p[k]);
+    try {
+      const done = await post(`${config.urls.saveTable}?${qs}`, { name: $("tablename").value });
+      location.href = done.url;
+    } catch (err) { $("tableerror").textContent = err.message; $("tableerror").hidden = false; }
   });
 
   // ── a row's history, in the side panel ──

@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% load humanize %}{% block title %}My tables{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>My tables</h1><p class="muted">Your own lists, in the same grid as everything else. Link them to each other and to collected data.</p></div></div>
+<div class="grid-2">
+  <form method="post" action="{% url 'my_tables_new' %}" class="card">{% csrf_token %}
+    <h2>New table</h2>
+    <div class="field"><label for="label">Name</label><input type="text" id="label" name="label" maxlength="120" required placeholder="e.g. Dealers"></div>
+    <div class="field"><label for="description">What it's for (optional)</label><input type="text" id="description" name="description" maxlength="300"></div>
+    <div class="form-actions"><button class="btn primary" type="submit">Make the table</button></div>
+  </form>
+  <form method="post" action="{% url 'my_tables_upload' %}" enctype="multipart/form-data" class="card">{% csrf_token %}
+    <h2>From a file</h2>
+    <div class="field"><label for="file">CSV or Excel (.xlsx)</label><input type="file" id="file" name="file" accept=".csv,.tsv,.txt,.xlsx" required>
+      <span class="help">The first line must be the headings. At most 20 MB and 100,000 rows. You'll see the columns before anything is saved.</span></div>
+    <div class="form-actions"><button class="btn primary" type="submit">Read the file</button></div>
+  </form>
+</div>
+<section class="ds-group"><h2>Your tables</h2>
+  {% if mine %}<div class="ds-cards">{% for d in mine %}<a class="card ds-card" href="{% url 'dataset' d.ref %}"><strong>{{ d.label }}</strong><span class="muted small">{{ d.description }}</span><span class="small ds-count">{{ d.row_count|default:0|intcomma }} rows</span></a>{% endfor %}</div>
+  {% else %}<p class="muted">None yet. Make one above, or start from a file. You can also press <b>Save as table</b> on any dataset.</p>{% endif %}</section>
+{% if others %}<section class="ds-group"><h2>Shared with you</h2><div class="ds-cards">{% for d in others %}<a class="card ds-card" href="{% url 'dataset' d.ref %}"><strong>{{ d.label }}</strong><span class="muted small">From {{ d.owner.get_username }}{% if d.description %} · {{ d.description }}{% endif %}</span><span class="small ds-count">{{ d.row_count|default:0|intcomma }} rows</span></a>{% endfor %}</div></section>{% endif %}
+{% endblock %}

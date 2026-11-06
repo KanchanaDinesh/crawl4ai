@@ -37,6 +37,7 @@ project_paths.apply_local_env()
 
 SCHEMAS = ("news", "tech", "markets", "vehicles", "companies", "scrapers")
 APP_SCHEMA = "app"                         # the web app's own tables; never readable by the reader login
+USERDATA_SCHEMA = "userdata"               # people's own tables, fields and links; owned by the web app's login
 AUDIT_SCHEMA = "audit"                     # people's corrections and their history; never readable by the reader login
 EXTENSIONS = ("pg_trgm", "unaccent")      # pg_trgm: fast "name contains" search; unaccent: search ignoring accents
 READER_STATEMENT_TIMEOUT = "30s"
@@ -152,6 +153,14 @@ def setup(admin_url: str | None = None) -> list[str]:
         if not con.execute("select 1 from pg_namespace where nspname = %s", [APP_SCHEMA]).fetchone():
             con.execute(sql.SQL("create schema {} authorization {}").format(sql.Identifier(APP_SCHEMA), A))
             done.append(f"created schema {APP_SCHEMA} (owner {n['app']})")
+        # people's own tables: the web app makes them while it runs, so it owns this schema; the reader can read them
+        if not con.execute("select 1 from pg_namespace where nspname = %s", [USERDATA_SCHEMA]).fetchone():
+            con.execute(sql.SQL("create schema {} authorization {}").format(sql.Identifier(USERDATA_SCHEMA), A))
+            done.append(f"created schema {USERDATA_SCHEMA} (owner {n['app']})")
+        con.execute(sql.SQL("grant usage on schema {} to {}").format(sql.Identifier(USERDATA_SCHEMA), R))
+        con.execute(sql.SQL("grant select on all tables in schema {} to {}").format(sql.Identifier(USERDATA_SCHEMA), R))
+        con.execute(sql.SQL("alter default privileges for role {} in schema {} grant select on tables to {}")
+                    .format(A, sql.Identifier(USERDATA_SCHEMA), R))
         con.execute(sql.SQL("alter role {} in database {} set search_path = {}, public").format(
             A, D, sql.Identifier(APP_SCHEMA)))
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, R))

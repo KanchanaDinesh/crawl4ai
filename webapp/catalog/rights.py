@@ -1,6 +1,8 @@
 """Who may see and export which dataset. Administrators may do everything; everyone else gets it through a role, and
 rights add up over all their roles. A dataset that's switched off is for administrators only."""
 
+from django.db.models import Q
+
 from webapp.accounts.rights import ADMINISTRATOR
 
 from .models import Dataset, DatasetRight
@@ -31,28 +33,37 @@ def _rights(user) -> dict[int, dict]:
     return rights
 
 
+def _owns(user, ds: Dataset) -> bool:
+    return ds.owner_id is not None and ds.owner_id == user.pk and not ds.missing
+
+
 def can_view(user, ds: Dataset) -> bool:
-    if is_admin(user):
+    if is_admin(user) or _owns(user, ds):
         return True
     return ds.enabled and not ds.missing and _rights(user).get(ds.pk, {}).get("view", False)
 
 
 def can_export(user, ds: Dataset) -> bool:
-    if is_admin(user):
+    if is_admin(user) or _owns(user, ds):
         return True
     return ds.enabled and not ds.missing and _rights(user).get(ds.pk, {}).get("export", False)
 
 
 def can_edit(user, ds: Dataset) -> bool:
-    if ds.edit_target is None or ds.missing:
+    """Correct its columns (where warehouse/edits.py allows) and use its own fields. Needs rows with a key."""
+    if ds.record_key is None or ds.missing:
         return False
-    return is_admin(user) or (ds.enabled and _rights(user).get(ds.pk, {}).get("edit", False))
+    return is_admin(user) or _owns(user, ds) or (ds.enabled and _rights(user).get(ds.pk, {}).get("edit", False))
 
 
 def can_hide(user, ds: Dataset) -> bool:
-    if ds.edit_target is None or ds.missing:
+    if (ds.edit_target is None and not ds.is_own) or ds.missing:
         return False
-    return is_admin(user) or (ds.enabled and _rights(user).get(ds.pk, {}).get("hide", False))
+    return is_admin(user) or _owns(user, ds) or (ds.enabled and _rights(user).get(ds.pk, {}).get("hide", False))
+
+
+def can_share(user, ds: Dataset) -> bool:
+    return ds.is_own and (is_admin(user) or _owns(user, ds))
 
 
 def visible_datasets(user):
@@ -60,4 +71,4 @@ def visible_datasets(user):
     found = Dataset.objects.filter(enabled=True, missing=False)
     if is_admin(user):
         return found
-    return found.filter(pk__in=[pk for pk, r in _rights(user).items() if r["view"]])
+    return found.filter(Q(pk__in=[pk for pk, r in _rights(user).items() if r["view"]]) | Q(owner=user))

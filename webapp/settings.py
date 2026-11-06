@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "webapp.catalog",
     "webapp.explore",
     "webapp.insights",
+    "webapp.userdata",
 ]
 
 MIDDLEWARE = [

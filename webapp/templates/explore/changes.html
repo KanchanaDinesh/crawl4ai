@@ -2,7 +2,7 @@
 {% block content %}
 <div class="page-head"><div><h1>Changes to {{ ds.label }}</h1><p class="muted">What people corrected and hid. A change a collector made appears here only when it replaced someone's correction.</p></div>
   <a href="{% url 'dataset' ds.ref %}">Back to the data</a></div>
-<section class="card"><h2>Hidden rows</h2><p class="muted small">Hidden rows don't show anywhere in the app, and stay hidden when a collector sees them again.</p><div id="hidden">{% include "explore/_hidden.html" %}</div></section>
+{% if can_have_hidden %}<section class="card"><h2>{% if ds.is_own %}Removed rows{% else %}Hidden rows{% endif %}</h2><p class="muted small">{% if ds.is_own %}Removed rows are kept, and can come back.{% else %}Hidden rows don't show anywhere in the app, and stay hidden when a collector sees them again.{% endif %}</p><div id="hidden">{% include "explore/_hidden.html" %}</div></section>{% endif %}
 <section class="card"><h2>Latest changes</h2>
 {% if entries %}<div class="table-wrap"><table class="list"><thead><tr><th>When</th><th>Who</th><th>Record</th><th>Field</th><th>From</th><th>To</th></tr></thead><tbody>
   {% for e in entries %}<tr><td class="nowrap small">{{ e.at|localtime|date:"Y-m-d H:i" }}</td><td class="small">{{ e.by }}</td><td class="small mono" style="overflow-wrap:anywhere">{{ e.record }}</td><td class="small">{{ e.label }}</td><td class="small">{{ e.old_text }}</td><td class="small">{{ e.new_text }}{% if e.note %}<div class="muted">{{ e.note }}</div>{% endif %}</td></tr>{% endfor %}

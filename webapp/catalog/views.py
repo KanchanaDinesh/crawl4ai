@@ -124,8 +124,8 @@ def rights(request):
                 for g in groups:
                     view = f"v_{ds.pk}_{g.pk}" in request.POST
                     export = view and f"e_{ds.pk}_{g.pk}" in request.POST
-                    edit = view and ds.edit_target is not None and f"c_{ds.pk}_{g.pk}" in request.POST
-                    hide = view and ds.edit_target is not None and f"h_{ds.pk}_{g.pk}" in request.POST
+                    edit = view and ds.record_key is not None and f"c_{ds.pk}_{g.pk}" in request.POST
+                    hide = view and (ds.edit_target is not None or ds.is_own) and f"h_{ds.pk}_{g.pk}" in request.POST
                     r = current.get((ds.pk, g.pk))
                     was = (r.can_view, r.can_export, r.can_edit, r.can_hide) if r else (False, False, False, False)
                     if was == (view, export, edit, hide):

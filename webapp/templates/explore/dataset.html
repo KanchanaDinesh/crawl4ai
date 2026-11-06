@@ -18,7 +18,10 @@
     <button class="btn" type="button" id="saveview">Save view</button>
     <button class="btn link danger" type="button" id="deleteview" hidden>Delete view</button>
     <span class="toolbar-gap"></span>
-    {% if ds.edit_target or ds.hide_target %}<a class="btn" href="{% url 'dataset_changes' ds.ref %}">Changes</a>{% endif %}
+    {% if ds.record_key %}<a class="btn" href="{% url 'dataset_fields' ds.ref %}">Fields</a>
+    <a class="btn" href="{% url 'dataset_changes' ds.ref %}">Changes</a>{% endif %}
+    <button class="btn" type="button" id="savetable" hidden>Save as table</button>
+    <button class="btn primary" type="button" id="addrow" hidden>Add row</button>
     <button class="btn" type="button" id="clearfilters">Clear filters</button>
     <a class="btn" id="csv" href="#" hidden>CSV</a>
     <a class="btn" id="xlsx" href="#" hidden>Excel</a>
@@ -29,7 +32,7 @@
     <span id="bulkbar" class="toolbar" hidden>
       <label class="small" for="bulkfield">Set</label>
       <select id="bulkfield"></select>
-      <label class="small" for="bulkvalue">to</label>
+      <label class="small" for="bulkvalue" id="bulkto">to</label>
       <input type="text" id="bulkvalue" list="bulkchoices" placeholder="empty clears it" autocomplete="off">
       <datalist id="bulkchoices"></datalist>
       <button class="btn primary" type="button" id="bulkapply">Apply</button>
@@ -38,7 +41,7 @@
   </div>
   <div class="status" id="status" role="status"></div>
   <div id="grid" class="gridbox"></div>
-  <p class="muted small">Filter under each heading. Numbers: &gt;10, &lt;=5, 10..20. Dates: 7d (last 7 days), 2026-11-01, &gt;2026-11-01, 2026-11-01..2026-11-05. Drag a heading to move it; Shift-click headings to sort by several. Select cells and copy with Ctrl/Cmd+C.{% if ds.edit_target %} Columns marked ✎ can be corrected: double-click a cell, or paste into it. Select rows to set one value on all of them or to see a row's history. An underlined cell was corrected by someone.{% endif %}</p>
+  <p class="muted small">Filter under each heading. Numbers: &gt;10, &lt;=5, 10..20. Dates: 7d (last 7 days), 2026-11-01, &gt;2026-11-01, 2026-11-01..2026-11-05. Drag a heading to move it; Shift-click headings to sort by several. Select cells and copy with Ctrl/Cmd+C.{% if ds.record_key %} Columns marked ✎ can be changed: double-click a cell, or paste into it. Select rows to set one value on all of them or to see a row's history.{% endif %}{% if ds.edit_target %} An underlined cell was corrected by someone.{% endif %}</p>
 </div>
 <dialog id="savedialog" class="savedialog">
   <form method="dialog" class="form" id="saveform">
@@ -48,6 +51,15 @@
     <label class="small"><input type="checkbox" id="viewshared"> Share with everyone who can see this dataset</label>
     <p class="errorlist" id="saveerror" role="alert" hidden></p>
     <div class="form-actions"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" id="savecancel">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="tabledialog" class="savedialog">
+  <form method="dialog" class="form" id="tableform">
+    <h2>Save these rows as a table</h2>
+    <p class="muted small">A copy of what's on screen now (columns, filters, sorting; at most 50,000 rows) in a table of your own, under My tables. It doesn't follow later changes.</p>
+    <div class="field"><label for="tablename">Name</label><input type="text" id="tablename" maxlength="120" required></div>
+    <p class="errorlist" id="tableerror" role="alert" hidden></p>
+    <div class="form-actions"><button class="btn primary" type="submit">Make the table</button><button class="btn" type="button" id="tablecancel">Cancel</button></div>
   </form>
 </dialog>
 <div class="drawer-bg" id="drawer-bg"></div>

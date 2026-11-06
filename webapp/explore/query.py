@@ -8,6 +8,7 @@ Filters:  text "contains";  number ">10", "<=5", "=3", "10..20";  date "7d" (the
 ">2026-11-01", "2026-11-01..2026-11-05";  tick lists: a list of values, EMPTY meaning "no value".
 """
 
+import json
 import math
 import re
 from datetime import date, datetime, time, timedelta
@@ -32,42 +33,123 @@ class QueryProblem(ValueError):
     """Something wrong with what was asked; the message is shown to the user."""
 
 
-def usable_fields(ds: Dataset) -> dict[str, Field]:
-    return {f.path: f for f in ds.fields.filter(available=True, missing=False)}
+def usable_fields(ds: Dataset, user=None) -> dict[str, Field]:
+    """With a user: leaving out links, lookups and rollups into a dataset they may not see, because those show its rows."""
+    found = ds.fields.filter(available=True, missing=False).select_related(
+        "link_dataset", "link_field", "link_field__link_dataset", "target_field", "target_field__dataset")
+    fields = {f.path: f for f in found if not (f.link_dataset and f.link_dataset.missing)}
+    if user is not None:
+        from webapp.catalog.rights import can_view
+        fields = {p: f for p, f in fields.items() if not f.link_dataset or can_view(user, f.link_dataset)}
+    return fields
 
 
 def shown_first(fields: dict[str, Field]) -> list[Field]:
     """What's on screen before anyone chooses: the catalog's choice, or if that leaves nothing (every shown field was
     switched off), the first few that can be displayed."""
     shown = [f for f in fields.values() if f.shown]
-    return shown or [f for f in fields.values() if f.type != Field.JSON][:8] or list(fields.values())[:8]
+    return shown or [f for f in fields.values() if f.base != Field.JSON][:8] or list(fields.values())[:8]
+
+
+def key_text(ds: Dataset, alias: str = "d") -> str:
+    return f"{alias}.{q(ds.record_key)}::text"
+
+
+def _key_equals(ds: Dataset, other: str) -> str:
+    """This dataset's row whose key is the text `other`. An own table's key is a number: comparing it as a number uses its index."""
+    if ds.is_own:
+        return f'd."id" = ({other})::bigint'
+    return f"d.{q(ds.record_key)}::text = {other}"
+
+
+def _data_column(f: Field) -> str:
+    """Where a field's JSON lives: an own table's row, or the separate row of own fields beside a collected row."""
+    ds = f.dataset
+    if f.kind == Field.OWN and not ds.is_own:
+        return f"(select e.data from userdata.extras e where e.dataset_id = {int(ds.pk)} and e.record = {key_text(ds)})"
+    return q(f.column)
+
+
+def _link_rows(link: Field) -> tuple[str, str, str]:
+    """A link field's rows for the outer row d: (the WHERE, the column with the other row's key, the one with its name).
+    A link's other side reads the same rows from the other end. Rows hidden on the other side don't count."""
+    outer = key_text(link.dataset)
+    if link.is_reverse_link:
+        where, other, label = f"l.field_id = {int(link.link_field_id)} and l.to_record = {outer}", "l.from_record", "l.from_label"
+    else:
+        where, other, label = f"l.field_id = {int(link.pk)} and l.from_record = {outer}", "l.to_record", "l.to_label"
+    hide = link.link_dataset.hide_target
+    if hide:
+        where += f" and not exists (select 1 from {edits.HIDDEN} h where h.dataset = {lit(hide.table)} and h.record = {other})"
+    return where, other, label
+
+
+def _through_link(f: Field) -> tuple[str, str]:
+    """For a lookup or rollup: the value of the linked rows' field, one per link: (FROM ... lateral, WHERE)."""
+    link, target = f.link_field, f.target_field
+    where, other, _ = _link_rows(link)
+    other_ds = link.link_dataset
+    source = (f"userdata.links l cross join lateral (select {value_expr(target)} as v from {relation(other_ds.schema, other_ds.name)} d "
+              f"where {_key_equals(other_ds, other)} limit 1) x")
+    return source, where
+
+
+def _computed(f: Field) -> str:
+    if f.kind == Field.RECORDS:
+        where, _, label = _link_rows(f)
+        return f"(select jsonb_agg({label} order by l.id) from userdata.links l where {where})"
+    if f.kind == Field.ROLLUP and f.rollup == Field.COUNT:
+        where, _, _ = _link_rows(f.link_field)
+        return f"(select count(*) from userdata.links l where {where})"
+    source, where = _through_link(f)
+    if f.kind == Field.LOOKUP:
+        return f"(select jsonb_agg(x.v order by l.id) from {source} where {where} and x.v is not null)"
+    return f"(select {f.rollup}(x.v) from {source} where {where})"
 
 
 def value_expr(f: Field) -> str:
     """The SQL for a field's value, with the right type (a bad value inside JSON gives NULL, not an error)."""
-    col = q(f.column)
+    if f.kind in (Field.RECORDS, Field.LOOKUP, Field.ROLLUP):
+        return _computed(f)
+    col = _data_column(f)
+    base = f.base
     if not f.json_key:
-        if f.type == Field.LIST and f.is_jsonb:
+        if base == Field.LIST and f.is_jsonb:
             return f"(case when jsonb_typeof({col}) = 'array' then {col} end)"
         return col
     key = lit(f.json_key)
     text, raw = f"{col} ->> {key}", f"{col} -> {key}"
-    if f.type == Field.NUMBER:
+    if base == Field.NUMBER:
         return f"(case when jsonb_typeof({raw}) = 'number' then ({text})::float8 end)"
-    if f.type == Field.BOOL:
+    if base == Field.BOOL:
         return f"(case when jsonb_typeof({raw}) = 'boolean' then ({text})::boolean end)"
-    if f.type == Field.DATETIME:
+    if base == Field.DATETIME:
         return f"(case when pg_input_is_valid({text}, 'timestamptz') then ({text})::timestamptz end)"
-    if f.type == Field.LIST:
+    if base == Field.DATE:
+        return f"(case when pg_input_is_valid({text}, 'date') then ({text})::date end)"
+    if base == Field.LIST:
         return f"(case when jsonb_typeof({raw}) = 'array' then {raw} end)"
-    if f.type == Field.JSON:
+    if base == Field.JSON:
         return f"({raw})"
     return f"({text})"
 
 
+def label_field(ds: Dataset) -> Field | None:
+    """The field that names a row, wherever a row is mentioned elsewhere (link pickers, lists of hidden rows)."""
+    fields = ds.fields.filter(available=True, missing=False)
+    target = ds.edit_target
+    found = fields.filter(column=target.label, json_key=None).first() if target else None
+    if found is None and ds.is_own:
+        found = fields.filter(kind=Field.OWN, type__in=[Field.TEXT, Field.EMAIL, Field.LINK, Field.CHOICE]).order_by("order", "id").first()
+    if found is None:
+        found = (fields.filter(type=Field.TEXT, shown=True, json_key=None).exclude(column=ds.record_key or "").order_by("order", "id").first()
+                 or fields.filter(type=Field.TEXT, json_key=None).order_by("order", "id").first())
+    return found
+
+
 def select_expr(f: Field) -> str:
     expr = value_expr(f)
-    return f"left(({expr})::text, {JSON_DISPLAY_CHARS})" if f.type == Field.JSON else expr
+    return f"left(({expr})::text, {JSON_DISPLAY_CHARS})" if f.base == Field.JSON else expr
 
 
 def _like(text: str) -> str:
@@ -130,12 +212,12 @@ def _tick_filter(f: Field, expr: str, picked: list) -> tuple[str, list]:
     has_empty = EMPTY in picked
     picked = [v for v in picked if v != EMPTY]
     parts, params = [], []
-    if f.type == Field.BOOL:
+    if f.base == Field.BOOL:
         if "yes" in picked:
             parts.append(f"{expr} is true")
         if "no" in picked:
             parts.append(f"{expr} is false")
-    elif f.type == Field.LIST:
+    elif f.base == Field.LIST:
         if picked:
             if f.is_jsonb:
                 parts.append(f"{expr} ?| %s")
@@ -146,9 +228,9 @@ def _tick_filter(f: Field, expr: str, picked: list) -> tuple[str, list]:
         parts.append(f"{expr} = any(%s)")
         params.append(picked)
     if has_empty:
-        if f.type == Field.LIST:
+        if f.base == Field.LIST:
             parts.append(f"({expr} is null or {expr}::text in ('[]', '{{}}'))")
-        elif f.type == Field.BOOL:
+        elif f.base == Field.BOOL:
             parts.append(f"{expr} is null")
         else:
             parts.append(f"({expr} is null or {expr}::text = '')")
@@ -162,11 +244,11 @@ def _one_filter(f: Field, value) -> tuple[str, list]:
     text = str(value if value is not None else "").strip()
     if not text:
         return "", []
-    if f.type == Field.NUMBER:
+    if f.base == Field.NUMBER:
         return _number_filter(expr, text, f.label)
-    if f.type == Field.DATETIME:
+    if f.base in (Field.DATETIME, Field.DATE):
         return _date_filter(expr, text, f.label)
-    if f.type == Field.BOOL:
+    if f.base == Field.BOOL:
         return _tick_filter(f, expr, [text])
     return f"lower(({expr})::text) like %s", [_like(text)]
 
@@ -185,7 +267,7 @@ def where_clause(fields: dict[str, Field], filters, search: str = "", shown: lis
             params += p
     search = (search or "").strip()
     if search:
-        text = [f for f in (shown or fields.values()) if f.type in (Field.TEXT, Field.LINK)][:MAX_SEARCH_FIELDS]
+        text = [f for f in (shown or fields.values()) if f.base in (Field.TEXT, Field.LINK)][:MAX_SEARCH_FIELDS]
         if text:
             like = _like(search)
             parts.append("(" + " or ".join(f"lower(({value_expr(f)})::text) like %s" for f in text) + ")")
@@ -199,7 +281,7 @@ def order_clause(ds: Dataset, fields: dict[str, Field], sorts) -> str:
     for item in sorts or []:
         if isinstance(item, dict) and item.get("field") in fields:
             f = fields[item["field"]]
-            if f.type != Field.JSON:
+            if f.base != Field.JSON:
                 terms.append(f"{value_expr(f)} {'desc' if item.get('dir') == 'desc' else 'asc'} nulls last")
     if not terms and ds.default_sort_field in fields:
         terms.append(f"{value_expr(fields[ds.default_sort_field])} {'desc' if ds.default_sort_dir == 'desc' else 'asc'} nulls last")
@@ -222,6 +304,17 @@ def plain(value):
     return value
 
 
+def shown_value(f: Field, value):
+    """A value for the grid and exports. jsonb comes back as text on Django's connection, so a list has to be read back into
+    one here: the grid draws a list as chips, and can't draw text that only looks like a list."""
+    if f.base == Field.LIST and isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return value
+    return plain(value)
+
+
 def _timeout(cur, seconds: str = QUERY_TIMEOUT) -> None:
     cur.execute(f"set local statement_timeout = '{seconds}'")
 
@@ -230,7 +323,7 @@ def not_hidden(ds: Dataset, where: str) -> str:
     """Adds "and not hidden" for datasets of records people can hide. Views may already leave them out; this also covers
     the plain tables. Reads audit's table only if it exists yet (a database that hasn't run `warehouse migrate`)."""
     target = ds.hide_target
-    if target is None:
+    if target is None or ds.is_own:          # an own table's view already leaves them out
         return where
     with connection.cursor() as cur:
         if not edits.available(cur):
@@ -265,7 +358,7 @@ def fetch_rows(ds: Dataset, shown: list[Field], where: str, params: list, order:
         cur.execute(sql, [*params, limit, start])
         found = []
         for row in cur.fetchall():
-            item = {f.path: plain(v) for f, v in zip(shown, row)}
+            item = {f.path: shown_value(f, v) for f, v in zip(shown, row)}
             if key_column:
                 item["_id"] = row[len(shown)]
             found.append(item)

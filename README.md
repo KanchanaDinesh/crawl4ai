@@ -188,6 +188,16 @@ A correction stays when a collector runs again and the source only repeats itsel
 value wins and the correction stays in the history (per field in the catalog, the person can win instead, or it can wait for review).
 Hidden rows are never deleted, and stay hidden when a collector sees them again.
 
+### Own tables, fields and links
+
+**My tables:** make a table, import a CSV or Excel file (you see the columns before anything is saved), or press **Save as table** on
+any dataset. A table is private until you share it with a role (its **Fields** page).
+
+**Fields** (button on a dataset's page): add your own columns to an own table, or beside collected data, where no collector touches
+them: text, number, money, date, yes/no, one or several choices, web address, email. A **link** points at rows of another table, and
+that table gets a column showing what links to each row. A **lookup** shows a field of the linked rows; a **rollup** counts them or adds
+them up. For example: link vehicle ads to a Dealers table, and each dealer shows its ad count and total asking price.
+
 ## Testing everything
 
 ```bash
@@ -279,7 +289,7 @@ run_all.sh, schedule.sh  run everything once / on a schedule (see Automation); s
 watch.sh                 the live tech-intel listener (normally via ./schedule.sh watch on)
 project_paths.py         where data/, .local/ and the databases live
 warehouse/               PostgreSQL: connections, setup and checks (postgres.py), tables (schema/), the `python -m warehouse` query tool
-webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids, the dashboard (docs/user-platform-plan.md)
+webapp/                  the user platform (Django): sign-in, roles, menus, audit log, grids, the dashboard, own tables (docs/user-platform-plan.md)
 techintel/ worldnews/ markets/ vehicles/ companies/   the other tools (python -m <name>), each with its own README
 data/                    databases and collected data (git-ignored)
 output/                  everything the scrapers write (git-ignored)

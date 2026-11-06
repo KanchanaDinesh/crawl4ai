@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block title %}Fields · {{ ds.label }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Fields of {{ ds.label }}</h1><p class="muted">{% if ds.is_own %}What each row of this table holds.{% else %}Your team's own columns beside the collected data. No collector ever touches them.{% endif %}</p></div>
+  <a href="{% url 'dataset' ds.ref %}">Back to the data</a></div>
+{% if may_edit %}<form method="post" class="card">{% csrf_token %}
+  <h2>Add a field</h2>
+  <div class="toolbar">
+    <div class="field"><label for="what">Kind</label><select id="what" name="what" hx-get="{% url 'dataset_field_options' ds.ref %}" hx-target="#options" hx-trigger="change" hx-include="this">
+      {% for code, name in types.items %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
+      {% for code, name in kinds.items %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="label">Name</label><input type="text" id="label" name="label" maxlength="120" required></div>
+  </div>
+  <div id="options"></div>
+  <div class="form-actions"><button class="btn primary" type="submit">Add the field</button></div>
+</form>{% endif %}
+<section class="card"><h2>Fields people added</h2>
+  {% if mine %}<div class="table-wrap"><table class="list"><thead><tr><th>Name</th><th>What it is</th>{% if may_edit %}<th></th>{% endif %}</tr></thead><tbody>
+  {% for f in mine %}<tr><td>{% if may_edit %}<form method="post" action="{% url 'dataset_field_change' ds.ref f.pk %}" class="toolbar" id="edit-{{ f.pk }}">{% csrf_token %}<input type="text" name="label" value="{{ f.label }}" maxlength="120" aria-label="Name of {{ f.label }}"><button class="btn" type="submit">Save</button></form>{% else %}{{ f.label }}{% endif %}</td>
+    <td class="small">{{ f.about }}
+      {% if may_edit and f.kind == "own" %}{% if f.type == "choice" or f.type == "multi" %}<div class="field" style="margin-top:6px"><textarea name="choices" form="edit-{{ f.pk }}" rows="2" aria-label="Choices of {{ f.label }}">{{ f.values|join:", " }}</textarea>
+        <label class="small" style="font-weight:400"><input type="checkbox" name="allow_new" form="edit-{{ f.pk }}"{% if f.allow_new %} checked{% endif %}> People can add a choice by typing it</label></div>{% endif %}{% endif %}</td>
+    {% if may_edit %}<td><form method="post" action="{% url 'dataset_field_change' ds.ref f.pk %}">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="btn link danger" type="submit">Remove</button></form></td>{% endif %}</tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">None yet.</p>{% endif %}</section>
+{% if ds.is_own and may_edit %}<form method="post" action="{% url 'dataset_add_from_file' ds.ref %}" enctype="multipart/form-data" class="card">{% csrf_token %}
+  <h2>Add rows from a file</h2>
+  <div class="field"><label for="file">CSV or Excel (.xlsx)</label><input type="file" id="file" name="file" accept=".csv,.tsv,.txt,.xlsx" required><span class="help">You match its columns to these fields before anything is saved.</span></div>
+  <div class="form-actions"><button class="btn" type="submit">Read the file</button></div></form>{% endif %}
+{% if may_share %}<form method="post" action="{% url 'dataset_share' ds.ref %}" class="card">{% csrf_token %}
+  <h2>Who can use it</h2><p class="muted small">Private until you tick a role. Administrators can always see it.</p>
+  <div class="table-wrap"><table class="list matrix"><thead><tr><th>Role</th><th>See and export</th><th>Change</th></tr></thead><tbody>
+  {% for r in roles %}<tr><td>{{ r.group.name }}</td><td><input type="checkbox" name="view_{{ r.group.pk }}" aria-label="{{ r.group.name }} may see it"{% if r.right.can_view %} checked{% endif %}></td><td><input type="checkbox" name="edit_{{ r.group.pk }}" aria-label="{{ r.group.name }} may change it"{% if r.right.can_edit %} checked{% endif %}></td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="form-actions"><button class="btn" type="submit">Save who can use it</button></div></form>
+<form method="post" action="{% url 'dataset_delete_table' ds.ref %}" class="card">{% csrf_token %}
+  <h2>Delete this table</h2><p class="muted small">Links to it go too. Its rows are kept in the database, so an administrator can recover it. Type its name to confirm.</p>
+  <div class="toolbar"><input type="text" name="confirm" placeholder="{{ ds.label }}" aria-label="Type the table's name to confirm"><button class="btn danger" type="submit">Delete the table</button></div></form>{% endif %}
+{% endblock %}

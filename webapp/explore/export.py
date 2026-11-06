@@ -14,7 +14,7 @@ import project_paths
 from webapp.catalog.models import Dataset, Field
 from webapp.catalog.sqlnames import relation
 
-from .query import plain, select_expr
+from .query import select_expr, shown_value
 
 LIMIT = 200_000
 BATCH = 5_000
@@ -29,8 +29,8 @@ def safe_text(value):
     return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
 
 
-def _cell(value):
-    value = plain(value)
+def _cell(f, value):
+    value = shown_value(f, value)
     if isinstance(value, (list, dict)):
         value = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
     return safe_text(value)
@@ -57,7 +57,7 @@ def write_csv(ds, shown, where, params, order) -> tuple[object, int]:
     writer = csv.writer(text)
     writer.writerow([f.label for f in shown])
     for rows in _batches(ds, shown, where, params, order):
-        writer.writerows([_cell(v) for v in row] for row in rows)
+        writer.writerows([_cell(f, v) for f, v in zip(shown, row)] for row in rows)
         n += len(rows)
     text.flush()
     text.detach()
@@ -73,7 +73,7 @@ def write_xlsx(ds, shown, where, params, order) -> tuple[object, int]:
     n = 0
     for rows in _batches(ds, shown, where, params, order):
         for row in rows:
-            sheet.append([_cell(v) for v in row])
+            sheet.append([_cell(f, v) for f, v in zip(shown, row)])
         n += len(rows)
     out = _spool()
     book.save(out)

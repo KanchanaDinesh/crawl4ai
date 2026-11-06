@@ -1,0 +1,15 @@
+{% if is_choice %}<input type="hidden" name="choices_sent" value="1">
+<div class="field"><label for="choices">Choices (comma or one per line)</label><textarea id="choices" name="choices" rows="3" placeholder="New, Called, Bought"></textarea></div>
+<label class="small" style="font-weight:400"><input type="checkbox" name="allow_new" checked> People can add a choice by typing it</label>
+{% elif what == "records" %}
+<div class="field"><label for="target">Link to</label><select id="target" name="target" required>{% regroup targets by schema as groups %}{% for g in groups %}<optgroup label="{{ g.grouper }}">{% for d in g.list %}<option value="{{ d.pk }}">{{ d.label }}</option>{% endfor %}</optgroup>{% endfor %}</select>
+  <span class="help">The other table gets a column showing what links to each of its rows.</span></div>
+<label class="small" style="font-weight:400"><input type="checkbox" name="single"> One linked row only</label>
+{% elif what == "lookup" or what == "rollup" %}
+{% if not links %}<p class="errorlist">Add a link field first: a {{ what }} works through a link.</p>{% else %}
+<div class="toolbar" id="through">
+  <div class="field"><label for="link">Through the link</label><select id="link" name="link" hx-get="{% url 'dataset_field_options' ds.ref %}" hx-target="#options" hx-trigger="change" hx-include="#what, #link, #how">{% for f in links %}<option value="{{ f.pk }}"{% if f == chosen %} selected{% endif %}>{{ f.label }} ({{ f.link_dataset.label }})</option>{% endfor %}</select></div>
+  {% if what == "rollup" %}<div class="field"><label for="how">What to work out</label><select id="how" name="how" hx-get="{% url 'dataset_field_options' ds.ref %}" hx-target="#options" hx-trigger="change" hx-include="#what, #link, #how">{% for code, name in rollups.items %}<option value="{{ code }}"{% if code == how %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>{% endif %}
+  {% if what == "lookup" or how != "count" %}<div class="field"><label for="target_field">Of the field</label><select id="target_field" name="target_field">{% for f in target_fields %}<option value="{{ f.pk }}">{{ f.label }}</option>{% empty %}<option value="">{% if what == "rollup" %}That table has no number fields{% else %}That table has no fields{% endif %}</option>{% endfor %}</select></div>{% endif %}
+</div>{% endif %}
+{% endif %}

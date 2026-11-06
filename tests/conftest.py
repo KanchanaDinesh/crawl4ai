@@ -163,6 +163,7 @@ def django_db_modify_db_settings(pg_server):
     base = conninfo_to_dict(pg_server)
     with psycopg.connect(make_conninfo(pg_server, dbname="template1"), autocommit=True) as con:
         con.execute("create schema if not exists app")
+        con.execute("create schema if not exists userdata")
         con.execute("create extension if not exists pg_trgm")
     settings.DATABASES["default"].update({"NAME": "crawl4ai_django", "USER": base["user"], "PASSWORD": "",
                                           "HOST": base["host"], "PORT": str(base["port"])})

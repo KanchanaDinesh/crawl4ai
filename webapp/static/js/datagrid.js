@@ -21,6 +21,8 @@
      the searchable multiple-choice list, also usable outside the grid (the bulk edit bar uses it). With onAdd
      (async, returns the saved name) people can add a new choice by typing it.
    DataGrid.addChoice(url, column, text): saves a new choice and updates column.choices (shared by every list).
+   DataGrid.pickRecords(anchor, {optionsUrl, current, single, onDone(rows), onCancel()}): the same for rows of another
+     table, searched on the server. DataGrid.postLinks(url, ids, field, to) saves links.
 */
 (function () {
   "use strict";
@@ -81,7 +83,7 @@
     return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
   function chipsHtml(list) {
-    return (list || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("");
+    return (Array.isArray(list) ? list : list ? [list] : []).map((t) => `<span class="chip">${esc(t)}</span>`).join("");
   }
   function linkHtml(url) {
     if (!url) return "";
@@ -246,6 +248,142 @@
     return { close };
   }
 
+  // ── Choosing rows of another table ───────────────────────────────────────────────────────────────────────
+  // The list can be 100,000 rows long, so it's searched on the server rather than filtered here.
+  async function getJson(url) {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `That didn't load (HTTP ${res.status}).`);
+    return data;
+  }
+
+  function pickRecords(anchor, { optionsUrl, current, single, onDone, onCancel }) {
+    const chosen = new Map((current || []).map((r) => [r.id, r.label]));
+    const start = JSON.stringify([...chosen.keys()].sort());
+    const box = document.createElement("div");
+    box.className = "picker";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", "Choose rows");
+    box.innerHTML = `<input type="search" class="picker-search" placeholder="Search by name" aria-label="Search by name" autocomplete="off">
+      <div class="picker-chosen"></div><div class="picker-list" role="listbox"></div>
+      <div class="picker-error" role="alert" hidden></div>
+      <div class="picker-foot"><button type="button" class="btn link picker-clear">Clear all</button><button type="button" class="btn primary picker-done">Done</button></div>`;
+    document.body.appendChild(box);
+    const search = box.querySelector(".picker-search"), listEl = box.querySelector(".picker-list"), chosenEl = box.querySelector(".picker-chosen"),
+      errorEl = box.querySelector(".picker-error");
+    let shown = [], active = 0, closed = false, ticket = 0, timer = null;
+
+    function drawChosen() {
+      chosenEl.innerHTML = "";
+      for (const [id, label] of chosen) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "chip chip-x"; b.textContent = label;
+        b.setAttribute("aria-label", `Remove ${label}`);
+        b.addEventListener("click", () => { chosen.delete(id); drawChosen(); drawList(); search.focus(); });
+        chosenEl.appendChild(b);
+      }
+      chosenEl.hidden = !chosen.size;
+    }
+    function drawList() {
+      listEl.innerHTML = "";
+      if (!shown.length) {
+        const none = document.createElement("div");
+        none.className = "picker-none"; none.textContent = "No rows match.";
+        listEl.appendChild(none);
+      }
+      shown.forEach((r, i) => {
+        const row = document.createElement("label");
+        row.className = "picker-row" + (i === active ? " active" : "");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", String(chosen.has(r.id)));
+        const tick = document.createElement("input");
+        tick.type = single ? "radio" : "checkbox"; tick.checked = chosen.has(r.id); tick.tabIndex = -1;
+        tick.addEventListener("change", () => { toggle(r); search.focus(); });
+        const text = document.createElement("span");
+        text.textContent = r.label;
+        row.append(tick, text);
+        listEl.appendChild(row);
+      });
+    }
+    function toggle(r) {
+      if (chosen.has(r.id)) chosen.delete(r.id);
+      else { if (single) chosen.clear(); chosen.set(r.id, r.label); }
+      drawChosen(); drawList();
+    }
+    async function load() {
+      const mine = ++ticket;
+      try {
+        const data = await getJson(`${optionsUrl}&q=${encodeURIComponent(search.value.trim())}`);
+        if (mine !== ticket || closed) return;
+        shown = data.options; active = 0; errorEl.hidden = true;
+        drawList();
+      } catch (err) { if (!closed) { errorEl.textContent = err.message; errorEl.hidden = false; } }
+    }
+    function place() {
+      const r = anchor.getBoundingClientRect();
+      box.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - box.offsetWidth - 8))}px`;
+      const below = r.bottom + 330 <= window.innerHeight;
+      box.style.top = below ? `${r.bottom + 4}px` : "auto";
+      box.style.bottom = below ? "auto" : `${Math.max(8, window.innerHeight - r.top + 4)}px`;
+    }
+    function close(save) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("mousedown", outside, true);
+      box.remove();
+      const result = [...chosen].map(([id, label]) => ({ id, label }));
+      if (save && JSON.stringify([...chosen.keys()].sort()) !== start) onDone && onDone(result);
+      else onCancel && onCancel();
+    }
+    const outside = (e) => { if (!box.contains(e.target)) { e.stopPropagation(); close(true); } };
+    search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 200); });
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, shown.length - 1); drawList(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); drawList(); }
+      else if (e.key === "Enter") { e.preventDefault(); if (shown[active]) toggle(shown[active]); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(false); }
+      else if (e.key === "Tab") { e.preventDefault(); close(true); }
+    });
+    box.querySelector(".picker-done").addEventListener("click", () => close(true));
+    box.querySelector(".picker-clear").addEventListener("click", () => { chosen.clear(); drawChosen(); drawList(); search.focus(); });
+    drawChosen(); place(); load();
+    search.focus();
+    setTimeout(() => { if (!closed) document.addEventListener("mousedown", outside, true); }, 150);
+    return { close };
+  }
+
+  function recordsEditor(cell, onRendered, success, cancel, params) {
+    const { column: c, opt } = params;
+    const el = document.createElement("div");
+    el.className = "picker-cell";
+    el.innerHTML = chipsHtml(cell.getValue());
+    onRendered(async () => {
+      const id = cell.getRow().getData()[opt.index || "id"];
+      const qs = new URLSearchParams({ field: c.field });
+      try {
+        const now = await getJson(`${opt.links.values}?${qs}&id=${encodeURIComponent(id)}`);
+        pickRecords(cell.getElement(), { optionsUrl: `${opt.links.options}?${qs}`, current: now.rows, single: c.single,
+          onCancel: () => cancel(),
+          onDone: async (rows) => {
+            try {
+              const done = await postLinks(opt.links.save, [id], c.field, rows.map((r) => r.id));
+              success(done.labels && done.labels.length ? done.labels : null);
+              opt.onLinked && opt.onLinked(id);
+            } catch (err) { opt.onError && opt.onError(err.message); cancel(); }
+          } });
+      } catch (err) { opt.onError && opt.onError(err.message); cancel(); }
+    });
+    return el;
+  }
+
+  async function postLinks(url, ids, field, to) {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify({ ids, field, to }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `Saving failed (HTTP ${res.status})`);
+    return data;
+  }
+
   function multiEditor(cell, onRendered, success, cancel, params) {
     const el = document.createElement("div");
     el.className = "picker-cell";
@@ -289,7 +427,7 @@
   function headerFilter(col, c) {
     if (c.filter === "choice") {
       col.headerFilter = choiceFilter;
-      col.headerFilterParams = { choices: c.choices || [] };
+      col.headerFilterParams = { choices: c.filter_choices || c.choices || [] };
       col.headerFilterEmptyCheck = (v) => !v || !v.length;
     } else if (c.filter) {
       col.headerFilter = "input";
@@ -298,18 +436,22 @@
   }
 
   const NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 });
+  const MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function column(c, opt) {
     const col = { field: c.field, title: c.title, width: c.width || WIDTHS[c.type] || 150, headerSort: c.type !== "json", resizable: true };
     if (c.description) col.headerTooltip = c.description;
     if (opt.headerFilters) headerFilter(col, c);
     if (c.visible === false) col.visible = false;
-    if (c.type === "number") {
+    if (c.type === "number" || c.type === "money") {
+      const shape = c.type === "money" ? MONEY : NUMBER;
       col.hozAlign = "right";
-      col.formatter = (cell) => (cell.getValue() === null || cell.getValue() === undefined ? "" : NUMBER.format(cell.getValue()));
+      col.formatter = (cell) => (cell.getValue() === null || cell.getValue() === undefined ? "" : shape.format(cell.getValue()));
     }
+    if (c.type === "email") col.formatter = (cell) => (cell.getValue() ? `<a href="mailto:${esc(cell.getValue())}">${esc(cell.getValue())}</a>` : "");
+    if (c.type === "choice") col.formatter = (cell) => (cell.getValue() ? chipsHtml([cell.getValue()]) : "");
+    if (c.type === "records" || c.type === "list") col.formatter = (cell) => chipsHtml(cell.getValue());
     if (c.type === "bool") col.formatter = (cell) => (cell.getValue() === true ? "yes" : cell.getValue() === false ? "no" : "");
-    if (c.type === "list") col.formatter = (cell) => chipsHtml(cell.getValue());
     if (c.editable) {
       col.editor = c.type === "choice" ? "list" : "input";
       if (col.editor === "input") col.editorParams = { selectContents: true };   // typing replaces the value, as in Excel
@@ -319,13 +461,25 @@
         col.editorParams = { values: ["", ...c.edit_choices], autocomplete: true, freetext: true, clearable: true, listOnEmpty: true };
       }
     }
-    if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true, listOnEmpty: true };
+    if (c.type === "choice" && c.editable) {
+      col.editor = "list";
+      col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, freetext: !!c.allow_new, clearable: true, listOnEmpty: true };
+    }
+    if (c.type === "bool" && c.editable) { col.editor = "tickCross"; col.editorParams = { tristate: false }; }
+    if (c.type === "date" && c.editable) col.editor = "date";
     if (c.type === "multi") {
-      col.editor = multiEditor;
-      c.choices = c.choices || [];
-      col.editorParams = { choices: c.choices, noun: c.noun || "item",
-        onAdd: c.allow_new && opt.choiceUrl ? (text) => addChoice(opt.choiceUrl, c, text) : null };
       col.formatter = (cell) => chipsHtml(cell.getValue());
+      if (c.editable) {
+        col.editor = multiEditor;
+        c.choices = c.choices || [];
+        col.editorParams = { choices: c.choices, noun: c.noun || "item",
+          onAdd: c.allow_new && opt.choiceUrl ? (text) => addChoice(opt.choiceUrl, c, text) : null };
+      }
+    }
+    if (c.type === "records" && c.can_link && opt.links) {
+      col.editor = recordsEditor;
+      col.cssClass = "can-edit";
+      col.editorParams = { column: c, opt };
     }
     // In a cell that can be edited, a double-click must edit it, not open the site twice: the link is a small arrow beside the text
     if (c.type === "link") col.formatter = (cell) => (c.editable ? editableLinkHtml(cell.getValue()) : linkHtml(cell.getValue()));
@@ -426,7 +580,7 @@
           try {
             const done = await saveEdit(opt, idOf(data), field, value, before);
             (original.get(idOf(data)) || {})[field] = done.value;
-            data._edited = [...(data._edited || []), field];
+            if (!col.mine) data._edited = [...(data._edited || []), field];
             putBack[field] = done.value;
             Object.assign(putBack, done.linked || {});
             saved++;
@@ -448,8 +602,10 @@
       try {
         const done = await saveEdit(opt, idOf(d), field, value, seen);
         (original.get(idOf(d)) || {})[field] = done.value;
-        d._edited = [...(d._edited || []), field];
-        cell.getElement().classList.add("edited");
+        if (!col.mine) {       // underlined: a collected value someone corrected. People's own fields are all theirs.
+          d._edited = [...(d._edited || []), field];
+          cell.getElement().classList.add("edited");
+        }
         if (JSON.stringify(done.value) !== JSON.stringify(value) || done.linked) row.update({ [field]: done.value, ...(done.linked || {}) });
         opt.onStatus && opt.onStatus(`Saved ${col.title}${d.name ? ` of ${d.name}` : ""}`);
       } catch (err) {
@@ -486,6 +642,14 @@
       },
       clearFilters() { table.clearHeaderFilter(); },
       reload() { table.setData(); },
+      addRow(data) {
+        original.set(idOf(data), { ...data });
+        table.addRow(data, true).then((row) => {
+          table.scrollToRow(row, "top", false).catch(() => {});
+          const first = columns.find((c) => c.editable && c.visible !== false);
+          if (first) { const cell = row.getCell(first.field); cell && cell.edit(); }
+        });
+      },
       selectedIds() { return selectedRows().map((r) => idOf(r.getData())); },
       applyChanges(id, changes, edited) {     // edited: the fields of this row that are corrected now
         const row = table.getRow(id);
@@ -515,5 +679,5 @@
     };
   }
 
-  window.DataGrid = { create, pick, addChoice };
+  window.DataGrid = { create, pick, pickRecords, addChoice, postLinks };
 })();
