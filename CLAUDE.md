@@ -37,6 +37,7 @@ the current state of every part, open issues and next steps. Read it before doin
 techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, each with its own PostgreSQL schema:
                                                __init__.py (calls project_paths.apply_local_env()), __main__.py,
                                                cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
+foresight/       predictions: analysts/ has one file per section; forecasts are append-only and scored afterwards (docs/foresight-plan.md). Reads other tools with the read-only login, writes only to schema foresight
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
 warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse;
                  edits.py = people's corrections and rule A (what can be edited, and how collectors respect it)

@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 546 tests pass.
+All 564 tests pass.
 
 ## Parts and how to run them
 
@@ -26,6 +26,7 @@ Run every command from the project folder, after `source env.sh`.
 |---|---|---|
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
+| Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phase 1: Markets only, no AI. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
@@ -488,6 +489,13 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **Reading it (2026-11-06): 238 of 295 CSE shares are marked overbought. That's real, not a bug:** ASPI went 20,080 to 21,240 (+5.8%) from 3 to 6 Nov, and 262 of 295 shares rose over three sessions. Stablecoins show a value too, but it only reflects tiny wobbles.
     - **cse.lk's closes aren't adjusted for splits and rights:** 31 shares have a move of 35% or more in the year (MERC.N0000 8,046 to 39.4, CPRT.N0000 3,497 to 50.6). RSI uses absolute changes, so this distorts it, but it fades as Wilder's average forgets. Compared with using only the closes since the jump, today's %K differs by 0.5 or less for most, 3.7 for CPRT.N0000, and **9.1 for PEG.N0000** (-44% on 2026-09-21; 80.3 vs 71.2, which crosses the overbought mark). A new split will do the same for a month or two. Not flagged in the UI, as only one is recent. SEMB.X0000 and SFIN.R0000 move 50% in one tick because they cost 0.2-2.2 rupees.
 
+60. **Foresight, the prediction module: phase 1 (Kanchana, 2026-11-06).** A separate module, `python -m foresight run | test | show | score`, schema `foresight`, no AI (Kanchana's decision). For each section: scenarios with odds and reasons, saved before the outcome, never changed (a database trigger), scored on their date against a "normal week" guess. Plan, rules and results: `docs/foresight-plan.md`.
+    - **Markets is the first analyst:** up, within or down by more than the instrument's own usual 7-day move, in 7 days, from past days in the same class and StochRSI zone. New run_all step `foresight`, after `markets_closes`.
+    - **Result: StochRSI zones gave no edge on the past year** (skill -0.6% for both CSE and coins, too small to matter). Oversold wasn't followed by more rises. Variations were deliberately not tried, because that finds luck. `show` tells people to read the odds as a normal week.
+    - 343 live forecasts saved on 2026-11-06, first checked on 2026-11-13. **Forecasts can't be deleted, by design**, so a method change means a new `method_version`, never editing old rows.
+    - The new tables stay with administrators in the catalog until phase 3 (the page). **On a new server: `warehouse setup` adds the schema.**
+    - **Next: phase 2, World news** (does a story keep going?), then phase 3, the page.
+
 ## Open issues and things to watch
 
 - **CoinGecko, for Kanchana to decide (found 2026-11-06, nothing changed).** Its API terms discourage storing data and bar deriving from it, except under conditions (refresh at least every 24 hours, strong encryption, delete on request). They also require a "Powered by CoinGecko" credit, and `api.coingecko.com/robots.txt` disallows `/api/v3`. `markets run` has stored its prices since 2026-11-03 and shows no credit. Options: add the credit and accept the risk for personal use, take a free key under their Demo plan and re-read the terms, or make CoinPaprika the main source (fewer calls allowed, but its `/v1/tickers` is one call for all coins).
@@ -502,6 +510,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     and `uv run python -m warehouse pg-check` (warns under 2 GB). The test PostgreSQL now keeps its files in
     `.local/test-postgres/` on the external drive, drops each test's database, and pytest keeps only the last run's
     temp folder.
+  - **Evening of 2026-11-06: about 300 MB free again** (1.2 GB that morning). Our database is only 147 MB and PostgreSQL's whole folder 479 MB, so it's not us; `~/Library/Caches` alone is 6.3 GB. Kanchana to free space.
 
 - **Browser crashes in tech intel (2026-11-03), cause not known yet.** In Kanchana's `./run_all.sh` at 05:11 the
   browser died on the first page of `profile` (and in `news`), so all 50 sites were saved as "unreachable" and the
@@ -538,7 +547,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **Foresight, the prediction module** (`docs/foresight-plan.md`, plan only, 2026-11-06): a separate module giving each section scenarios with odds and reasons, saved before the outcome and scored afterwards. Kanchana decided: no AI in the first version; Markets first, then World news. Waiting on Kanchana's read of the plan and its three open questions.
+- **Foresight** (`docs/foresight-plan.md`): phase 1 is built (item 60). Next phase 2, World news, then the page, tech and vehicles; AI last. Open questions for Kanchana are at the end of the plan.
 - **The user platform** (`docs/user-platform-plan.md`): phases 1-7 and newsletter reports are built; the AI assistant is switched on last, and phase 8 (the server) waits for Kanchana's go. Open questions are
   listed at the end of the plan.
 

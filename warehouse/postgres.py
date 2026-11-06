@@ -36,7 +36,7 @@ import project_paths
 
 project_paths.apply_local_env()
 
-SCHEMAS = ("news", "tech", "markets", "vehicles", "companies", "scrapers")
+SCHEMAS = ("news", "tech", "markets", "vehicles", "companies", "scrapers", "foresight")
 APP_SCHEMA = "app"                         # the web app's own tables; never readable by the reader login
 USERDATA_SCHEMA = "userdata"               # people's own tables, fields and links; owned by the web app's login
 AUDIT_SCHEMA = "audit"                     # people's corrections and their history; never readable by the reader login

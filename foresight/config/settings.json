@@ -1,0 +1,19 @@
+{
+  "markets": {
+    "enabled": true,
+    "horizon_days": 7,
+    "groups": {
+      "stock_lk": {"label": "CSE shares", "jump_pct": 40},
+      "crypto": {"label": "coins"}
+    },
+    "min_cases": 100,
+    "min_weeks": 8,
+    "shrink": 20,
+    "band_closes": 180,
+    "min_band_moves": 30,
+    "min_band_pct": 0.5,
+    "recent_days": 30,
+    "min_recent_closes": 5,
+    "fresh_days": 3
+  }
+}

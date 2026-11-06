@@ -1,6 +1,6 @@
 # Foresight, the prediction module: plan
 
-_Written 2026-11-06 with Kanchana. Status: **plan only, nothing built yet.** Decided: a separate module, and the first version runs **without AI**._
+_Written 2026-11-06 with Kanchana. Status: **phase 1 built (2026-11-06).** Decided: a separate module, and the first version runs **without AI**._
 
 ## What it is for
 
@@ -85,6 +85,28 @@ webapp/foresight/     a thin page on top: menu Foresight, its own menu right
 | **3. The page** | Menu Foresight: one tab per section with scenarios, reasons, track record; also in the catalog, grid and reports | Kanchana can read it all in the browser |
 | **4. Tech, vehicles** | The same analysts, when there's enough history. Companies when it has changes over time | Each section has a forecast or says why not |
 | **5. AI (last, by Kanchana's decision)** | Claude writes scenarios in words from the numbers and headlines, including links between sections. Its odds get the same scoring, so we can see if AI adds anything | AI forecasts have a track record next to the plain ones |
+
+## Phase 1 results (2026-11-06)
+
+**Stochastic RSI zones gave no edge on the past year, for either class.** The test used only what was known each day, and resampled whole weeks.
+
+| Class | Scored days | Weeks | Skill against a normal-week guess | 90% range |
+|---|---|---|---|---|
+| CSE shares | 46,393 | 36 | -0.6% | -1.0% to -0.2% |
+| Coins (76 of them) | 16,165 | 39 | -0.6% | -1.1% to -0.0% |
+
+What happened in the 7 days after each zone:
+
+| | Oversold: up / within / down | Middle | Overbought | All days |
+|---|---|---|---|---|
+| CSE shares | 20 / 55 / 25% | 18 / 53 / 28% | 21 / 55 / 24% | 19 / 54 / 27% |
+| Coins | 20 / 51 / 29% | 23 / 55 / 22% | 21 / 54 / 25% | 22 / 53 / 25% |
+
+- So "oversold" was **not** followed by more rises. For coins it was followed by fewer. The method is slightly worse than the simple guess, by an amount too small to matter.
+- **Variations were deliberately not tried.** Trying many until one looks good finds luck, not skill. A new idea should be a new method version, with its own test and its own live record.
+- It's one year, mostly falling, so this doesn't prove the indicator never works. It does mean nothing here supports trusting it.
+- **Live forecasts started:** 343 on 2026-11-06, checked from 2026-11-13. 21 more coins join once CoinPaprika's history is complete. Odds stay within about 4 points of normal, and `show` says to read them that way.
+- **Tests that guard this:** changing the future doesn't change past zones, bands or odds (and that test fails when a leak is put in on purpose); pure noise never gets "better"; a real planted pattern is found.
 
 ## Things to watch
 
