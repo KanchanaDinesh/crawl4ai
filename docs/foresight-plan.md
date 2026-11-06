@@ -105,7 +105,7 @@ What happened in the 7 days after each zone:
 - So "oversold" was **not** followed by more rises. For coins it was followed by fewer. The method is slightly worse than the simple guess, by an amount too small to matter.
 - **Variations were deliberately not tried.** Trying many until one looks good finds luck, not skill. A new idea should be a new method version, with its own test and its own live record.
 - It's one year, mostly falling, so this doesn't prove the indicator never works. It does mean nothing here supports trusting it.
-- **Live forecasts started:** 343 on 2026-11-06, checked from 2026-11-13. 21 more coins join once CoinPaprika's history is complete. Odds stay within about 4 points of normal, and `show` says to read them that way.
+- **Live forecasts started:** 359 on 2026-11-06 (283 CSE shares, 76 coins), checked from 2026-11-13. Odds stay within about 4 points of normal, and `show` says to read them that way.
 - **Tests that guard this:** changing the future doesn't change past zones, bands or odds (and that test fails when a leak is put in on purpose); pure noise never gets "better"; a real planted pattern is found.
 
 ## Things to watch

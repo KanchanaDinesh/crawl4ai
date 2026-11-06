@@ -493,7 +493,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 60. **Foresight, the prediction module: phase 1 (Kanchana, 2026-11-06).** A separate module, `python -m foresight run | test | show | score`, schema `foresight`, no AI (Kanchana's decision). For each section: scenarios with odds and reasons, saved before the outcome, never changed (a database trigger), scored on their date against a "normal week" guess. Plan, rules and results: `docs/foresight-plan.md`.
     - **Markets is the first analyst:** up, within or down by more than the instrument's own usual 7-day move, in 7 days, from past days in the same class and StochRSI zone. New run_all step `foresight`, after `markets_closes`.
     - **Result: StochRSI zones gave no edge on the past year** (skill -0.6% for both CSE and coins, too small to matter). Oversold wasn't followed by more rises. Variations were deliberately not tried, because that finds luck. `show` tells people to read the odds as a normal week.
-    - 343 live forecasts saved on 2026-11-06, first checked on 2026-11-13. **Forecasts can't be deleted, by design**, so a method change means a new `method_version`, never editing old rows.
+    - 359 live forecasts saved on 2026-11-06 (283 CSE shares, 76 coins), first checked on 2026-11-13. **Forecasts can't be deleted, by design**, so a method change means a new `method_version`, never editing old rows.
     - The new tables stay with administrators in the catalog until phase 3 (the page). **On a new server: `warehouse setup` adds the schema.**
     - **Next: phase 2, World news** (does a story keep going?), then phase 3, the page.
 
