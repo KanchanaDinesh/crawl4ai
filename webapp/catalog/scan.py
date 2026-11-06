@@ -18,7 +18,7 @@ from django.utils import timezone
 from warehouse.postgres import SCHEMAS
 
 from .defaults import KNOWN, STARTING_ROLES_EXPORT, STARTING_ROLES_VIEW, STARTING_ROLES_EDIT
-from .models import USERDATA, Dataset, DatasetRight, Field
+from .models import QUERY_PREFIX, USERDATA, Dataset, DatasetRight, Field
 from .sqlnames import lit, q, relation
 
 logger = logging.getLogger("webapp.catalog")
@@ -265,6 +265,15 @@ def scan_one(cur, schema: str, name: str, kind: str) -> dict:
     return {"ref": ds.ref, "new": created, "fields_added": added, "rows": total}
 
 
+def _refresh_saved_queries(cur, summary: dict) -> None:
+    """Live datasets saved from the AI assistant: their rows are always current, but their counts and filter lists are from here."""
+    for ds in Dataset.objects.filter(schema=USERDATA, name__startswith=QUERY_PREFIX, missing=False):
+        try:
+            scan_one(cur, ds.schema, ds.name, ds.kind)
+        except DatabaseError as e:
+            summary["errors"][ds.ref] = str(e).strip().splitlines()[0][:200]
+
+
 def scan() -> dict:
     """Every dataset. One that fails (too slow, or being rebuilt) is reported and the rest still get scanned."""
     summary = {"datasets": 0, "new": [], "new_fields": 0, "missing": [], "errors": {}}
@@ -282,6 +291,7 @@ def scan() -> dict:
             summary["new_fields"] += r["fields_added"]
             if r["new"]:
                 summary["new"].append(r["ref"])
+        _refresh_saved_queries(cur, summary)
     seen = {(s, n) for s, n, _ in found}
     for ds in Dataset.objects.filter(missing=False).exclude(schema=USERDATA):      # people's own tables aren't the scan's
         if (ds.schema, ds.name) not in seen:

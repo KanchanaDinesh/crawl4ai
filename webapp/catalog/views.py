@@ -49,6 +49,7 @@ def dataset_edit(request, pk):
         ds.label = request.POST.get("label", ds.label).strip()[:120] or ds.label
         ds.description = request.POST.get("description", "").strip()[:300]
         ds.enabled = "enabled" in request.POST
+        ds.use_in_ai = "use_in_ai" in request.POST
         taken, problem = set(), None
         target = ds.edit_target
         rule_changes = []

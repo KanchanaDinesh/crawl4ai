@@ -24,6 +24,7 @@ from django.db import models
 from warehouse import edits
 
 USERDATA = "userdata"
+QUERY_PREFIX = "a_"
 
 
 class Dataset(models.Model):
@@ -42,6 +43,9 @@ class Dataset(models.Model):
     scanned_at = models.DateTimeField(null=True, blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="own_tables",
                               help_text="Own tables only: who made it")
+    use_in_ai = models.BooleanField(default=True, help_text="The AI assistant may use it (it only ever sees its description, never its rows)")
+    query_sources = models.ManyToManyField("self", symmetrical=False, blank=True, related_name="used_by_queries",
+                                           help_text="A saved query: the datasets it reads")
 
     class Meta:
         ordering = ["schema", "label"]
@@ -56,7 +60,13 @@ class Dataset(models.Model):
 
     @property
     def is_own(self) -> bool:
-        return self.schema == USERDATA
+        """A table people make and fill in. (A saved query lives in the same schema, but is worked out, not filled in.)"""
+        return self.schema == USERDATA and not self.is_query
+
+    @property
+    def is_query(self) -> bool:
+        """A live dataset saved from the AI assistant: a view, so its rows are always current."""
+        return self.schema == USERDATA and self.name.startswith(QUERY_PREFIX)
 
     @property
     def edit_target(self):

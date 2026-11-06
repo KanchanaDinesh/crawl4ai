@@ -18,6 +18,7 @@
     <button class="btn" type="button" id="saveview">Save view</button>
     <button class="btn link danger" type="button" id="deleteview" hidden>Delete view</button>
     <span class="toolbar-gap"></span>
+    {% if ds.is_query %}<a class="btn" href="{% url 'assistant_saved' ds.pk %}">About this query</a>{% endif %}
     {% if ds.record_key %}<a class="btn" href="{% url 'dataset_fields' ds.ref %}">Fields</a>
     <a class="btn" href="{% url 'dataset_changes' ds.ref %}">Changes</a>{% endif %}
     <a class="btn" id="chartit" href="#" hidden>Chart</a>

@@ -206,6 +206,17 @@ draws it as you go. Put charts on a **dashboard** (Arrange). Charts are worked o
 **Reports:** a dashboard as a PDF, whenever you ask or every day, week or month. Scheduled ones are made by the `reports` step of
 `./run_all.sh`, into `output/reports/`: a run that's missed happens at the next one. PDFs need Pango (`brew install pango`).
 
+## AI assistant
+
+Menu **AI assistant** in the web app: ask for a dataset in plain words, see the rows and the query, and save it as a live dataset. Claude is told what the datasets hold, never their rows.
+It needs a Claude API key from console.anthropic.com. Add this line to `.local/database.env` (git-ignored), then restart the web app:
+
+```
+ANTHROPIC_API_KEY=your-key
+```
+
+Optional there too: `ASSISTANT_DAILY_LIMIT` (20 per person), `ASSISTANT_MONTHLY_USD` (50 for everyone), `ASSISTANT_MODEL`. Administrators see use and cost under Usage and cost. Details: `docs/user-platform-plan.md`, "Phase 7 results".
+
 ## Testing everything
 
 ```bash

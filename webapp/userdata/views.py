@@ -14,7 +14,8 @@ from django.views.decorators.http import require_POST
 from webapp.accounts.rights import ADMINISTRATOR, menu_required
 from webapp.audit.log import record
 from webapp.catalog import rights
-from webapp.catalog.models import Dataset, DatasetRight, Field
+from webapp.catalog.models import QUERY_PREFIX, Dataset, DatasetRight, Field
+from webapp.catalog.sqlnames import relation
 from webapp.explore.editing import bump_counts
 
 from . import fields as tools
@@ -46,7 +47,7 @@ def _refresh_count(ds: Dataset) -> None:
 # ── My tables ────────────────────────────────────────────────────────────────────────────────────────────────
 @menu_required("my_tables")
 def my_tables(request):
-    found = rights.visible_datasets(request.user).filter(schema="userdata").select_related("owner").order_by("label")
+    found = rights.visible_datasets(request.user).filter(schema="userdata").exclude(name__startswith=QUERY_PREFIX).select_related("owner").order_by("label")
     mine = [d for d in found if d.owner_id == request.user.pk]
     others = [d for d in found if d.owner_id != request.user.pk]
     return render(request, "userdata/my_tables.html", {"mine": mine, "others": others})
@@ -324,7 +325,7 @@ def share(request, ref):
                 DatasetRight.objects.filter(dataset=ds, group=g).delete()
         record(request, "table_shared", f"Table “{ds.label}” shared with: {', '.join(changes) or 'nobody'}", target_type="dataset", target_id=ds.ref)
     messages.success(request, "Saved who can use it.")
-    return redirect("dataset_fields", ds.ref)
+    return redirect("assistant_saved", ds.pk) if ds.is_query else redirect("dataset_fields", ds.ref)
 
 
 @require_POST
@@ -335,15 +336,18 @@ def delete_table(request, ref):
     if not rights.can_share(request.user, ds):
         raise PermissionDenied("Only its owner or an administrator can delete a table.")
     if request.POST.get("confirm", "").strip().lower() != ds.label.strip().lower():
-        messages.error(request, f"Type the table's name, “{ds.label}”, to delete it.")
-        return redirect("dataset_fields", ds.ref)
+        messages.error(request, f"Type the name, “{ds.label}”, to delete it.")
+        return redirect("assistant_saved", ds.pk) if ds.is_query else redirect("dataset_fields", ds.ref)
     with transaction.atomic():
         for f in Field.objects.filter(link_dataset=ds, missing=False):
             tools.remove_field(f)
+        if ds.is_query:     # only a query, kept with its question; a view left behind would stop a collector changing what it reads
+            with connection.cursor() as cur:
+                cur.execute(f"drop view if exists {relation(ds.schema, ds.name)}")
         Dataset.objects.filter(pk=ds.pk).update(missing=True)
         record(request, "table_deleted", f"Table “{ds.label}” deleted", target_type="dataset", target_id=ds.ref)
     messages.success(request, f"“{ds.label}” deleted.")
-    return redirect("my_tables")
+    return redirect("assistant") if ds.is_query else redirect("my_tables")
 
 
 # ── what the grid asks ───────────────────────────────────────────────────────────────────────────────────────

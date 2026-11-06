@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% load tz %}{% block title %}{{ q.title|default:"Question" }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ q.text|truncatechars:100 }}</h1><p class="muted small">Asked {{ q.at|localtime|date:"Y-m-d H:i" }}{% if q.user_id != user.pk %} by {{ q.user.get_username }}{% endif %}. Worked out again now, on today's data.</p></div><a href="{% url 'assistant' %}">Back to the assistant</a></div>
+{% include "assistant/_answer.html" %}
+{% endblock %}

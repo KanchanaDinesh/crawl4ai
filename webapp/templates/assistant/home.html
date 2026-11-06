@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}AI assistant{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>AI assistant</h1><p class="muted">Ask for a dataset in plain words. Claude is told what the datasets hold, never their rows, and writes a query; you see the result, and the query in plain words.</p></div>
+  {% if is_admin %}<a href="{% url 'assistant_usage' %}">Usage and cost</a>{% endif %}</div>
+{% if not configured %}<div class="messages"><li class="error">The assistant has no Claude API key yet. An administrator can add a line <code>ANTHROPIC_API_KEY=...</code> to <code>.local/database.env</code>, then restart the web app.</li></div>{% endif %}
+<form class="card" hx-post="{% url 'assistant_ask' %}" hx-target="#answer" hx-indicator="#working" hx-disabled-elt="#askbtn">
+  <div class="field"><label for="question">Your question</label>
+    <textarea id="question" name="question" rows="2" maxlength="{{ max_question }}" required placeholder="e.g. Sri Lankan companies in the news this month, with their LinkedIn"></textarea></div>
+  <div class="toolbar"><button class="btn primary" id="askbtn" type="submit"{% if not configured %} disabled{% endif %}>Ask</button>
+    <span class="htmx-indicator muted small" id="working">Working it out. This can take a minute…</span><span class="toolbar-gap"></span>{% include "assistant/_left.html" %}</div>
+</form>
+<div id="answer" aria-live="polite"></div>
+{% if saved %}<section class="card"><h2>Saved answers</h2><p class="muted small">Live datasets: they follow the data.</p><div class="ds-cards">{% for d in saved %}<a class="card ds-card" href="{% url 'dataset' d.ref %}"><strong>{{ d.label }}</strong><span class="muted small">{{ d.description }}</span></a>{% endfor %}</div></section>{% endif %}
+{% include "assistant/_recent.html" %}
+{% endblock %}

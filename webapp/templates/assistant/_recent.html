@@ -1,0 +1,3 @@
+{% load tz %}<section class="card" id="recent"{% if swap %} hx-swap-oob="true"{% endif %}><h2>Your earlier questions</h2>
+  {% if recent %}<div class="table-wrap"><table class="list"><thead><tr><th>When</th><th>Question</th><th>Result</th></tr></thead><tbody>{% for q in recent %}<tr><td class="nowrap small">{{ q.at|localtime|date:"Y-m-d H:i" }}</td><td><a href="{% url 'assistant_question' q.pk %}">{{ q.text|truncatechars:120 }}</a></td>
+    <td class="small">{% if q.status == "answered" %}{{ q.rows|default_if_none:0 }} rows{% elif q.status == "clarify" %}Asked back{% else %}<span class="pill bad">{{ q.status }}</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">None yet.</p>{% endif %}</section>

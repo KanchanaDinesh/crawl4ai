@@ -16,7 +16,7 @@ os.environ["SCRAPERS_OUTPUT_DIR"] = str(_TMP / "output")
 os.environ["CRAWL4_AI_BASE_DIRECTORY"] = str(_TMP / "crawl4ai")
 # Nor the real PostgreSQL: unless a test asks for the throwaway one (the pg_env fixture), every database address
 # points nowhere, so a test that forgets it fails ("Can't reach PostgreSQL") instead of writing to real data.
-for _name in ("CRAWL4AI_DATABASE_URL", "CRAWL4AI_READER_URL", "CRAWL4AI_ADMIN_URL", "CRAWL4AI_APP_URL"):
+for _name in ("CRAWL4AI_DATABASE_URL", "CRAWL4AI_READER_URL", "CRAWL4AI_ADMIN_URL", "CRAWL4AI_APP_URL", "CRAWL4AI_AGENT_URL"):
     os.environ[_name] = "postgresql://tests-use-pg_env@127.0.0.1:1/none"
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -136,17 +136,19 @@ def pg_env(pg_server, monkeypatch):
         "writer": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"w_{tag}"),
         "reader": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"r_{tag}"),
         "app": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"a_{tag}"),
+        "agent": make_conninfo(host=base["host"], port=base["port"], dbname=f"c4_{tag}", user=f"g_{tag}"),
     }
     monkeypatch.setenv("CRAWL4AI_ADMIN_URL", urls["admin"])
     monkeypatch.setenv("CRAWL4AI_DATABASE_URL", urls["writer"])
     monkeypatch.setenv("CRAWL4AI_READER_URL", urls["reader"])
     monkeypatch.setenv("CRAWL4AI_APP_URL", urls["app"])
+    monkeypatch.setenv("CRAWL4AI_AGENT_URL", urls["agent"])
     yield urls
     import psycopg
     from psycopg import sql
     with psycopg.connect(pg_server, autocommit=True) as con:      # a database per test adds up: drop it again
         con.execute(sql.SQL("drop database if exists {} with (force)").format(sql.Identifier(f"c4_{tag}")))
-        for role in (f"w_{tag}", f"r_{tag}", f"a_{tag}"):
+        for role in (f"w_{tag}", f"r_{tag}", f"a_{tag}", f"g_{tag}"):
             con.execute(sql.SQL("drop role if exists {}").format(sql.Identifier(role)))
 
 

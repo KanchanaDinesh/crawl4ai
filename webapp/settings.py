@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "webapp.userdata",
     "webapp.charts",
     "webapp.reports",
+    "webapp.assistant",
 ]
 
 MIDDLEWARE = [

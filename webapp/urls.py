@@ -17,7 +17,7 @@ urlpatterns = [
     path("my-tables/", include("webapp.userdata.urls")),
     path("charts/", include("webapp.charts.urls")),
     path("reports/", include("webapp.reports.urls")),
-    path("assistant/", core.coming("assistant"), name="assistant"),
+    path("assistant/", include("webapp.assistant.urls")),
     path("django-admin/", admin.site.urls),
 ]
 

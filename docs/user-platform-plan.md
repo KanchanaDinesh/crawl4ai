@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 to 6 built (2026-11-06); grid: Tabulator; phase 7 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 7 built (2026-11-06; phase 7 not yet run against the real Claude: no API key on the Mac); grid: Tabulator; phase 8 (server) is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -303,6 +303,45 @@ Known limits, for later: nothing is emailed yet (the PDFs wait in `output/report
 own, only shared; no custom report layouts beyond the dashboard's order; charts can't compare two datasets (a link and a rollup can do part
 of that); the plotly Python package still isn't needed.
 
+## Phase 7 results (2026-11-06)
+
+**The AI assistant** (`webapp/assistant/`, menu AI assistant). Someone asks in plain words; Claude Opus 5.5 writes one query from a description of the
+datasets; the server checks and runs it; the person sees the rows, an explanation and the query, and can save it as a live dataset.
+
+**Not yet run against the real Claude: there's no API key on the Mac.** Everything around the call is tested with a stand-in that returns known SQL, and the real SDK's request
+is checked with the network swapped out. To turn it on, put a line `ANTHROPIC_API_KEY=...` in `.local/database.env` and restart. Then try real questions: how good the queries are can only be judged there.
+
+**What Claude gets:** the rules, each dataset's name, label, description and row count, each field's name, type, label, and short value lists. **Never rows.** Afterwards it's told only the
+row count, or the error text (up to 300 characters; PostgreSQL's errors name columns, and can quote a value that failed to convert).
+
+- **Value lists are limited more than the plan said.** The catalog keeps a list for any field with few different values, which in a small table or a thin field can be the rows themselves
+  (the test caught LinkedIn addresses and shortened headlines going out). Claude now only hears a list whose values repeat at least 3 times on average, and never one with addresses in it.
+- **Which datasets:** what the asking person may see, and the administrator's "AI assistant may use it" tick on the catalog page. Not people's own tables or saved answers (open question 5 answered
+  the careful way; easy to change). Not `companies.companies` or `vehicles.ads`, where only the view leaves out hidden rows; their views are there instead.
+
+**What runs** goes through three walls:
+1. **The check** (`sqlcheck.py`, sqlglot): one SELECT; schema-qualified tables on this person's list; no `*` or whole rows; functions from a list; no field that's switched off, including inside JSON.
+   What runs is the parsed query written out again, so comments and tricks in the text don't survive.
+2. **The login** `crawl4ai_agent`: read only, the collected schemas only, 30 s. It can't reach `app`, `audit` or `userdata`.
+3. **The transaction:** read-only, its own time limit, and `pg_catalog` first in the search path.
+
+**Costs and limits:** at most 3 requests per question (a refused or failed query goes back to be fixed, and 0 rows gets one more look); 20 questions per person per day (`ASSISTANT_DAILY_LIMIT`), $50 a month
+across everyone (`ASSISTANT_MONTHLY_USD`), a question of at most 1,000 characters. The rules and catalog (about 5,000 tokens for an administrator) are cached between questions. Every question is logged with its query, tokens and an
+estimated cost (`assistant.Question`; page Usage and cost, for administrators), and in the audit log. Rows of answers aren't kept: an old answer is worked out again when opened, and only if the person may still see what it reads.
+The model is `claude-opus-5-5` (`ASSISTANT_MODEL` to change it), and the API may fall back to another model if Claude declines (`fallbacks: "default"`).
+
+**Saved answers:** `userdata.a_<hex>`, a view, plus a catalog entry with `query_sources`. So it follows the data, and the grid, filters, exports and charts work on it without any new code. It can't be edited or hidden (it's worked out, not filled in).
+Private until shared with a role, and even then only people who may see **all** the datasets it reads can open it. Saving checks the query again. The next scan refreshes its count and filter lists. Deleting drops the view.
+
+**The plan's test:** on a temporary copy of the real data, "Sri Lankan companies in the news this month with LinkedIn" with the query written by hand as Claude would: 8 correct companies in 1.9 s (Bank of Ceylon, John Keells, Sampath Bank, ...), saved,
+shown in the grid. A test shows that a new headline then adds a company. Whether Claude itself writes that query is what the first real run shows.
+
+**Limits to know:**
+- News has no link to companies, so "in the news" means the name appears in a headline. The rules tell Claude that and to skip names under 4 characters, so "Singer" also matches a headline about a singer. The explanation should say so.
+- A saved answer depends on the views it reads. PostgreSQL refuses to drop such a view, so a future schema change that drops one must deal with it first (none does today: only `create or replace`).
+- The estimated cost uses Opus 5.5's prices; the real bill is on Anthropic's console.
+- Only one question at a time: each is separate, with no follow-up conversation.
+
 ## How it fits together
 
 ```
@@ -483,7 +522,7 @@ only the web app (port 8060).
 | 4 ✅ | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
 | 5 ✅ | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
 | 6 ✅ | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |
-| 7 | **AI assistant:** catalog-only SQL, preview, save as live dataset, limits, logging | "Sri Lankan companies in the news this month with LinkedIn" gives a correct, saved, updating dataset |
+| 7 ✅ | **AI assistant:** catalog-only SQL, preview, save as live dataset, limits, logging | "Sri Lankan companies in the news this month with LinkedIn" gives a correct, saved, updating dataset |
 | 8 | **Server:** deployment with HTTPS, two-step login, backups there, monitoring | The team uses it from their own computers |
 
 Each phase ends with tests passing, a real check on the Mac, an update to STATUS.md and a push to `main`.
@@ -495,7 +534,7 @@ Each phase ends with tests passing, a real check on the Mac, an update to STATUS
 2. Extra roles beyond Administrator / Editor / Analyst / Viewer?
 3. Log page views too, or only changes, exports and logins (suggested)?
 4. Build on the Mac first and move to the server in phase 8 (suggested), or start on the server?
-5. AI assistant: may it see the column names of users' private tables, or only shared datasets?
+5. ~~AI assistant: may it see the column names of users' private tables, or only shared datasets?~~ Decided for now (phase 7): neither; collected datasets only. Say if own tables should be included.
 
 ## Risks
 

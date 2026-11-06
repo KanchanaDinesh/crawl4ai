@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}{{ ds.label }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ ds.label }}</h1><p class="muted">A live dataset from the AI assistant{% if question %}: “{{ question.text }}”{% endif %}</p></div><a class="btn primary" href="{% url 'dataset' ds.ref %}">Open the data</a></div>
+<section class="card"><h2>What it does</h2>{% if question %}<p>{{ question.explanation }}</p><details open><summary class="small">The query</summary><pre class="sql-box">{{ question.sql }}</pre></details>{% endif %}
+  <p class="small">Reads: {% for s in sources %}{{ s.label }}{% if not forloop.last %}, {% endif %}{% endfor %}</p></section>
+{% if may_share %}<form method="post" action="{% url 'dataset_share' ds.ref %}" class="card">{% csrf_token %}
+  <h2>Who can use it</h2><p class="muted small">Private until you tick a role. Even then, someone sees it only if they may see all the datasets it reads.</p>
+  <div class="table-wrap"><table class="list matrix"><thead><tr><th>Role</th><th>See and export</th></tr></thead><tbody>{% for r in roles %}<tr><td>{{ r.group.name }}</td><td><input type="checkbox" name="view_{{ r.group.pk }}" aria-label="{{ r.group.name }} may see it"{% if r.right.can_view %} checked{% endif %}></td></tr>{% endfor %}</tbody></table></div>
+  <div class="form-actions"><button class="btn" type="submit">Save who can use it</button></div></form>
+<form method="post" action="{% url 'dataset_delete_table' ds.ref %}" class="card">{% csrf_token %}<h2>Delete it</h2><p class="muted small">The data it reads isn't touched. Type its name to confirm.</p>
+  <div class="toolbar"><input type="text" name="confirm" placeholder="{{ ds.label }}" aria-label="Type the name to confirm"><button class="btn danger" type="submit">Delete</button></div></form>{% endif %}
+{% endblock %}

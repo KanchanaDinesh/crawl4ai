@@ -9,6 +9,7 @@ audit log: docs/user-platform-plan.md). Three logins:
 
     crawl4ai           collectors and setup: create tables, read, write (owns the database and the data schemas)
     crawl4ai_reader    dashboard, analysis, other users: read only, and a query stops after 30 s
+    crawl4ai_agent     the AI assistant's queries: read only, the collected data only, and a query stops after 30 s
     crawl4ai_app       the web app (webapp/, Django): owns schema `app`, reads the data schemas
 
 Where to connect (environment, or KEY=value lines in .local/database.env, which git ignores):
@@ -48,9 +49,10 @@ DEFAULT_URLS = {
     "reader": "postgresql://crawl4ai_reader@localhost:5432/crawl4ai",
     "admin": "postgresql://localhost:5432/postgres",
     "app": "postgresql://crawl4ai_app@localhost:5432/crawl4ai",
+    "agent": "postgresql://crawl4ai_agent@localhost:5432/crawl4ai",
 }
 ENV_NAMES = {"writer": "CRAWL4AI_DATABASE_URL", "reader": "CRAWL4AI_READER_URL", "admin": "CRAWL4AI_ADMIN_URL",
-             "app": "CRAWL4AI_APP_URL"}
+             "app": "CRAWL4AI_APP_URL", "agent": "CRAWL4AI_AGENT_URL"}
 
 
 class DatabaseError(RuntimeError):
@@ -74,9 +76,10 @@ def _where(conninfo: str) -> str:
 
 def names() -> dict:
     """The database and login names, taken from the writer, reader and app URLs."""
-    w, r, a = _parts(url("writer")), _parts(url("reader")), _parts(url("app"))
+    w, r, a, g = _parts(url("writer")), _parts(url("reader")), _parts(url("app")), _parts(url("agent"))
     return {"database": w.get("dbname") or "crawl4ai", "writer": w.get("user") or "crawl4ai",
             "reader": r.get("user") or "crawl4ai_reader", "app": a.get("user") or "crawl4ai_app",
+            "agent": g.get("user") or "crawl4ai_agent", "agent_password": g.get("password"),
             "writer_password": w.get("password"), "reader_password": r.get("password"),
             "app_password": a.get("password")}
 
@@ -113,7 +116,7 @@ def setup(admin_url: str | None = None) -> list[str]:
     admin = admin_url or url("admin")
     done: list[str] = []
     with connect(conninfo=admin, autocommit=True) as con:
-        for key in ("writer", "reader", "app"):
+        for key in ("writer", "reader", "app", "agent"):
             role = n[key]
             if not con.execute("select 1 from pg_roles where rolname = %s", [role]).fetchone():
                 con.execute(sql.SQL("create role {} login").format(sql.Identifier(role)))
@@ -129,7 +132,7 @@ def setup(admin_url: str | None = None) -> list[str]:
     db_admin = _with_dbname(admin, n["database"])
     with connect(conninfo=db_admin, autocommit=True) as con:
         W, R, D = sql.Identifier(n["writer"]), sql.Identifier(n["reader"]), sql.Identifier(n["database"])
-        A = sql.Identifier(n["app"])
+        A, G = sql.Identifier(n["app"]), sql.Identifier(n["agent"])
         for ext in EXTENSIONS:
             if not con.execute("select 1 from pg_extension where extname = %s", [ext]).fetchone():
                 con.execute(sql.SQL("create extension {}").format(sql.Identifier(ext)))
@@ -149,6 +152,11 @@ def setup(admin_url: str | None = None) -> list[str]:
             con.execute(sql.SQL("grant select on all tables in schema {} to {}").format(S, A))
             con.execute(sql.SQL("alter default privileges for role {} in schema {} grant select on tables to {}")
                         .format(W, S, A))
+            # what the AI assistant's queries run as: the collected data and nothing else (never app, audit or userdata)
+            con.execute(sql.SQL("grant usage on schema {} to {}").format(S, G))
+            con.execute(sql.SQL("grant select on all tables in schema {} to {}").format(S, G))
+            con.execute(sql.SQL("alter default privileges for role {} in schema {} grant select on tables to {}")
+                        .format(W, S, G))
         # the web app's own schema: users, roles, menus, audit log (Django creates the tables in it)
         if not con.execute("select 1 from pg_namespace where nspname = %s", [APP_SCHEMA]).fetchone():
             con.execute(sql.SQL("create schema {} authorization {}").format(sql.Identifier(APP_SCHEMA), A))
@@ -165,6 +173,10 @@ def setup(admin_url: str | None = None) -> list[str]:
             A, D, sql.Identifier(APP_SCHEMA)))
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, R))
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, A))
+        con.execute(sql.SQL("grant connect on database {} to {}").format(D, G))
+        con.execute(sql.SQL("alter role {} in database {} set default_transaction_read_only = on").format(G, D))
+        con.execute(sql.SQL("alter role {} in database {} set statement_timeout = {}").format(
+            G, D, sql.Literal(READER_STATEMENT_TIMEOUT)))
         con.execute(sql.SQL("revoke create on schema public from public"))
         grant_edit_rights(con)
         # the reader can never change anything, and a heavy query can't keep the server busy for long
@@ -257,7 +269,20 @@ def check() -> list[Check]:
                                        from pg_namespace where nspname = %s), false)""", [APP_SCHEMA]).fetchone()[0]
         out.append(Check(not app_readable, "Reader can't see the web app's tables",
                          "ok" if not app_readable else f"{n['reader']} can use schema {APP_SCHEMA}: remove that grant"))
-    return out + _app_check(n) + _disk_check()
+    return out + _app_check(n) + _agent_check(n) + _disk_check()
+
+
+def _agent_check(n: dict) -> list[Check]:
+    """The AI assistant's queries run as this login: people's accounts, corrections and own tables must stay out of its reach."""
+    try:
+        con = connect("agent", autocommit=True)
+    except DatabaseError as e:
+        return [Check(False, "PostgreSQL (AI assistant login)", str(e))]
+    with con:
+        reachable = [s for s in (APP_SCHEMA, AUDIT_SCHEMA, USERDATA_SCHEMA) if con.execute(
+            """select coalesce((select has_schema_privilege(current_user, oid, 'usage') from pg_namespace where nspname = %s), false)""", [s]).fetchone()[0]]
+    return [Check(not reachable, "AI assistant's login reads collected data only",
+                  n["agent"] if not reachable else f"{n['agent']} can use {', '.join(reachable)}: remove that grant")]
 
 
 def _app_check(n: dict) -> list[Check]:

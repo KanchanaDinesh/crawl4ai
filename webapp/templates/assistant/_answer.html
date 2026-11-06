@@ -1,0 +1,12 @@
+{% load humanize %}{% if problem and not result %}<div class="card"><p class="errorlist" role="alert" style="list-style:none;padding:0">{{ problem }}</p>{% if q.pk and q.status != "clarify" %}<p class="muted small"><a href="{% url 'assistant_question' q.pk %}">See this question</a></p>{% endif %}</div>
+{% elif q.status == "clarify" %}<div class="card"><h2>A question back</h2><p>{{ q.clarification }}</p><p class="muted small">Ask again with that added.</p></div>
+{% elif q %}<section class="card">
+  <div class="page-head"><h2>{{ q.title|default:"Answer" }}</h2><span class="muted small">{{ result.total|intcomma }} row{{ result.total|pluralize }}{% if result.total > preview_limit %}, the first {{ preview_limit }} shown{% endif %}</span></div>
+  <p>{{ q.explanation }}</p>
+  <details><summary class="small">The query</summary><pre class="sql-box">{{ q.sql }}</pre></details>
+  {% if result.rows %}<div class="table-wrap answer-table"><table class="list"><thead><tr>{% for c in result.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>{% for row in result.rows %}<tr>{% for v in row %}<td class="small">{{ v|default_if_none:"" }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No rows match.</p>{% endif %}
+  {% if q.saved_as %}<p><a class="btn" href="{% url 'dataset' q.saved_as.ref %}">Open the saved dataset</a></p>
+  {% else %}<form method="post" action="{% url 'assistant_save' q.pk %}" class="toolbar">{% csrf_token %}<input type="text" name="label" value="{{ q.title }}" maxlength="120" aria-label="Name for the dataset" required><button class="btn primary" type="submit">Save as a live dataset</button><span class="muted small">It follows the data from then on, and works in the grid and charts.</span></form>{% endif %}
+</section>{% endif %}
+{% if swap %}{% include "assistant/_left.html" %}{% include "assistant/_recent.html" %}{% endif %}

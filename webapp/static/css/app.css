@@ -211,3 +211,9 @@ table.matrix .sec td { background: var(--surface-2); font-size: 12px; text-trans
 .dash-grid .wide { grid-column: 1 / -1; }
 .tile-tools { margin-top: 8px; }
 
+
+/* the AI assistant */
+.sql-box { background: var(--surface-2); border-radius: 6px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
+.answer-table { max-height: 480px; overflow: auto; }
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline; }

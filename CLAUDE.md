@@ -44,7 +44,8 @@ webapp/          the user platform (Django + HTMX): python -m webapp runserver 8
                  catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them;
                  insights/ = the dashboard's five tabs (queries.py is the SQL, also used by the tools' `show` commands);
                  userdata/ = own tables, own fields, links, imports (schema `userdata`, values in JSONB);
-                 charts/ = chart builder, dashboards; reports/ = PDFs (WeasyPrint needs Pango: brew install pango)
+                 charts/ = chart builder, dashboards; reports/ = PDFs (WeasyPrint needs Pango: brew install pango);
+                 assistant/ = AI assistant (Claude sees the catalog, never rows; sqlcheck.py + login crawl4ai_agent; saved answers are views userdata.a_*)
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
 automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Open issues")
@@ -55,8 +56,8 @@ data/  output/  logs/  .local/  .venv/       git-ignored
 
 - **Database: PostgreSQL** (since 2026-11-06; it replaced one DuckDB file per tool, which allowed only one
   program at a time). Database `crawl4ai` on the Mac's Homebrew PostgreSQL 18, one schema per tool: news, tech,
-  markets, vehicles, companies, scrapers. Logins `crawl4ai` (writer) and `crawl4ai_reader` (read-only, 30 s query
-  limit); settings `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` / `CRAWL4AI_ADMIN_URL` or `.local/database.env`.
+  markets, vehicles, companies, scrapers. Logins `crawl4ai` (writer), `crawl4ai_reader` (read-only, 30 s query
+  limit), `crawl4ai_app` (web app) and `crawl4ai_agent` (the AI's queries: read-only, collected data only); settings `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` / `CRAWL4AI_ADMIN_URL` or `.local/database.env`.
   Each store opens a writer connection, runs `postgres.migrate` for its schema (only when the .sql file changed)
   and saves in short transactions; the dashboard tabs and CLIs read with the reader login. Placeholders are `%s`,
   table names always with the schema, text through `postgres.clean_text`/`json_text` (no NUL). New tables or

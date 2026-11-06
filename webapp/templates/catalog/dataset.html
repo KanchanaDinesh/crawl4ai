@@ -8,6 +8,7 @@
     <div class="field"><label for="description">What it holds</label><input type="text" id="description" name="description" value="{{ ds.description }}" maxlength="300"></div>
   </div>
   <label><input type="checkbox" name="enabled" {% if ds.enabled %}checked{% endif %}> On: roles with the right can see it</label>
+  <label><input type="checkbox" name="use_in_ai" {% if ds.use_in_ai %}checked{% endif %}> The AI assistant may use it (it's told what the dataset holds, never its rows)</label>
   <p class="muted small">{{ ds.row_count|default_if_none:"?"|intcomma }} rows{% if ds.key_columns %}; identified by {{ ds.key_columns|join:", " }}{% endif %}; last scan {{ ds.scanned_at|date:"j M Y H:i" }}. What the scan finds (types, value lists) updates by itself; names and switches here are kept.</p>
   <div class="table-wrap"><table class="list">
     <thead><tr><th>Field</th><th>In the database</th><th>Type</th><th>Filled</th><th>Values</th><th>Available</th><th>Shown first</th>{% if can_correct %}<th>Editable</th><th>If the source changes it</th>{% endif %}<th>What it means</th></tr></thead>

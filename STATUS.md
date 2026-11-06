@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 333 tests pass.
+All 415 tests pass.
 
 ## Parts and how to run them
 
@@ -30,7 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-5: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, and charts, dashboards and PDF reports. Django; schema `app`. The server restarts by itself after a code change |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-7: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, charts, dashboards and PDF reports, and the AI assistant (needs an API key). Django; schema `app`. The server restarts by itself after a code change |
 | Dashboard | In the web app: http://localhost:8060/dashboard/ (`webapp/insights/`) | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. Charts in Plotly. `python -m dashboard` (the old aiohttp page on port 8050) only says where it went |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -440,6 +440,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Checked on a temporary copy of the database with `./run_all.sh reports`, then deleted: the real database has no test charts.
     - **Next: phase 7** (AI assistant: catalog-only SQL, preview, save as live dataset, limits, logging).
 
+53. **User platform phase 7 built (2026-11-06): the AI assistant.** Menu AI assistant (`webapp/assistant/`): ask in plain words, Claude Opus 5.5 writes one query from a description of the datasets, the server
+    checks it and runs it as the new read-only login `crawl4ai_agent`; the person sees the rows, an explanation and the query, and can save it as a live dataset (a view, `userdata.a_*`), which then works in the grid, exports and charts.
+    Claude never gets rows, only the count or the error. Limits: 20 questions per person per day, $50 a month, 3 requests per question; every question is logged with its cost. Details: `docs/user-platform-plan.md` → "Phase 7 results".
+    - **Not yet run against the real Claude: no API key on the Mac.** Tested with a stand-in (and the real SDK's request with the network swapped out). Kanchana adds `ANTHROPIC_API_KEY=...` to `.local/database.env`, restarts, and tries real questions.
+    - Found by the "no rows reach the AI" test: the catalog's value lists can be the rows themselves in a small table. Now only lists of values that repeat, and no addresses.
+    - Checked on a temporary copy, then deleted: the plan's question gives 8 real companies in 1.9 s, saved and shown in the grid.
+    - **Open question for Kanchana:** the assistant only knows collected datasets, not people's own tables. Say if own tables should be included.
+    - **Next: phase 8** (the server: HTTPS, two-step login, backups, monitoring), when Kanchana says go.
+
 ## Open issues and things to watch
 
 - **The Mac's own drive is nearly full, and PostgreSQL keeps its data there** (Homebrew,
@@ -487,7 +496,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phases 1-6 are built; phase 7 is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-7 are built; phase 8 (the server) is next. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).
