@@ -1,0 +1,21 @@
+{% load tz %}<h2>History of this row</h2>
+<div class="muted small mono" style="overflow-wrap:anywhere">{{ record }}</div>
+<div class="errorlist panel-error" role="alert" hidden></div>
+{% for f in corrected %}{% if f.pending %}
+<div class="card review"><strong>{{ f.label }}: the source now says something new</strong>
+  <div class="kv"><div>Now</div><div>{{ f.now }}</div><div>The source says</div><div>{{ f.pending }}</div></div>
+  {% if may_edit %}<div class="form-actions">
+    <button class="btn primary" type="button" hx-post="{% url 'dataset_review' ds.ref %}" hx-vals='{"record": "{{ record|escapejs }}", "field": "{{ f.field|escapejs }}", "choice": "accept"}' hx-target="#drawer-body">Use the source's value</button>
+    <button class="btn" type="button" hx-post="{% url 'dataset_review' ds.ref %}" hx-vals='{"record": "{{ record|escapejs }}", "field": "{{ f.field|escapejs }}", "choice": "keep"}' hx-target="#drawer-body">Keep ours</button>
+  </div>{% endif %}</div>
+{% endif %}{% endfor %}
+<h4>Corrected fields</h4>
+{% for f in corrected %}<div class="hist"><b>{{ f.label }}</b>: {{ f.now }}<div class="muted small">The source said: {{ f.source }}</div></div>
+{% empty %}<div class="muted">Nothing: this row is as it was collected.</div>{% endfor %}
+<h4>Every change</h4>
+{% for e in entries %}<div class="hist">
+  <div class="muted small">{{ e.at|localtime|date:"Y-m-d H:i" }} · {{ e.by }} · {{ e.label }}</div>
+  <div>{{ e.old_text }} → <b>{{ e.new_text }}</b></div>
+  {% if e.note %}<div class="muted small">{{ e.note }}</div>{% endif %}
+  {% if may_edit and e.can_restore %}<button class="btn link small" type="button" hx-post="{% url 'dataset_restore' ds.ref %}" hx-vals='{"record": "{{ record|escapejs }}", "entry": "{{ e.id }}"}' hx-target="#drawer-body">Put back “{{ e.old_text|truncatechars:40 }}”</button>{% endif %}
+</div>{% empty %}<div class="muted">No changes yet.</div>{% endfor %}

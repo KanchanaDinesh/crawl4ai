@@ -157,7 +157,8 @@ def test_createadmin_command(monkeypatch):
 def companies():
     """The companies schema (warehouse/schema/companies.sql) with a few rows, in the test database."""
     from pathlib import Path
-    sql = (Path(__file__).resolve().parent.parent / "warehouse" / "schema" / "companies.sql").read_text()
+    folder = Path(__file__).resolve().parent.parent / "warehouse" / "schema"
+    sql = (folder / "audit.sql").read_text() + (folder / "companies.sql").read_text()     # its view looks at audit's table
     with connection.cursor() as cur:
         cur.execute("create schema if not exists companies")
         cur.execute("set local search_path = app, public")      # pg_trgm's operators live in public

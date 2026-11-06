@@ -178,6 +178,16 @@ a tab when it has that menu and the right to see the tab's main dataset (Catalog
 - `runserver 8060` listens on this computer only. **The server restarts by itself after a code change**, except
   with `--noreload`.
 
+### Correcting data
+
+Companies and vehicle ads can be corrected in **Datasets** (roles with the Edit right: columns marked ✎). Double-click a cell, paste
+into it, or select rows to set one value on all of them or to hide them. Select one row → **History** shows every change, with
+**Put back**. **Changes** lists a dataset's latest changes and hidden rows.
+
+A correction stays when a collector runs again and the source only repeats itself. If the source really changes the value, the new
+value wins and the correction stays in the history (per field in the catalog, the person can win instead, or it can wait for review).
+Hidden rows are never deleted, and stay hidden when a collector sees them again.
+
 ## Testing everything
 
 ```bash

@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from warehouse.postgres import SCHEMAS
 
-from .defaults import KNOWN, STARTING_ROLES_EXPORT, STARTING_ROLES_VIEW
+from .defaults import KNOWN, STARTING_ROLES_EXPORT, STARTING_ROLES_VIEW, STARTING_ROLES_EDIT
 from .models import Dataset, DatasetRight, Field
 from .sqlnames import lit, q, relation
 
@@ -218,7 +218,9 @@ def _save_fields(ds: Dataset, specs: list[dict], total: int) -> int:
             show = (spec["type"] != Field.JSON and filled_enough and spec["path"] not in hide
                     and shown < SHOWN_BY_DEFAULT)
             shown += 1 if show else 0
-            Field.objects.create(dataset=ds, label=_label(spec, taken), order=next_order, shown=show, **spec)
+            target = ds.edit_target
+            editable = bool(target and not spec.get("json_key") and spec["column"] in target.columns)
+            Field.objects.create(dataset=ds, label=_label(spec, taken), order=next_order, shown=show, editable=editable, **spec)
             added += 1
         else:
             for k in ("type", "is_jsonb", "fill_pct", "values"):
@@ -239,7 +241,8 @@ def _new_dataset(schema: str, name: str, kind: str, primary_key: list[str]) -> D
         key_columns=primary_key or (known or {}).get("key", []), default_sort_field=sort[0], default_sort_dir=sort[1])
     if known and not known.get("off"):      # datasets we know start with the plan's rights; unknown ones with none
         for group in Group.objects.filter(name__in=STARTING_ROLES_VIEW):
-            DatasetRight.objects.create(dataset=ds, group=group, can_view=True,
+            edit = group.name in STARTING_ROLES_EDIT and ds.edit_target is not None
+            DatasetRight.objects.create(dataset=ds, group=group, can_view=True, can_edit=edit, can_hide=edit,
                                         can_export=group.name in STARTING_ROLES_EXPORT)
     return ds
 

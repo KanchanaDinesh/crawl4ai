@@ -11,10 +11,96 @@
 
   $("q").value = state.q || "";
   const grid = DataGrid.create($("grid"), {
-    columns: config.columns, rowsUrl: config.urls.rows, headerFilters: true, index: "_row",
+    columns: config.columns, rowsUrl: config.urls.rows, headerFilters: true, index: config.hasRecords ? "_id" : "_row",
+    editUrl: config.canEdit ? config.urls.edit : null, undo: false,
     state, defaultSort: config.defaultSort,
+    onSelection: showSelection,
     filters: () => ({ q: $("q").value.trim() }),
     onStatus: (t) => status(t), onError: (t) => status(t, true), onTotal: (n) => (total = n),
+  });
+
+  // ── rows selected: their history, one value for all of them, hide ──
+  function showSelection() {
+    const n = config.hasRecords ? grid.selectedIds().length : 0;
+    $("selection").hidden = !n;
+    $("selcount").textContent = `${n.toLocaleString("en-US")} row${n === 1 ? "" : "s"} selected`;
+    $("showhistory").hidden = n !== 1;
+    $("bulkbar").hidden = !config.canEdit;
+    $("hiderows").hidden = !config.canHide;
+    $("hiderows").textContent = `Hide ${n === 1 ? "this row" : `these ${n.toLocaleString("en-US")} rows`}`;
+    delete $("hiderows").dataset.armed;
+  }
+  async function post(url, body) {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": decodeURIComponent(csrf()) }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `That didn't work (HTTP ${res.status}).`);
+    return data;
+  }
+  const editableColumns = config.columns.filter((c) => c.editable);
+  for (const c of editableColumns) {
+    const o = document.createElement("option");
+    o.value = c.field; o.textContent = c.title;
+    $("bulkfield").appendChild(o);
+  }
+  function fillBulkChoices() {
+    const c = editableColumns.find((x) => x.field === $("bulkfield").value);
+    $("bulkchoices").innerHTML = "";
+    for (const v of (c && c.edit_choices) || []) {
+      const o = document.createElement("option");
+      o.value = v;
+      $("bulkchoices").appendChild(o);
+    }
+  }
+  $("bulkfield").addEventListener("change", fillBulkChoices);
+  fillBulkChoices();
+  $("bulkapply").addEventListener("click", async () => {
+    const ids = grid.selectedIds(), field = $("bulkfield").value;
+    const c = editableColumns.find((x) => x.field === field);
+    if (!ids.length || !c) return;
+    try {
+      const done = await post(config.urls.bulk, { ids, field, value: $("bulkvalue").value });
+      grid.applyValue(ids, field, done.value);
+      for (const [id, linked] of Object.entries(done.linked || {})) grid.applyChanges(id, linked, [field, ...Object.keys(linked)]);
+      status(`${c.title} set on ${done.changed.toLocaleString("en-US")} row${done.changed === 1 ? "" : "s"}.`);
+      $("bulkvalue").value = "";
+    } catch (err) { status(err.message, true); }
+  });
+  $("hiderows").addEventListener("click", async () => {
+    const ids = grid.selectedIds(), b = $("hiderows");
+    if (!ids.length) return;
+    if (b.dataset.armed !== "1") {            // asked here rather than in a dialog: one more click, right where they are
+      b.dataset.armed = "1";
+      b.textContent = `Really hide ${ids.length.toLocaleString("en-US")}? They can be shown again from Changes`;
+      return;
+    }
+    try {
+      const done = await post(config.urls.hide, { ids });
+      status(`${done.hidden.toLocaleString("en-US")} row${done.hidden === 1 ? "" : "s"} hidden. Changes lists them, to show them again.`);
+      $("selection").hidden = true;
+      grid.reload();
+    } catch (err) { status(err.message, true); }
+  });
+
+  // ── a row's history, in the side panel ──
+  const drawer = $("drawer"), shade = $("drawer-bg");
+  function closeDrawer() { drawer.classList.remove("open"); shade.classList.remove("open"); }
+  $("drawer-close").addEventListener("click", closeDrawer);
+  shade.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+  $("showhistory").addEventListener("click", async () => {
+    const id = grid.selectedIds()[0];
+    if (id === undefined) return;
+    drawer.classList.add("open"); shade.classList.add("open");
+    $("drawer-close").focus();
+    $("drawer-body").innerHTML = '<div class="muted">Loading…</div>';
+    const res = await fetch(`${config.urls.history}?${new URLSearchParams({ id })}`);
+    $("drawer-body").innerHTML = res.ok ? await res.text() : '<div class="muted">That didn\'t load. Try again.</div>';
+    window.htmx.process($("drawer-body"));
+  });
+  document.body.addEventListener("cellsChanged", (e) => grid.applyChanges(e.detail.id, e.detail.changes, e.detail.edited));
+  document.body.addEventListener("htmx:responseError", (e) => {
+    const box = document.querySelector("#drawer-body .panel-error");
+    if (box) { box.textContent = e.detail.xhr.responseText.slice(0, 300) || "That didn't work."; box.hidden = false; }
   });
 
   $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => grid.reload(), 350); });

@@ -187,7 +187,7 @@ def test_rows_sort_page_and_count(data, admin):
     res = rows(admin, cols=["name", "employees"], sorts=[{"field": "employees", "dir": "desc"}], limit=2, start=1)
     data_ = res.json()
     assert data_["total"] == 4 and [r["name"] for r in data_["rows"]] == ["Acme Bank", "Beta Tea"]
-    assert set(data_["rows"][0]) == {"name", "employees", "_row"} and data_["rows"][0]["_row"] == 1
+    assert set(data_["rows"][0]) == {"name", "employees", "_row", "_id"} and data_["rows"][0]["_row"] == 1
 
 
 def test_filters_of_every_kind(data, admin):
@@ -227,7 +227,7 @@ def test_a_request_cant_reach_other_columns_or_inject_sql(data, admin):
     assert rows(admin, filters=[{"field": evil, "value": "x"}]).status_code == 400
     assert rows(admin, filters=[{"field": "password", "value": "x"}]).status_code == 400
     found = rows(admin, cols=["name", evil, "id; select 1"]).json()["rows"][0]
-    assert set(found) == {"name", "_row"}
+    assert set(found) == {"name", "_row", "_id"}             # _id: the row's key, for editing and history
     assert names(rows(admin, cols=["name"], sorts=[{"field": evil}], limit=1))     # unknown sort: ignored
     res = rows(admin, cols=["name"], filters=[{"field": "name", "value": "'; drop table companies.companies; --"}])
     assert res.json()["total"] == 0

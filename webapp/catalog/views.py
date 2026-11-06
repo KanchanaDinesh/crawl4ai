@@ -2,7 +2,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.models import Group
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -10,7 +10,9 @@ from django.views.decorators.http import require_POST
 from webapp.accounts.rights import ADMINISTRATOR, menu_required
 from webapp.audit.log import record
 
-from .models import Dataset, DatasetRight
+from warehouse import edits
+
+from .models import Dataset, DatasetRight, Field
 from .scan import describe, scan
 
 
@@ -48,7 +50,15 @@ def dataset_edit(request, pk):
         ds.description = request.POST.get("description", "").strip()[:300]
         ds.enabled = "enabled" in request.POST
         taken, problem = set(), None
+        target = ds.edit_target
+        rule_changes = []
         for f in fields:
+            if target and _correctable(target, f):
+                f.editable = f"editable_{f.pk}" in request.POST
+                rule = request.POST.get(f"rule_{f.pk}", f.edit_rule)
+                if rule in edits.RULES and rule != f.edit_rule:
+                    f.edit_rule = rule
+                    rule_changes.append(f)
             f.label = request.POST.get(f"label_{f.pk}", f.label).strip()[:120] or f.label
             f.description = request.POST.get(f"desc_{f.pk}", "").strip()[:300]
             f.available = f"available_{f.pk}" in request.POST
@@ -63,11 +73,35 @@ def dataset_edit(request, pk):
                 ds.save()
                 for f in fields:
                     f.save()
+                _apply_rules(ds, rule_changes)
                 record(request, "dataset_updated", f"Dataset {ds.ref} changed in the catalog", target_type="dataset",
                        target_id=ds.ref, detail={"before": before, "after": {"label": ds.label, "enabled": ds.enabled}})
             messages.success(request, f"Saved {ds.label}.")
             return redirect("catalog_dataset", pk=ds.pk)
-    return render(request, "catalog/dataset.html", {"ds": ds, "fields": fields})
+    target = ds.edit_target
+    for f in fields:
+        f.correctable = bool(target and _correctable(target, f))
+    return render(request, "catalog/dataset.html", {"ds": ds, "fields": fields, "can_correct": bool(target), "rules": edits.RULES})
+
+
+def _correctable(target, f) -> bool:
+    return not f.json_key and f.column in target.columns
+
+
+def _apply_rules(ds: Dataset, changed: list) -> None:
+    """Corrections already made follow a changed rule, and so does every dataset showing the same table's field."""
+    if not changed:
+        return
+    with connection.cursor() as cur:
+        ready = edits.available(cur)
+        for f in changed:
+            if ready:
+                edits.set_rule(cur, ds.edit_target.table, f.column, f.edit_rule)
+    others = [ref for ref, table in edits.EDITABLE_DATASETS.items() if table == ds.edit_target.table and ref != ds.ref]
+    for ref in others:
+        schema, name = ref.split(".")
+        for f in changed:
+            Field.objects.filter(dataset__schema=schema, dataset__name=name, column=f.column, json_key=None).update(edit_rule=f.edit_rule)
 
 
 def _matrix(groups):
@@ -90,20 +124,22 @@ def rights(request):
                 for g in groups:
                     view = f"v_{ds.pk}_{g.pk}" in request.POST
                     export = view and f"e_{ds.pk}_{g.pk}" in request.POST
+                    edit = view and ds.edit_target is not None and f"c_{ds.pk}_{g.pk}" in request.POST
+                    hide = view and ds.edit_target is not None and f"h_{ds.pk}_{g.pk}" in request.POST
                     r = current.get((ds.pk, g.pk))
-                    was = (r.can_view, r.can_export) if r else (False, False)
-                    if was == (view, export):
+                    was = (r.can_view, r.can_export, r.can_edit, r.can_hide) if r else (False, False, False, False)
+                    if was == (view, export, edit, hide):
                         continue
                     if view:
                         DatasetRight.objects.update_or_create(dataset=ds, group=g, defaults={
-                            "can_view": True, "can_export": export})
+                            "can_view": True, "can_export": export, "can_edit": edit, "can_hide": hide})
                     elif r:
                         r.delete()
-                    changes.append({"dataset": ds.ref, "role": g.name, "view": view, "export": export})
+                    changes.append({"dataset": ds.ref, "role": g.name, "view": view, "export": export, "edit": edit, "hide": hide})
             if changes:
                 record(request, "dataset_rights_changed", "Dataset rights changed: " + "; ".join(
-                    f"{c['role']} {c['dataset']} {'view' if c['view'] else 'none'}{'+export' if c['export'] else ''}"
+                    f"{c['role']} {c['dataset']} {'view' if c['view'] else 'none'}{'+export' if c['export'] else ''}{'+edit' if c['edit'] else ''}{'+hide' if c['hide'] else ''}"
                     for c in changes), target_type="dataset", detail={"changes": changes})
         messages.success(request, f"Saved {len(changes)} change(s)." if changes else "Nothing changed.")
         return redirect("dataset_rights")
-    return render(request, "catalog/rights.html", {"groups": groups, "rows": _matrix(groups)})
+    return render(request, "catalog/rights.html", {"groups": groups, "rows": _matrix(groups), "span": 4 * len(groups) + 1})

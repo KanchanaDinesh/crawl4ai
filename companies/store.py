@@ -13,7 +13,8 @@
 Moved from DuckDB (data/companies/companies.duckdb) on 2026-11-06: in PostgreSQL the dashboard and anyone else
 can read while collect/update write. Every save is its own short transaction, so nothing is locked for long.
 
-Saving is an upsert: a company seen again keeps its first_seen and gets the newest name/website/industry.
+Saving is an upsert: a company seen again keeps its first_seen and gets the newest name/website/industry, except where a
+person corrected a field and the source only repeats what it said before (warehouse/edits.py, rule A).
 """
 
 import json
@@ -62,6 +63,7 @@ class CompanyStore:
 
         A batch (a page of GLEIF, a Wikidata query: up to ~27,000 rows) is loaded with COPY into a temporary
         table and merged with one statement, in one transaction: fast, and readers see the whole batch or none."""
+        from warehouse import edits
         from warehouse.postgres import clean_text, json_text
         seen_at = seen_at or now_iso()
         unique: dict[str, dict] = {}
@@ -72,12 +74,14 @@ class CompanyStore:
             return 0, 0
         con = self.con
         with con.transaction():
+            con.execute("drop table if exists staged")
             con.execute("""create temp table staged (id text, source text, source_id text, name text, country text,
                            website text, domain text, industry text, extra jsonb) on commit drop""")
             with con.cursor().copy(f"copy staged ({', '.join(COMPANY_FIELDS)}) from stdin") as cp:
                 for r in unique.values():
                     cp.write_row([json_text(r.get(f)) if f == "extra" else clean_text(r.get(f))
                                   for f in COMPANY_FIELDS])
+            edits.protect_staged(con.cursor(), "companies.companies", "staged", "collector:companies")
             added = con.execute("""select count(*) from staged s
                                    where not exists (select 1 from companies.companies c where c.id = s.id)""").fetchone()[0]
             con.execute("""

@@ -33,6 +33,12 @@ def backup_dir() -> Path:
     return project_paths.DATA_DIR / "backups"
 
 
+def dump_url() -> str:
+    """The administrator's login, on our database. A backup must include everything, and no other login can read it all:
+    the web app's schema (users, roles, audit log) belongs to the web app's login, and the collectors' login can't open it."""
+    return postgres._with_dbname(postgres.url("admin"), postgres.names()["database"])
+
+
 def find_pg_dump() -> str:
     """pg_dump on the PATH, else next to pg_config, else Homebrew's (launchd jobs have a short PATH)."""
     found = shutil.which("pg_dump")
@@ -67,7 +73,7 @@ def backup(folder: Path | None = None, keep: int = 7, now: datetime | None = Non
     final = folder / f"{PREFIX}{stamp}{SUFFIX}"
     partial = folder / f".{final.name}.partial"
     run = subprocess.run([find_pg_dump(), "--format=custom", "--no-password", f"--file={partial}",
-                          f"--dbname={postgres.url('writer')}"], capture_output=True, text=True)
+                          f"--dbname={dump_url()}"], capture_output=True, text=True)
     if run.returncode != 0 or not partial.exists() or partial.stat().st_size == 0:
         partial.unlink(missing_ok=True)
         detail = (run.stderr or run.stdout or "no output").strip().splitlines()

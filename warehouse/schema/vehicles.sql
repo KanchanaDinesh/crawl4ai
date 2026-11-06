@@ -48,7 +48,8 @@ create or replace view vehicles.v_vehicle_ads_latest as
                  count(*) over (partition by url) as times_seen,
                  row_number() over (partition by url order by saved_at desc) as rn
           from vehicles.v_vehicle_ads) a
-    where rn = 1;
+    where rn = 1
+      and not exists (select 1 from audit.hidden_records h where h.dataset = 'vehicles.ads' and h.record = a.url);
 
 -- ads whose price changed between two runs
 create or replace view vehicles.v_vehicle_price_changes as
@@ -56,4 +57,5 @@ create or replace view vehicles.v_vehicle_price_changes as
     from (select url, site, title, saved_at, price_lkr,
                  lag(price_lkr) over (partition by url order by saved_at) as previous_price_lkr
           from vehicles.v_vehicle_ads) a
-    where previous_price_lkr is not null and previous_price_lkr <> price_lkr;
+    where previous_price_lkr is not null and previous_price_lkr <> price_lkr
+      and not exists (select 1 from audit.hidden_records h where h.dataset = 'vehicles.ads' and h.record = a.url);

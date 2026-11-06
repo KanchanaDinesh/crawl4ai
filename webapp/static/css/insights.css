@@ -147,17 +147,6 @@ table.dense svg.spark { height: 26px; margin: 0; }
 .ad .t { font-weight: 600; } .ad .m { color: var(--muted); font-size: 12.5px; } .ad .p { text-align: right; white-space: nowrap; font-weight: 700; }
 @media (max-width: 600px) { .ad { grid-template-columns: 72px minmax(0, 1fr); } .ad img, .ad .noimg { width: 72px; height: 54px; } .ad .p { grid-column: 2; text-align: left; } }
 
-.drawer-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 40; display: none; }
-.drawer-bg.open { display: block; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface); z-index: 50; overflow-y: auto; padding: 18px 20px; transform: translateX(100%); transition: transform .2s; border-left: 1px solid var(--line); visibility: hidden; }
-.drawer.open { transform: none; visibility: visible; }
-@media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
-.drawer h2 { margin: 0 44px 4px 0; font-size: 19px; overflow-wrap: anywhere; }
-.drawer h4 { margin: 16px 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-.drawer h4 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.drawer .close { position: absolute; top: 12px; right: 14px; padding: 4px 10px; }
-.kv { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 4px 10px; font-size: 13.5px; overflow-wrap: anywhere; }
-.kv > div:nth-child(odd) { color: var(--muted); }
 .people-list div { margin: 2px 0; }
 /* Plotly puts a white line behind the crosshair, which glares on the dark theme */
 .plot .spikeline[stroke-width="3"] { display: none; }

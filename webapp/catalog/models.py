@@ -9,11 +9,14 @@ Scans refresh what comes from the data (type, how full, value lists, row counts)
 saved views and rights survive a collector being rebuilt.
 
 DatasetRight says what a role may do with a dataset. Administrators may do everything, and a new dataset nobody
-has been given stays with administrators until they grant it. Editing rights arrive in phase 4.
+has been given stays with administrators until they grant it. Which datasets and columns can be corrected at all is in
+warehouse/edits.py; here an administrator switches them on per field and per role.
 """
 
 from django.contrib.auth.models import Group
 from django.db import models
+
+from warehouse import edits
 
 
 class Dataset(models.Model):
@@ -42,6 +45,14 @@ class Dataset(models.Model):
     def ref(self) -> str:
         return f"{self.schema}.{self.name}"
 
+    @property
+    def edit_target(self):
+        return edits.target_for(self.ref)
+
+    @property
+    def hide_target(self):
+        return edits.hide_target_for(self.ref)
+
 
 class Field(models.Model):
     TEXT, LINK, NUMBER, DATETIME, BOOL, LIST, JSON = "text", "link", "number", "datetime", "bool", "list", "json"
@@ -61,6 +72,8 @@ class Field(models.Model):
     fill_pct = models.PositiveSmallIntegerField(default=0)
     values = models.JSONField(default=list, blank=True)   # the choices, for a field with few different values
     missing = models.BooleanField(default=False)
+    editable = models.BooleanField(default=False, help_text="People with the right can correct it")
+    edit_rule = models.CharField(max_length=1, default="A", help_text="When the source changes a corrected value")
 
     class Meta:
         ordering = ["order", "id"]
@@ -75,6 +88,8 @@ class DatasetRight(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="dataset_rights")
     can_view = models.BooleanField(default=True)
     can_export = models.BooleanField(default=False)
+    can_edit = models.BooleanField(default=False)
+    can_hide = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["dataset", "group"], name="right_once_per_role")]

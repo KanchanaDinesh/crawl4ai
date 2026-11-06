@@ -17,6 +17,7 @@ from django.core.cache import cache
 from django.db import connection, transaction
 from django.utils import timezone
 
+from warehouse import edits
 from webapp.catalog.models import Dataset, Field
 from webapp.catalog.sqlnames import lit, q, relation
 
@@ -225,8 +226,23 @@ def _timeout(cur, seconds: str = QUERY_TIMEOUT) -> None:
     cur.execute(f"set local statement_timeout = '{seconds}'")
 
 
+def not_hidden(ds: Dataset, where: str) -> str:
+    """Adds "and not hidden" for datasets of records people can hide. Views may already leave them out; this also covers
+    the plain tables. Reads audit's table only if it exists yet (a database that hasn't run `warehouse migrate`)."""
+    target = ds.hide_target
+    if target is None:
+        return where
+    with connection.cursor() as cur:
+        if not edits.available(cur):
+            return where
+    clause = (f"not exists (select 1 from {edits.HIDDEN} h where h.dataset = {lit(target.table)} "
+              f"and h.record = d.{q(target.key)}::text)")
+    return f"{where} and {clause}" if where else f" where {clause}"
+
+
 def count_rows(ds: Dataset, where: str, params: list) -> int:
-    key = f"dscount:{ds.pk}:{hash((where, repr(params)))}"
+    generation = cache.get(f"dsgen:{ds.pk}", 0)        # goes up when someone edits or hides rows
+    key = f"dscount:{ds.pk}:{generation}:{hash((where, repr(params)))}"
     found = cache.get(key)
     if found is None:
         with transaction.atomic(), connection.cursor() as cur:
@@ -237,10 +253,20 @@ def count_rows(ds: Dataset, where: str, params: list) -> int:
     return found
 
 
-def fetch_rows(ds: Dataset, shown: list[Field], where: str, params: list, order: str, start: int, limit: int) -> list[dict]:
+def fetch_rows(ds: Dataset, shown: list[Field], where: str, params: list, order: str, start: int, limit: int,
+               key_column: str | None = None) -> list[dict]:
+    """key_column: also return each row's key as "_id", for people who may edit or hide rows (it may not be on screen)."""
     select = ", ".join(f"{select_expr(f)} as c{i}" for i, f in enumerate(shown)) or "null"
+    if key_column:
+        select += f", d.{q(key_column)}::text as _id"
     sql = f"select {select} from {relation(ds.schema, ds.name)} d{where}{order} limit %s offset %s"
     with transaction.atomic(), connection.cursor() as cur:
         _timeout(cur)
         cur.execute(sql, [*params, limit, start])
-        return [{f.path: plain(v) for f, v in zip(shown, row)} for row in cur.fetchall()]
+        found = []
+        for row in cur.fetchall():
+            item = {f.path: plain(v) for f, v in zip(shown, row)}
+            if key_column:
+                item["_id"] = row[len(shown)]
+            found.append(item)
+        return found

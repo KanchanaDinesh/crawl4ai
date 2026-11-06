@@ -38,7 +38,8 @@ techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, 
                                                __init__.py (calls project_paths.apply_local_env()), __main__.py,
                                                cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
-warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse
+warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse;
+                 edits.py = people's corrections and rule A (what can be edited, and how collectors respect it)
 webapp/          the user platform (Django + HTMX): python -m webapp runserver 8060; its tables in schema `app`.
                  catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them;
                  insights/ = the dashboard's five tabs (queries.py is the SQL, also used by the tools' `show` commands)
@@ -62,6 +63,8 @@ data/  output/  logs/  .local/  .venv/       git-ignored
 - **Next big piece: the user platform** (`docs/user-platform-plan.md`): Django + HTMX + Plotly + WeasyPrint, Python
   only (Kanchana decided against React), the Tabulator grid behind `datagrid.js`, roles and menu
   rights, edit history with rule A. Follow its phases and update it as decisions change.
+- **Corrections:** a collector whose data people can edit must save through `warehouse/edits.py` (`protect_rows` or
+  `protect_staged`), or the next run undoes their work. Schema `audit` isn't a data schema: the reader login can't see it.
 - **Vehicle ads** are in schema `vehicles` (`vehicles/store.py`): tables `ads` and `runs`, views
   `v_vehicle_ads*` used by the dashboard. The latest run is also written to `output/vehicles_<site>.json`.
   Schema `scrapers` holds only the `scrapers/` tools' output (generic `scraper_rows`).

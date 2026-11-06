@@ -64,7 +64,7 @@ create table if not exists companies.runs (
 );
 create index if not exists runs_started_at_idx on companies.runs (started_at);
 
--- companies with their website check (the dashboard's Companies tab and `companies show` read this)
+-- companies with their website check (the dashboard's Companies tab and `companies show` read this); what people hid isn't here
 create or replace view companies.v_companies as
     select c.id, c.source, c.source_id, c.name, c.country, c.website, c.domain, c.industry, c.first_seen, c.last_seen,
            coalesce(s.status, case when c.domain is null then 'no website' else 'not read' end) as site_status,
@@ -72,4 +72,5 @@ create or replace view companies.v_companies as
            case when jsonb_typeof(s.people) = 'array' then jsonb_array_length(s.people) end as people,
            coalesce(s.employees, s.employees_hint) as employees,
            s.social ->> 'linkedin' as linkedin, s.legal_name, s.founded
-    from companies.companies c left join companies.sites s on s.domain = c.domain;
+    from companies.companies c left join companies.sites s on s.domain = c.domain
+    where not exists (select 1 from audit.hidden_records h where h.dataset = 'companies.companies' and h.record = c.id);

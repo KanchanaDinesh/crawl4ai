@@ -507,7 +507,7 @@ def companies_summary(con) -> dict:
     counts = one(con, f"""select count(*) as companies, count(website) as with_website,
         count(distinct domain) as websites, count(distinct country) as countries, count(distinct source) as sources,
         count(*) filter (where first_seen >= now() - interval '1 day') as new_24h,
-        {_pg_ts('max(first_seen)')} as last_added from companies.companies""")
+        {_pg_ts('max(first_seen)')} as last_added from companies.v_companies""")
     counts.update(one(con, """select count(*) filter (where status = 'ok') as sites_ok, count(*) as sites_checked,
         count(*) filter (where status = 'ok' and social is not null and social <> '{}'::jsonb) as sites_with_social,
         count(*) filter (where status = 'ok' and jsonb_typeof(people) = 'array' and jsonb_array_length(people) > 0)
@@ -520,7 +520,7 @@ def companies_summary(con) -> dict:
     for r in by_country:
         r["name"] = names.get(r["country"] or "", r["country"] or "unknown")
     by_source = rows(con, f"""select source, count(*) as n, count(website) as with_website,
-        count(distinct country) as countries, {_pg_ts('max(last_seen)')} as last_seen from companies.companies
+        count(distinct country) as countries, {_pg_ts('max(last_seen)')} as last_seen from companies.v_companies
         group by 1 order by n desc""")
     by_status = rows(con, """select site_status as status, count(*) as n from companies.v_companies
         group by 1 order by n desc""")
@@ -528,8 +528,8 @@ def companies_summary(con) -> dict:
         where status = 'ok' and jsonb_typeof(social) = 'object' group by 1 order by n desc, k""")
     by_day = rows(con, """select to_char(first_seen at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n,
         count(website) as with_website
-        from companies.companies where first_seen >= current_date - interval '14 days' group by 1 order by 1""")
-    industries = rows(con, """select industry, count(*) as n from companies.companies where industry is not null
+        from companies.v_companies where first_seen >= current_date - interval '14 days' group by 1 order by 1""")
+    industries = rows(con, """select industry, count(*) as n from companies.v_companies where industry is not null
         group by 1 order by n desc, industry limit 15""")
     runs = rows(con, f"""select command, {_pg_ts('started_at')} as started_at, seconds, summary from companies.runs
         order by runs.started_at desc limit 10""")
@@ -577,7 +577,8 @@ def companies_list(con, *, country=None, source=None, status=None, q=None, sort=
 def company_detail(con, company_id: str) -> dict:
     c = one(con, f"""select id, source, source_id, name, country, website, domain, industry, extra,
         {_pg_ts('first_seen')} as first_seen, {_pg_ts('last_seen')} as last_seen
-        from companies.companies where id = %s""", [company_id])
+        from companies.companies c where id = %s
+          and exists (select 1 from companies.v_companies v where v.id = c.id)""", [company_id])
     if not c:
         return {}
     c["extra"] = _json(c["extra"], {})
@@ -593,6 +594,6 @@ def company_detail(con, company_id: str) -> dict:
         refusal = one(con, f"""select {_pg_ts('refused_at')} as refused_at, error from companies.refusals
             where domain = %s""", [c["domain"]])
         c["refusal"] = refusal or None
-    same = rows(con, """select id, source, name, country from companies.companies where domain = %s and id <> %s
+    same = rows(con, """select id, source, name, country from companies.v_companies where domain = %s and id <> %s
         order by source, id limit 20""", [c["domain"], c["id"]]) if c["domain"] else []
     return {"company": c, "site": site, "same_website": same}

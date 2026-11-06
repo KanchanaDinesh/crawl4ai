@@ -9,6 +9,7 @@ hide: columns that are in the way at first (they stay under Columns).
 
 STARTING_ROLES_VIEW = ("Editor", "Analyst", "Viewer")
 STARTING_ROLES_EXPORT = ("Editor", "Analyst")
+STARTING_ROLES_EDIT = ("Editor",)
 
 KNOWN = {
     "news.news_items": dict(label="Headlines", description="Every headline collected, once per link.",

@@ -37,12 +37,14 @@ class VehicleStore:
 
     def save_report(self, report: dict, saved_at: str | None = None) -> int:
         """Store one site's run (its ads and how it went). Returns the number of ads saved."""
+        from warehouse import edits
         from warehouse.postgres import clean_text as t, json_text
         saved_at = saved_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         site = report.get("site")
-        ads = report.get("ads") or []
+        ads = [dict(a) for a in report.get("ads") or []]   # copies: a person's correction doesn't belong in the site's report
         with self.con.transaction():
             cur = self.con.cursor()
+            edits.protect_rows(cur, "vehicles.ads", ads, "collector:vehicles")
             if ads:
                 cur.executemany(
                     f"insert into vehicles.ads (saved_at, site, {', '.join(AD_COLUMNS)}, extra) "

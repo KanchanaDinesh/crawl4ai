@@ -10,7 +10,7 @@
   <label><input type="checkbox" name="enabled" {% if ds.enabled %}checked{% endif %}> On: roles with the right can see it</label>
   <p class="muted small">{{ ds.row_count|default_if_none:"?"|intcomma }} rows{% if ds.key_columns %}; identified by {{ ds.key_columns|join:", " }}{% endif %}; last scan {{ ds.scanned_at|date:"j M Y H:i" }}. What the scan finds (types, value lists) updates by itself; names and switches here are kept.</p>
   <div class="table-wrap"><table class="list">
-    <thead><tr><th>Field</th><th>In the database</th><th>Type</th><th>Filled</th><th>Values</th><th>Available</th><th>Shown first</th><th>What it means</th></tr></thead>
+    <thead><tr><th>Field</th><th>In the database</th><th>Type</th><th>Filled</th><th>Values</th><th>Available</th><th>Shown first</th>{% if can_correct %}<th>Editable</th><th>If the source changes it</th>{% endif %}<th>What it means</th></tr></thead>
     <tbody>{% for f in fields %}
     <tr><td><input type="text" name="label_{{ f.pk }}" value="{{ f.label }}" maxlength="120" aria-label="Name of {{ f.path }}"></td>
       <td class="mono small">{{ f.path }}{% if f.missing %} <span class="pill bad">gone</span>{% endif %}</td>
@@ -18,6 +18,8 @@
       <td class="small">{% if f.values %}{{ f.values|length }} choices{% endif %}</td>
       <td><input type="checkbox" name="available_{{ f.pk }}" aria-label="{{ f.label }} available" {% if f.available %}checked{% endif %}></td>
       <td><input type="checkbox" name="shown_{{ f.pk }}" aria-label="{{ f.label }} shown first" {% if f.shown %}checked{% endif %}></td>
+      {% if can_correct %}<td>{% if f.correctable %}<input type="checkbox" name="editable_{{ f.pk }}" aria-label="{{ f.label }} editable" {% if f.editable %}checked{% endif %}>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if f.correctable %}<select name="rule_{{ f.pk }}" aria-label="What happens to a correction of {{ f.label }} when the source changes it">{% for code, label in rules.items %}<option value="{{ code }}"{% if code == f.edit_rule %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}</td>{% endif %}
       <td><input type="text" name="desc_{{ f.pk }}" value="{{ f.description }}" maxlength="300" aria-label="What {{ f.label }} means"></td></tr>
     {% endfor %}</tbody>
   </table></div>

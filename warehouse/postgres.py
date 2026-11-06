@@ -37,6 +37,7 @@ project_paths.apply_local_env()
 
 SCHEMAS = ("news", "tech", "markets", "vehicles", "companies", "scrapers")
 APP_SCHEMA = "app"                         # the web app's own tables; never readable by the reader login
+AUDIT_SCHEMA = "audit"                     # people's corrections and their history; never readable by the reader login
 EXTENSIONS = ("pg_trgm", "unaccent")      # pg_trgm: fast "name contains" search; unaccent: search ignoring accents
 READER_STATEMENT_TIMEOUT = "30s"
 LOW_DISK_GB = 2.0
@@ -156,11 +157,34 @@ def setup(admin_url: str | None = None) -> list[str]:
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, R))
         con.execute(sql.SQL("grant connect on database {} to {}").format(D, A))
         con.execute(sql.SQL("revoke create on schema public from public"))
+        grant_edit_rights(con)
         # the reader can never change anything, and a heavy query can't keep the server busy for long
         con.execute(sql.SQL("alter role {} in database {} set default_transaction_read_only = on").format(R, D))
         con.execute(sql.SQL("alter role {} in database {} set statement_timeout = {}").format(
             R, D, sql.Literal(READER_STATEMENT_TIMEOUT)))
     return done
+
+
+def grant_edit_rights(con) -> None:
+    """What the web app may change in the collected data: only the columns people may correct (warehouse/edits.py), so a
+    bug in the app can't damage anything else. Needs the tables' owner, which the app isn't. Safe to run again."""
+    from psycopg import sql
+    from . import edits
+    app = names()["app"]
+    if not con.execute("select 1 from pg_roles where rolname = %s", [app]).fetchone():
+        return
+    A = sql.Identifier(app)
+    if con.execute("select to_regclass('audit.field_source')").fetchone()[0]:
+        con.execute(sql.SQL("grant usage on schema audit to {}").format(A))
+        con.execute(sql.SQL("grant select, insert on audit.field_history to {}").format(A))
+        con.execute(sql.SQL("grant usage on sequence audit.field_history_id_seq to {}").format(A))
+        con.execute(sql.SQL("grant select, insert, update, delete on audit.field_source, audit.hidden_records to {}").format(A))
+    for table, target in edits.TARGETS.items():
+        if con.execute("select to_regclass(%s)", [table]).fetchone()[0]:
+            schema, name = table.split(".")
+            con.execute(sql.SQL("grant update ({}) on {}.{} to {}").format(
+                sql.SQL(", ").join(map(sql.Identifier, edits.protected_columns(target))),
+                sql.Identifier(schema), sql.Identifier(name), A))
 
 
 def _with_dbname(conninfo: str, dbname: str) -> str:
@@ -283,6 +307,7 @@ def migrate(con=None, schemas: list[str] | tuple[str, ...] = SCHEMAS) -> list[st
     own = con is None
     con = con or connect("writer", autocommit=True)
     ran: list[str] = []
+    schemas = (AUDIT_SCHEMA, *[s for s in schemas if s != AUDIT_SCHEMA])   # the data schemas' views look at audit's tables
     try:
         con.execute("""create table if not exists public.schema_versions (
                            schema text primary key, sha256 text not null, applied_at timestamptz not null)""")
@@ -302,6 +327,8 @@ def migrate(con=None, schemas: list[str] | tuple[str, ...] = SCHEMAS) -> list[st
                                on conflict (schema) do update set sha256 = excluded.sha256, applied_at = now()""",
                             [schema, digest])
                 ran.append(schema)
+        if ran:
+            grant_edit_rights(con)
     finally:
         if own:
             con.close()

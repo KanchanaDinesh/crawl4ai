@@ -121,3 +121,18 @@ def test_a_failed_backup_leaves_nothing_behind(tmp_path):
     with pytest.raises(backup.BackupError, match="pg_dump said"):     # tests' dead database address
         backup.backup(tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_backup_includes_the_web_apps_tables_and_the_corrections(pg_env, tmp_path):
+    """The web app's schema belongs to its own login, which the collectors' login can't read: that once stopped every backup."""
+    import subprocess
+    import psycopg
+    from warehouse import backup, postgres
+    postgres.setup()
+    postgres.migrate(schemas=("companies",))
+    with psycopg.connect(pg_env["app"], autocommit=True) as app:
+        app.execute("create table app.auth_user (id int)")
+    path, _ = backup.backup(tmp_path)
+    listing = subprocess.run([backup.find_pg_dump().replace("pg_dump", "pg_restore"), "--list", str(path)],
+                             capture_output=True, text=True, check=True).stdout
+    assert "TABLE app auth_user" in listing and "TABLE audit field_history" in listing and "TABLE companies companies" in listing

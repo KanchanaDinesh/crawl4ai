@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1, 2 and 3 built (2026-11-06); grid: Tabulator; phase 4 is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 4 built (2026-11-06); grid: Tabulator; phase 5 is next.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -183,6 +183,55 @@ cut, the same point the old page cut in the browser.
 Known limits: a tab's rights follow one dataset, not every table it reads. A role given only `news.news_items` also sees
 source health and run history on that tab.
 
+## Phase 4 results (2026-11-06)
+
+**People can correct collected data, and a collector doesn't undo it.** Corrections go in the main tables, so the grid, the
+dashboard, exports and the tools' `show` commands all see them. `warehouse/edits.py` is the part the web app and the
+collectors share; `webapp/explore/editing.py` checks and saves values.
+
+**What can be edited** (open question 1, the suggested answer): companies (name, country, website, industry; a website
+brings its domain) and vehicle ads (title, price, location, year, mileage). News, prices and tech intel stay read-only.
+`edits.TARGETS` is the ceiling: PostgreSQL grants the web app these columns and nothing else, and the catalog can offer
+only these. Within that, an administrator switches fields on and sets the rule (Catalog → a dataset), and gives roles
+Edit and Hide (Dataset rights). Editors start with both; Analysts and Viewers with neither. Editing needs a real
+column: keys inside JSONB (`extra`) aren't editable yet, because collectors replace `extra` as a whole.
+
+**Rule A in the collectors:** `audit.field_source` keeps the last value the source gave, per corrected field.
+`CompanyStore.upsert_companies` and `VehicleStore.save_report` call `edits.protect_staged` / `protect_rows` before saving:
+
+| The source says | Rule A (default) | Rule B | Rule C |
+|---|---|---|---|
+| the same as before, or nothing | correction stays | correction stays | correction stays |
+| something new | **new value saved**; the correction stays in the history, one click to put back | correction stays | correction stays, the new value waits for a person |
+| what the person said | the correction is no longer needed | same | same |
+
+Vehicles keep one row per run, so a correction goes on the latest row and is carried to each new row. The site's own
+report (the JSON file) isn't changed. A race is harmless: if an edit lands just as a run saves, the next run restores it.
+
+**In the grid:** columns marked ✎: double-click, or paste (typing replaces the value; a website's link is an arrow, so a
+double-click edits). A save carries the value the person saw: if it changed meanwhile, nothing is saved and they see the
+new value. Select rows to set one value on all of them (all or none, at most 5,000; no "value I saw" here, since the
+person chose to set them all) or to hide them. Corrected cells are underlined; a cell waiting for review is tinted.
+
+**History:** `audit.field_history` has every change: who, when, old, new, why. A database trigger refuses changing or
+removing it, even for its owner. Select one row → **History** shows what's corrected and every change with **Put back**, and
+the rule C decision. **Changes** lists a dataset's latest changes and hidden rows. Collector changes appear only when they
+replaced someone's correction (otherwise this would be millions of rows). Edits, bulk edits, hides and put-backs are in
+the audit log too.
+
+**Hiding:** `audit.hidden_records`; nothing is deleted, the collector keeps collecting, and the row stays hidden. The views
+(`v_companies`, `v_vehicle_ads_latest`, `v_vehicle_price_changes`) leave hidden rows out, so the dashboard, CLIs and briefing
+follow; the grid and exports also filter the plain tables. Shown again from **Changes**.
+
+**Checked on a temporary copy of the real database** (deleted afterwards; the real history is empty), with real runs:
+a corrected company stayed corrected through a real CSE collection (its last-seen moved, its name didn't); when the source
+changed a website, the new value won and the domain followed; corrected ads stayed corrected through a real vehicles run;
+hidden ads were collected again and stayed hidden. As the web app's login, updating `source` or deleting history is refused.
+
+Known limits, for later: a corrected price counts in "price changes", as a real change would; the first cell of a grid
+is selected on opening, so the selection bar shows "1 row selected" straight away; a role can be given Edit per dataset,
+not per column.
+
 ## How it fits together
 
 ```
@@ -210,7 +259,7 @@ source health and run history on that tab.
 | `news`, `tech`, `markets`, `vehicles`, `companies`, `scrapers` | collected data (as now) | collectors; the app only for user edits to editable fields |
 | `app` | Django's own tables: users, roles, permissions, menus, catalog, saved views, charts, dashboards, report definitions | the app |
 | `userdata` | users' own tables, link tables, tags | the app |
-| `audit` | the audit log and field history | the app (and database triggers as a safety net) |
+| `audit` | field history, what the source last said, hidden records (the sign-in and admin audit log is in `app`) | the app and collectors (and a database trigger as a safety net) |
 
 ### Flexible records
 
@@ -360,7 +409,7 @@ only the web app (port 8060).
 | 1 ✅ | **Foundation + grid test:** Django project in `webapp/`, schema `app`, login, users, roles, menu rights, admin screens, audit log; the AG Grid vs Tabulator test; the `datagrid.js` wrapper | An admin creates a user and a role; the user signs in and sees only the menus granted; grid chosen with the test's results written down |
 | 2 ✅ | **Catalog + explore:** automatic catalog, dataset pages with the grid for every dataset, saved views, CSV/Excel export | Every dataset is browsable with filters and paging over 130,000 rows; a new collector table appears after a catalog scan |
 | 3 ✅ | **Today's dashboard in Django:** the five tabs as Django pages (reusing `queries.py`, charts in Plotly); retire the aiohttp dashboard | Every tab shows the same numbers as today; `python -m dashboard` is replaced |
-| 4 | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
+| 4 ✅ | **Editing:** inline and bulk edit, history, hide, rule A in the collectors, conflict check, column grants | An edit survives the next collector run unless the source really changed; every edit is in the history and can be undone |
 | 5 | **Airtable-like:** choice and multi-choice fields, links, lookups, rollups, own tables, imports | A user links vehicle ads to a dealer table they made and sees the ad count per dealer |
 | 6 | **Charts, dashboards, reports:** chart builder, dashboards, PDF reports, scheduled reports | A user builds a dashboard; a weekly PDF arrives in `output/reports/` |
 | 7 | **AI assistant:** catalog-only SQL, preview, save as live dataset, limits, logging | "Sri Lankan companies in the news this month with LinkedIn" gives a correct, saved, updating dataset |
@@ -370,7 +419,7 @@ Each phase ends with tests passing, a real check on the Mac, an update to STATUS
 
 ## Open questions
 
-1. Which datasets and fields may users edit at first? (Suggested: companies and vehicles; news and prices
+1. **Answered in phase 4, with the suggestion below; Kanchana can change it.** Which datasets and fields may users edit at first? (Suggested: companies and vehicles; news and prices
    read-only.)
 2. Extra roles beyond Administrator / Editor / Analyst / Viewer?
 3. Log page views too, or only changes, exports and logins (suggested)?

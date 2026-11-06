@@ -22,10 +22,11 @@ def _rights(user) -> dict[int, dict]:
     if cached is not None:
         return cached
     rights: dict[int, dict] = {}
-    for r in DatasetRight.objects.filter(group__user=user).values("dataset_id", "can_view", "can_export"):
-        e = rights.setdefault(r["dataset_id"], {"view": False, "export": False})
+    for r in DatasetRight.objects.filter(group__user=user).values("dataset_id", "can_view", "can_export", "can_edit", "can_hide"):
+        e = rights.setdefault(r["dataset_id"], {"view": False, "export": False, "edit": False, "hide": False})
         e["view"] |= r["can_view"]
-        e["export"] |= r["can_view"] and r["can_export"]
+        for right, column in (("export", "can_export"), ("edit", "can_edit"), ("hide", "can_hide")):
+            e[right] |= r["can_view"] and r[column]
     user._dataset_rights = rights
     return rights
 
@@ -40,6 +41,18 @@ def can_export(user, ds: Dataset) -> bool:
     if is_admin(user):
         return True
     return ds.enabled and not ds.missing and _rights(user).get(ds.pk, {}).get("export", False)
+
+
+def can_edit(user, ds: Dataset) -> bool:
+    if ds.edit_target is None or ds.missing:
+        return False
+    return is_admin(user) or (ds.enabled and _rights(user).get(ds.pk, {}).get("edit", False))
+
+
+def can_hide(user, ds: Dataset) -> bool:
+    if ds.edit_target is None or ds.missing:
+        return False
+    return is_admin(user) or (ds.enabled and _rights(user).get(ds.pk, {}).get("hide", False))
 
 
 def visible_datasets(user):

@@ -11,6 +11,8 @@ ACTIONS = {
     "catalog_scanned": "Catalog scanned", "dataset_updated": "Dataset changed in the catalog",
     "dataset_rights_changed": "Dataset rights changed", "export": "Data exported",
     "view_saved": "View saved", "view_deleted": "View deleted",
+    "cell_edited": "Value corrected", "rows_edited": "Rows corrected together", "edit_restored": "Earlier value put back",
+    "edit_reviewed": "Flagged value decided", "rows_hidden": "Rows hidden", "rows_unhidden": "Rows shown again",
     "gridtest_edit": "Grid test: cell edited", "gridtest_bulk_edit": "Grid test: rows edited together",
     "gridtest_choice_added": "Grid test: new choice added",
 }

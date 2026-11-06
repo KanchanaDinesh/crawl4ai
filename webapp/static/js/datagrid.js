@@ -5,12 +5,14 @@
    DataGrid.create(element, options)
      columns     [{field, title, type: text|choice|multi|link|date, editable, choices, allow_new, noun, width}]
      rowsUrl     GET ?start&limit&sort&dir&<filters> -> {total, rows:[{id, ...}], ms}
-     editUrl     POST {id, field, value} -> {ok, value} | {error}
+     editUrl     POST {id, field, value, seen} -> {ok, value, linked} | {error, conflict, current}; seen is the value
+                 the person saw, so a value someone else changed meanwhile isn't saved over
      choiceUrl   POST {field, value} -> {ok, value, choices} | {error}   (columns with allow_new)
      filters()   returns extra request values (object)
      headerFilters  true: a filter under each heading (column.filter: text|number|date|choice)
      state       {columns:[{field, visible, width}], sorts:[{field, dir}], filters:[{field, value}]} to start from
      defaultSort {field, dir}, shown on the heading
+     index       the row's key field (default "id"); undo: false turns off Ctrl+Z (saved edits are undone from the history)
      onStatus(text), onSelection(count), onError(text), onTotal(total)
    returns { reload(), selectedIds(), applyValue(ids, field, value), state(), params(), chooseColumns(anchor),
              clearFilters(), destroy() }
@@ -48,15 +50,19 @@
     return data;
   }
 
-  async function saveEdit(opt, id, field, value) {
+  async function saveEdit(opt, id, field, value, seen) {
     const res = await fetch(opt.editUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
-      body: JSON.stringify({ id, field, value, engine: "tabulator" }),
+      body: JSON.stringify({ id, field, value, seen, engine: "tabulator" }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || `Saving failed (HTTP ${res.status})`);
-    return data.value;
+    if (!res.ok || !data.ok) {
+      const problem = new Error(data.error || `Saving failed (HTTP ${res.status})`);
+      if (data.conflict) { problem.conflict = true; problem.current = data.current; }
+      throw problem;
+    }
+    return data;
   }
 
   async function addChoice(url, column, text) {
@@ -81,6 +87,12 @@
     if (!url) return "";
     const safe = /^https?:\/\//i.test(url) ? url : "";
     return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener">${esc(url.replace(/^https?:\/\//, ""))}</a>` : esc(url);
+  }
+
+  function editableLinkHtml(url) {
+    if (!url) return "";
+    const safe = /^https?:\/\//i.test(url);
+    return esc(String(url).replace(/^https?:\/\//, "")) + (safe ? ` <a href="${esc(url)}" target="_blank" rel="noopener" title="Open the site" aria-label="Open the site">↗</a>` : "");
   }
 
   // ── The searchable multiple-choice list ──────────────────────────────────────────────────────────────────
@@ -298,7 +310,15 @@
     }
     if (c.type === "bool") col.formatter = (cell) => (cell.getValue() === true ? "yes" : cell.getValue() === false ? "no" : "");
     if (c.type === "list") col.formatter = (cell) => chipsHtml(cell.getValue());
-    if (c.editable) col.editor = c.type === "choice" ? "list" : "input";
+    if (c.editable) {
+      col.editor = c.type === "choice" ? "list" : "input";
+      if (col.editor === "input") col.editorParams = { selectContents: true };   // typing replaces the value, as in Excel
+      if (opt.headerFilters) col.cssClass = "can-edit";
+      if (c.edit_choices) {          // suggestions from what's in the data; other values can be typed
+        col.editor = "list";
+        col.editorParams = { values: ["", ...c.edit_choices], autocomplete: true, freetext: true, clearable: true, listOnEmpty: true };
+      }
+    }
     if (c.type === "choice") col.editorParams = { values: ["", ...(c.choices || [])], autocomplete: true, clearable: true, listOnEmpty: true };
     if (c.type === "multi") {
       col.editor = multiEditor;
@@ -307,13 +327,16 @@
         onAdd: c.allow_new && opt.choiceUrl ? (text) => addChoice(opt.choiceUrl, c, text) : null };
       col.formatter = (cell) => chipsHtml(cell.getValue());
     }
-    if (c.type === "link") col.formatter = (cell) => linkHtml(cell.getValue());
+    // In a cell that can be edited, a double-click must edit it, not open the site twice: the link is a small arrow beside the text
+    if (c.type === "link") col.formatter = (cell) => (c.editable ? editableLinkHtml(cell.getValue()) : linkHtml(cell.getValue()));
     return col;
   }
 
   function create(el, opt) {
     const original = new Map();          // id -> the row as loaded (and as saved since)
     const editable = !!opt.editUrl;
+    const key = opt.index || "id";
+    const idOf = (d) => d[key];
     const state = opt.state || {};
     // a saved view: its columns first, in its order and widths; anything else after them, hidden
     let columns = opt.columns.map((c) => ({ ...c, visible: c.shown !== false }));
@@ -333,7 +356,7 @@
       height: `${Math.round(height)}px`,
       layout: "fitData",
       columns: columns.map((c) => column(c, opt)),
-      index: opt.index || "id",
+      index: key,
       nestedFieldSeparator: false,       // a field "extra.city" is one field, not a key inside "extra"
       movableColumns: !!opt.headerFilters,
       headerSortClickElement: "header",
@@ -356,7 +379,7 @@
       clipboardPasteParser: "range",
       clipboardPasteAction: "range",
       rowHeader: { resizable: false, frozen: true, width: 46, hozAlign: "center", formatter: "rownum", headerSort: false },
-      history: editable,
+      history: editable && opt.undo !== false,
       progressiveLoad: "scroll",
       progressiveLoadScrollMargin: 400,
       paginationSize: PAGE,
@@ -372,13 +395,14 @@
           filters: filters.length ? JSON.stringify(filters) : "", sorts: sorts.length ? JSON.stringify(sorts) : "" } : {};
         try {
           const data = await getRows(opt, (page - 1) * size, size, s ? { field: s.field, dir: s.dir } : null, lastParams);
-          for (const r of data.rows) original.set(r.id, { ...r });      // to undo pastes into read-only cells
+          for (const r of data.rows) original.set(idOf(r), { ...r });   // to undo pastes into read-only cells
           return { last_page: Math.max(1, Math.ceil(data.total / size)), data: data.rows };
         } catch (e) { opt.onError && opt.onError(e.message); throw e; }
       },
       rowFormatter: (row) => {
         const d = row.getData();
         for (const f of d._edited || []) { const cell = row.getCell(f); cell && cell.getElement().classList.add("edited"); }
+        for (const f of d._pending || []) { const cell = row.getCell(f); cell && cell.getElement().classList.add("pending"); }
       },
     });
     const selectedRows = () => {
@@ -396,16 +420,17 @@
         const data = row.getData(), pasted = rowData[i] || {}, putBack = {};
         for (const [field, raw] of Object.entries(pasted)) {
           const col = opt.columns.find((c) => c.field === field);
-          const before = (original.get(data.id) || {})[field];
+          const before = (original.get(idOf(data)) || {})[field];
           if (!col || !col.editable) { putBack[field] = before; refused++; continue; }
           const value = col.type === "multi" && typeof raw === "string" ? raw.split(",").map((v) => v.trim()).filter(Boolean) : raw;
           try {
-            const value2 = await saveEdit(opt, data.id, field, value);
-            (original.get(data.id) || {})[field] = value2;
+            const done = await saveEdit(opt, idOf(data), field, value, before);
+            (original.get(idOf(data)) || {})[field] = done.value;
             data._edited = [...(data._edited || []), field];
-            putBack[field] = value2;
+            putBack[field] = done.value;
+            Object.assign(putBack, done.linked || {});
             saved++;
-          } catch (err) { putBack[field] = before; refused++; opt.onError && opt.onError(err.message); }
+          } catch (err) { putBack[field] = err.conflict ? err.current : before; refused++; opt.onError && opt.onError(err.message); }
         }
         if (Object.keys(putBack).length) { row.update(putBack); row.reformat(); }
       }
@@ -417,18 +442,21 @@
     table.on("cellEdited", async (cell) => {
       const field = cell.getField(), col = opt.columns.find((c) => c.field === field);
       if (!col || !col.editable) return;
-      const value = cell.getValue();
+      const value = cell.getValue(), row = cell.getRow(), d = row.getData();
+      const seen = (original.get(idOf(d)) || {})[field];
+      // row.update changes what's shown without counting as another edit, which cell.setValue would
       try {
-        const saved = await saveEdit(opt, cell.getRow().getData().id, field, value);
-        const d = cell.getRow().getData();
-        (original.get(d.id) || {})[field] = saved;
+        const done = await saveEdit(opt, idOf(d), field, value, seen);
+        (original.get(idOf(d)) || {})[field] = done.value;
         d._edited = [...(d._edited || []), field];
         cell.getElement().classList.add("edited");
-        if (JSON.stringify(saved) !== JSON.stringify(value)) cell.setValue(saved, true);
-        opt.onStatus && opt.onStatus(`Saved ${col.title} of ${d.name}`);
+        if (JSON.stringify(done.value) !== JSON.stringify(value) || done.linked) row.update({ [field]: done.value, ...(done.linked || {}) });
+        opt.onStatus && opt.onStatus(`Saved ${col.title}${d.name ? ` of ${d.name}` : ""}`);
       } catch (err) {
         opt.onError && opt.onError(err.message);
-        cell.restoreOldValue();
+        const back = err.conflict ? err.current : seen;
+        if (err.conflict) (original.get(idOf(d)) || {})[field] = back;
+        row.update({ [field]: back });
       }
     });
     return {
@@ -458,7 +486,20 @@
       },
       clearFilters() { table.clearHeaderFilter(); },
       reload() { table.setData(); },
-      selectedIds() { return selectedRows().map((r) => r.getData().id); },
+      selectedIds() { return selectedRows().map((r) => idOf(r.getData())); },
+      applyChanges(id, changes, edited) {     // edited: the fields of this row that are corrected now
+        const row = table.getRow(id);
+        if (!row) return;
+        for (const [f, v] of Object.entries(changes)) (original.get(id) || {})[f] = v;
+        row.update(changes);
+        if (edited) {
+          const d = row.getData();
+          d._edited = edited;
+          d._pending = (d._pending || []).filter((f) => edited.includes(f) && !(f in changes));
+          for (const cell of row.getCells()) cell.getElement().classList.remove("edited", "pending");
+        }
+        row.reformat();
+      },
       applyValue(ids, field, value) {
         for (const id of ids) {
           const row = table.getRow(id);
