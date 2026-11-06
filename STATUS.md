@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 415 tests pass.
+All 439 tests pass.
 
 ## Parts and how to run them
 
@@ -449,12 +449,19 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **Open question for Kanchana:** the assistant only knows collected datasets, not people's own tables. Say if own tables should be included.
     - **Next: phase 8** (the server: HTTPS, two-step login, backups, monitoring), when Kanchana says go.
 
+54. **Newsletter reports (Kanchana's request, 2026-11-06).** Reports → New newsletter: a PDF like a daily newsletter from any dataset, or ready-made (Daily news, New companies, New vehicle ads, Markets, Daily briefing), on demand or every day, week or month through the `reports` step.
+    Sections of a dataset's latest rows: articles or a table, filters, period, sorting, bars of the most common values. `webapp/reports/newsletter.py`, `sections.py`; details: `docs/user-platform-plan.md` → "Newsletter reports".
+    - **Decision (Kanchana, 2026-11-06): the AI feature comes last.** Item 53 is in the code and stays off until a key is added. Nothing more on it for now.
+    - Checked on a copy of the real data on a temporary PostgreSQL on the external drive (the Mac's drive had only ~350 MB free), then deleted: nothing went into the real database except the new empty table.
+    - Found: Newsfirst's titles and summaries are messy (date and first sentence in the title, the site's slogan in the summary), and Hacker News's summary is "Comments". It shows in the PDF; the news collector should clean it.
+    - **Next:** Kanchana tries the PDFs and says what to change.
+
 ## Open issues and things to watch
 
 - **The Mac's own drive is nearly full, and PostgreSQL keeps its data there** (Homebrew,
   `/opt/homebrew/var/postgresql@18`; 1.2 GB free on 2026-11-06). Our database is 87 MB, fine for now, but not for
   the GLEIF full file. Backups go to the external drive (`data/backups/`). The plan is to move to a server.
-  - **2026-11-06 the Mac's drive filled up completely** (0 bytes; our database is only 82 MB, the rest was other
+  - **Again on 2026-11-06 it was down to ~350 MB free.** **2026-11-06 the Mac's drive filled up completely** (0 bytes; our database is only 82 MB, the rest was other
     things on the Mac). Commands and tests failed with "No space left on device", and PostgreSQL (with all of
     Kanchana's databases, not only ours) can stop when that happens. Kanchana freed ~1 GB. Watch it with `df -h /`
     and `uv run python -m warehouse pg-check` (warns under 2 GB). The test PostgreSQL now keeps its files in
@@ -496,7 +503,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
 
 ## Ideas for next steps (not started)
 
-- **The user platform** (`docs/user-platform-plan.md`): phases 1-7 are built; phase 8 (the server) is next. Open questions are
+- **The user platform** (`docs/user-platform-plan.md`): phases 1-7 and newsletter reports are built; the AI assistant is switched on last, and phase 8 (the server) waits for Kanchana's go. Open questions are
   listed at the end of the plan.
 
 - `automation.local.conf` for personal settings (see above).

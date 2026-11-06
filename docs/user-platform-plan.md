@@ -1,6 +1,6 @@
 # The user platform: plan
 
-_Written 2026-11-06 with Kanchana. Status: **phases 1 to 7 built (2026-11-06; phase 7 not yet run against the real Claude: no API key on the Mac); grid: Tabulator; phase 8 (server) is next.** Builds on the PostgreSQL move
+_Written 2026-11-06 with Kanchana. Status: **phases 1 to 7 built (2026-11-06), plus newsletter reports. The AI assistant (phase 7) comes last by Kanchana's decision: the code is in, and it stays off until a key is added. Grid: Tabulator.** Builds on the PostgreSQL move
 (`docs/postgres-migration.md`, finished)._
 
 ## What it is for
@@ -302,6 +302,27 @@ every way a program gets started here.
 Known limits, for later: nothing is emailed yet (the PDFs wait in `output/reports/` and on the report's page); a chart can't be copied into your
 own, only shared; no custom report layouts beyond the dashboard's order; charts can't compare two datasets (a link and a rollup can do part
 of that); the plotly Python package still isn't needed.
+
+## Newsletter reports (2026-11-06)
+
+Kanchana's request: take a dataset, such as companies or news, and get a newsletter-style PDF, every day or when asked. A dashboard report needs charts built first; this doesn't.
+
+**Reports → New newsletter:** start from something ready-made (Daily news, New companies, New vehicle ads, Markets, Daily briefing), any one dataset, or nothing, and the PDF is one click away. The schedule chosen sets how recent the rows are:
+every day means the last 24 hours, every week the last 7 days, every month the last 30.
+
+**Sections** (`ReportSection`): each takes the latest rows of one dataset: heading, articles (two columns, with a heading, a few lines, the source and date) or a table, filters as in the grid, which date decides "recent", sorting, how many rows (0: only the count),
+and bars of the most common values. Choosing a dataset fills in good guesses (`sections.guessed_section`). A section stores field paths, never rows or SQL.
+
+**Content** (`newsletter.py`): goes through the catalog's fields and the grid's query code, so corrections, hidden rows and own fields behave as on screen. It's worked out with the rights of whoever it's for: the owner on a schedule, the viewer on screen, and a section they may not see says so.
+Someone else can download a PDF only if they may see all the datasets in it. Text from collected pages is stripped of HTML and escaped, only http(s) addresses become links, and the PDF fetches nothing, so **there are no photos**.
+
+**The real thing:** all five ready-made ones on a copy of the real data: 0.2-1.9 s, 46-65 KB, 3 pages for Daily news.
+
+**Known limits:**
+- **Data quality shows.** Newsfirst's titles hold the date and first sentence, its summaries end in the site's own slogan, and Hacker News's summary is the word "Comments". That's the news collector's to fix.
+- Nothing is emailed yet: PDFs wait in `output/reports/` and on the report's page.
+- Stories aren't merged: the same story from several sources appears each time. `worldnews analyze` already finds these and could feed a "biggest stories" section.
+- These are for people inside the team. The business plan's rule still holds for anything published: our own analysis, not sources' text.
 
 ## Phase 7 results (2026-11-06)
 

@@ -217,3 +217,7 @@ table.matrix .sec td { background: var(--surface-2); font-size: 12px; text-trans
 .answer-table { max-height: 480px; overflow: auto; }
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline; }
+
+/* a newsletter section's form */
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
+#section-fields { display: flex; flex-direction: column; gap: 14px; }

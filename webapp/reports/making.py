@@ -14,6 +14,7 @@ from webapp.charts.data import ChartProblem, chart_data, show_number, table_rows
 from webapp.charts.models import Chart
 from webapp.charts.svg import chart_svg
 
+from . import newsletter
 from .models import Report, ReportRun
 
 TABLE_ROWS = 25
@@ -52,10 +53,13 @@ def _section(chart: Chart, user, with_table: bool) -> dict:
 
 
 def report_context(report: Report, user, now: datetime | None = None) -> dict:
-    items = report.dashboard.items.select_related("chart", "chart__dataset")
     now = timezone.localtime(now or timezone.now())
-    return {"report": report, "made_at": now, "sections": [_section(i.chart, user, report.include_tables) for i in items],
-            "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()]}
+    context = {"report": report, "made_at": now, "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()]}
+    if report.is_newsletter:
+        context.update(sections=newsletter.sections_for(report, user), issue=report.runs.filter(problem="").count() + 1)
+    else:
+        context["sections"] = [_section(i.chart, user, report.include_tables) for i in report.dashboard.items.select_related("chart", "chart__dataset")]
+    return context
 
 
 def render_html(report: Report, user, now=None) -> str:

@@ -13,8 +13,9 @@ from webapp.catalog.rights import can_view, is_admin
 from webapp.charts.forms import mine_or_shared
 from webapp.charts.models import Dashboard
 
+from . import sections as section_forms
 from .making import make_report, report_context, reports_dir
-from .models import Report
+from .models import Report, ReportSection
 
 
 def _report(request, pk) -> Report:
@@ -38,12 +39,13 @@ def _read_form(request, report: Report) -> str | None:
     report.name = " ".join(post.get("name", "").split())[:120]
     if not report.name:
         return "Give the report a name."
-    board = mine_or_shared(Dashboard, request.user).filter(pk=post.get("dashboard") if post.get("dashboard", "").isdigit() else None).first()
-    if board is None:
-        return "Choose which dashboard it prints."
-    report.dashboard = board
+    if not report.is_newsletter:
+        board = mine_or_shared(Dashboard, request.user).filter(pk=post.get("dashboard") if post.get("dashboard", "").isdigit() else None).first()
+        if board is None:
+            return "Choose which dashboard it prints."
+        report.dashboard = board
+        report.include_tables = "include_tables" in post
     report.intro = post.get("intro", "").strip()[:3000]
-    report.include_tables = "include_tables" in post
     schedule = post.get("schedule", "")
     report.schedule = schedule if schedule in Report.SCHEDULES else ""
     weekday = post.get("weekday", "0")
@@ -64,7 +66,28 @@ def overview(request):
             record(request, "report_saved", f"Report “{report.name}” made", target_type="report", target_id=report.pk)
             return redirect("report", report.pk)
     reports = mine_or_shared(Report, request.user).select_related("dashboard", "owner")
-    return render(request, "reports/overview.html", {"reports": reports, "boards": mine_or_shared(Dashboard, request.user), "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS))})
+    return render(request, "reports/overview.html", {"reports": reports, "boards": mine_or_shared(Dashboard, request.user), "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS)),
+                                                     "starts": section_forms.ready_made(request.user), "datasets": section_forms.choosable_datasets(request.user)})
+
+
+@require_POST
+@menu_required("reports")
+def new_newsletter(request):
+    """From something ready-made or any one dataset, so the first PDF is one click away. Its sections can all be changed afterwards."""
+    start, schedule = request.POST.get("start", ""), request.POST.get("schedule", "")
+    schedule = schedule if schedule in Report.SCHEDULES else ""
+    try:
+        name, specs = section_forms.starting_point(start, request.user, schedule)
+    except section_forms.SectionProblem as e:
+        messages.error(request, str(e))
+        return redirect("reports")
+    report = Report(owner=request.user, kind=Report.NEWSLETTER, schedule=schedule, name=" ".join(request.POST.get("name", "").split())[:120] or name)
+    with transaction.atomic():
+        report.save()
+        for i, spec in enumerate(specs):
+            ReportSection.objects.create(report=report, order=i, **spec)
+        record(request, "report_saved", f"Newsletter “{report.name}” made", target_type="report", target_id=report.pk, detail={"start": start, "schedule": schedule})
+    return redirect("report", report.pk)
 
 
 @menu_required("reports")
@@ -82,6 +105,7 @@ def report_page(request, pk):
             messages.success(request, "Saved.")
             return redirect("report", report.pk)
     return render(request, "reports/report.html", {"report": report, "runs": report.runs.select_related("made_by")[:30], "may_change": _may_change(request.user, report),
+                                                   "sections": report.sections.select_related("dataset") if report.is_newsletter else [],
                                                    "may_download": _may_download(request.user, report), "boards": mine_or_shared(Dashboard, request.user),
                                                    "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS))})
 
@@ -111,6 +135,8 @@ def _may_download(user, report: Report) -> bool:
     """A file holds what its maker could see. Someone else gets it only if they may see all the data in it too."""
     if _may_change(user, report):
         return True
+    if report.is_newsletter:
+        return all(can_view(user, s.dataset) for s in report.sections.select_related("dataset"))
     return all(can_view(user, i.chart.dataset) for i in report.dashboard.items.select_related("chart__dataset"))
 
 
@@ -139,3 +165,74 @@ def delete_report(request, pk):
         report.delete()
     messages.success(request, f"“{name}” deleted. PDFs already made stay in output/reports/.")
     return redirect("reports")
+
+
+# ── a newsletter's sections ──────────────────────────────────────────
+def _newsletter(request, pk) -> Report:
+    report = _changing(request, pk)
+    if not report.is_newsletter:
+        raise Http404("That report prints a dashboard")
+    return report
+
+
+def _section_of(report: Report, section_id) -> ReportSection:
+    return get_object_or_404(report.sections.select_related("dataset"), pk=section_id)
+
+
+def _section_context(request, report, section, ds) -> dict:
+    return {"report": report, "section": section, "ds": ds, "datasets": section_forms.choosable_datasets(request.user), **section_forms.choices(ds, request.user, section)}
+
+
+def _section_form(request, report: Report, section: ReportSection | None):
+    if request.method == "POST":
+        try:
+            filled = section_forms.read_section(request.POST, request.user, report, section)
+        except section_forms.SectionProblem as e:
+            messages.error(request, str(e))
+        else:
+            if filled.pk is None:
+                filled.order = report.sections.count()
+            filled.save()
+            record(request, "report_saved", f"Newsletter “{report.name}”: section “{filled.heading}” saved", target_type="report", target_id=report.pk)
+            messages.success(request, f"Saved “{filled.heading}”.")
+            return redirect("report", report.pk)
+    ds = section.dataset if section else None
+    return render(request, "reports/section.html", _section_context(request, report, section, ds))
+
+
+@menu_required("reports")
+def section_new(request, pk):
+    report = _newsletter(request, pk)
+    if request.method == "POST" and report.sections.count() >= section_forms.MAX_SECTIONS:
+        messages.error(request, f"A newsletter has at most {section_forms.MAX_SECTIONS} sections.")
+        return redirect("report", report.pk)
+    return _section_form(request, report, None)
+
+
+@menu_required("reports")
+def section_edit(request, pk, section_id):
+    report = _newsletter(request, pk)
+    return _section_form(request, report, _section_of(report, section_id))
+
+
+@menu_required("reports")
+def section_fields(request, pk):
+    """The choices that depend on the dataset chosen, with good guesses filled in."""
+    report = _newsletter(request, pk)
+    ds = section_forms.dataset_named(request.user, request.GET.get("dataset"))
+    section = section_forms.guessed_section(ds, request.user, report) if ds else None
+    return render(request, "reports/_section_fields.html", _section_context(request, report, section, ds))
+
+
+@require_POST
+@menu_required("reports")
+def section_change(request, pk, section_id):
+    report = _newsletter(request, pk)
+    section = _section_of(report, section_id)
+    action = request.POST.get("action")
+    if action == "remove":
+        record(request, "report_saved", f"Newsletter “{report.name}”: section “{section.heading}” removed", target_type="report", target_id=report.pk)
+        section.delete()
+    elif action in ("up", "down"):
+        section_forms.move(report, section, -1 if action == "up" else 1)
+    return redirect("report", report.pk)

@@ -203,7 +203,9 @@ them up. For example: link vehicle ads to a Dealers table, and each dealer shows
 **Charts:** press **New chart**, or **Chart** on any dataset's page: choose what to group by and what to work out, and the preview
 draws it as you go. Put charts on a **dashboard** (Arrange). Charts are worked out when they're opened, so they're always current.
 
-**Reports:** a dashboard as a PDF, whenever you ask or every day, week or month. Scheduled ones are made by the `reports` step of
+**Newsletters:** Reports → New newsletter makes a PDF like a daily newsletter from any dataset, or from something ready-made (Daily news, New companies, New vehicle ads, Markets, Daily briefing). Each section takes the latest rows of a dataset, and you can change them all.
+
+**Reports:** a newsletter or a dashboard as a PDF, whenever you ask or every day, week or month. Scheduled ones are made by the `reports` step of
 `./run_all.sh`, into `output/reports/`: a run that's missed happens at the next one. PDFs need Pango (`brew install pango`).
 
 ## AI assistant
