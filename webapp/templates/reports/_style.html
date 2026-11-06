@@ -1,50 +1,62 @@
-<style>
-.r-doc { color: #18232b; font-family: Helvetica, Arial, "Noto Sans", sans-serif; font-size: 10.5pt; line-height: 1.4; }
-.r-doc .r-head { border-bottom: 2px solid #0b6e8a; padding-bottom: 6pt; margin-bottom: 12pt; }
-.r-doc h1 { font-size: 20pt; margin: 0; color: #18232b; }
-.r-doc .r-meta, .r-doc .r-source, .r-doc .r-measure, .r-doc .r-note { color: #5b6a75; font-size: 9pt; margin: 0 0 4pt; }
+{% load report_design %}<style>
+.r-doc { color: {{ design.text }}; font-family: {{ design.body_stack|safe }}; font-size: {% pt 10.5 %}; line-height: 1.4; }
+.r-doc .r-head { border-bottom: 2px solid {{ design.accent }}; padding-bottom: 6pt; margin-bottom: 12pt; }
+.r-doc h1 { font-size: {% pt 20 %}; margin: 0; color: {{ design.heading }}; }
+.r-doc .r-meta, .r-doc .r-source, .r-doc .r-measure, .r-doc .r-note { color: {{ design.muted }}; font-size: {% pt 9 %}; margin: 0 0 4pt; }
 .r-doc .r-intro { margin: 0 0 8pt; }
 .r-doc .r-section { margin: 14pt 0; }
-.r-doc .r-section h2 { font-size: 13pt; margin: 0 0 1pt; color: #18232b; break-after: avoid; }
+.r-doc .r-section h2 { font-size: {% pt 13 %}; margin: 0 0 1pt; color: {{ design.heading }}; break-after: avoid; }
 .r-doc .r-source { break-after: avoid; }
 .r-doc .r-chart { break-inside: avoid; }
 .r-doc .r-chart svg { width: 100%; height: auto; display: block; margin: 4pt 0; }
 .r-doc .r-table tr { break-inside: avoid; }
-.r-doc .r-number { font-size: 30pt; font-weight: bold; margin: 2pt 0; break-after: avoid; }
-.r-doc .r-table { border-collapse: collapse; width: 100%; font-size: 9pt; margin-top: 4pt; }
-.r-doc .r-table th { text-align: left; color: #5b6a75; font-weight: 600; border-bottom: 1px solid #5b6a75; padding: 2pt 6pt 2pt 0; }
-.r-doc .r-table td { border-bottom: 0.5pt solid #d7dfe4; padding: 2pt 6pt 2pt 0; }
+.r-doc .r-number { font-size: {% pt 30 %}; font-weight: bold; margin: 2pt 0; break-after: avoid; }
+.r-doc .r-table { border-collapse: collapse; width: 100%; font-size: {% pt 9 %}; margin-top: 4pt; }
+.r-doc .r-table th { text-align: left; color: {{ design.muted }}; font-weight: 600; border-bottom: 1px solid {{ design.muted }}; padding: 2pt 6pt 2pt 0; }
+.r-doc .r-table td { border-bottom: 0.5pt solid {{ design.rule }}; padding: 2pt 6pt 2pt 0; }
 .r-doc .r-table th:not(:first-child), .r-doc .r-table td:not(:first-child) { text-align: right; }
-.r-doc .n-mast { border-top: 4pt solid #0b6e8a; border-bottom: 0.75pt solid #5b6a75; padding: 8pt 0 7pt; margin-bottom: 11pt; }
-.r-doc .n-mast h1 { font-size: 25pt; line-height: 1.1; margin: 0; }
-.r-doc .n-date { color: #5b6a75; font-size: 9.5pt; margin: 0 0 3pt; }
-.r-doc .n-intro { font-size: 11pt; margin: 0 0 9pt; }
-.r-doc .n-toc { background: #eef2f4; padding: 7pt 10pt; margin-bottom: 12pt; font-size: 9.5pt; break-inside: avoid; }
-.r-doc .n-toc h2 { font-size: 9pt; letter-spacing: .06em; text-transform: uppercase; color: #5b6a75; margin: 0 0 3pt; font-weight: 600; }
+.r-doc .n-mast { border-top: 4pt solid {{ design.accent }}; border-bottom: 0.75pt solid {{ design.muted }}; padding: 8pt 0 7pt; margin-bottom: 11pt; }
+.r-doc .n-mast h1 { font-size: {% pt 25 %}; line-height: 1.1; margin: 0; }
+.r-doc .n-date { color: {{ design.muted }}; font-size: {% pt 9.5 %}; margin: 0 0 3pt; }
+.r-doc .n-intro { font-size: {% pt 11 %}; margin: 0 0 9pt; }
+.r-doc .n-toc { background: {{ design.tint }}; padding: 7pt 10pt; margin-bottom: 12pt; font-size: {% pt 9.5 %}; break-inside: avoid; }
+.r-doc .n-toc h2 { font-size: {% pt 9 %}; letter-spacing: .06em; text-transform: uppercase; color: {{ design.muted }}; margin: 0 0 3pt; font-weight: 600; }
 .r-doc .n-toc table { border-collapse: collapse; width: 100%; }
 .r-doc .n-toc td { padding: 1pt 0; }
-.r-doc .n-toc td:last-child { text-align: right; color: #5b6a75; white-space: nowrap; }
-.r-doc .n-toc a { color: #18232b; text-decoration: none; }
+.r-doc .n-toc td:last-child { text-align: right; color: {{ design.muted }}; white-space: nowrap; }
+.r-doc .n-toc a { color: {{ design.heading }}; text-decoration: none; }
 .r-doc .n-section { margin: 0 0 15pt; }
-.r-doc .n-section > h2 { font-size: 14.5pt; margin: 0; color: #0b6e8a; border-bottom: 0.75pt solid #d7dfe4; padding-bottom: 2pt; break-after: avoid; }
-.r-doc .n-sub { color: #5b6a75; font-size: 8.5pt; margin: 2pt 0 6pt; break-after: avoid; }
-.r-doc .n-articles { columns: 2; column-gap: 15pt; }
+.r-doc .n-section > h2 { font-size: {% pt 14.5 %}; margin: 0; color: {{ design.accent }}; border-bottom: 0.75pt solid {{ design.rule }}; padding-bottom: 2pt; break-after: avoid; }
+.r-doc .n-sub { color: {{ design.muted }}; font-size: {% pt 8.5 %}; margin: 2pt 0 6pt; break-after: avoid; }
+.r-doc .n-articles { columns: {{ design.columns }}; column-gap: 15pt; }
 .r-doc .n-item { break-inside: avoid; margin: 0 0 8pt; }
-.r-doc .n-item h3 { font-size: 10.5pt; line-height: 1.25; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-.r-doc .n-item h3 a, .r-doc .n-table a { color: #18232b; text-decoration: none; }
-.r-doc .n-table a.n-link { color: #0b6e8a; }
-.r-doc .n-text { font-size: 9pt; line-height: 1.32; margin: 2pt 0 0; overflow-wrap: anywhere; }
-.r-doc .n-meta { color: #5b6a75; font-size: 7.5pt; margin: 2pt 0 0; }
-.r-doc .n-table { border-collapse: collapse; width: 100%; font-size: 8.5pt; }
-.r-doc .n-table th { text-align: left; color: #5b6a75; font-weight: 600; border-bottom: 0.75pt solid #5b6a75; padding: 2pt 6pt 2pt 0; }
-.r-doc .n-table td { border-bottom: 0.5pt solid #d7dfe4; padding: 2.5pt 6pt 2.5pt 0; vertical-align: top; overflow-wrap: anywhere; }
+.r-doc .n-item h3 { font-size: {% pt 10.5 %}; line-height: 1.25; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.r-doc .n-item h3 a, .r-doc .n-table a { color: {{ design.heading }}; text-decoration: none; }
+.r-doc .n-table a.n-link { color: {{ design.accent }}; }
+.r-doc .n-text { font-size: {% pt 9 %}; line-height: 1.32; margin: 2pt 0 0; overflow-wrap: anywhere; }
+.r-doc .n-meta { color: {{ design.muted }}; font-size: {% pt 7.5 %}; margin: 2pt 0 0; }
+.r-doc .n-table { border-collapse: collapse; width: 100%; font-size: {% pt 8.5 %}; }
+.r-doc .n-table th { text-align: left; color: {{ design.muted }}; font-weight: 600; border-bottom: 0.75pt solid {{ design.muted }}; padding: 2pt 6pt 2pt 0; }
+.r-doc .n-table td { border-bottom: 0.5pt solid {{ design.rule }}; padding: 2.5pt 6pt 2.5pt 0; vertical-align: top; overflow-wrap: anywhere; }
 .r-doc .n-table tr { break-inside: avoid; }
 .r-doc .n-table .num { text-align: right; white-space: nowrap; }
-.r-doc .n-bars { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin: 1pt 0 8pt; break-inside: avoid; }
+.r-doc .n-bars { border-collapse: collapse; width: 100%; font-size: {% pt 8.5 %}; margin: 1pt 0 8pt; break-inside: avoid; }
 .r-doc .n-bars td { padding: 1.5pt 6pt 1.5pt 0; }
 .r-doc .n-bars .n-label { width: 28%; overflow-wrap: anywhere; }
 .r-doc .n-bars .n-count { width: 11%; text-align: right; padding-right: 0; white-space: nowrap; }
-.r-doc .n-bar { background: #0b6e8a; height: 7pt; }
-.r-doc .n-breakdown { font-size: 8.5pt; font-weight: 600; margin: 0 0 2pt; color: #5b6a75; break-after: avoid; }
-.r-doc .n-none { color: #5b6a75; font-size: 9.5pt; margin: 4pt 0; }
+.r-doc .n-bar { background: {{ design.accent }}; height: 7pt; }
+.r-doc .n-breakdown { font-size: {% pt 8.5 %}; font-weight: 600; margin: 0 0 2pt; color: {{ design.muted }}; break-after: avoid; }
+.r-doc .n-none { color: {{ design.muted }}; font-size: {% pt 9.5 %}; margin: 4pt 0; }
+.r-doc h1, .r-doc h2, .r-doc h3 { font-family: {{ design.heading_stack|safe }}; }
+.r-doc .n-item h3 { color: {{ design.heading }}; }
+.r-doc .r-head::after, .r-doc .n-mast::after { content: ""; display: block; clear: both; }
+.r-doc .t-logo { height: {{ design.logo_height }}pt; width: auto; max-width: 45%; }
+.r-doc .logo-right { float: right; margin: 0 0 4pt 10pt; }
+.r-doc .logo-left { float: left; margin: 0 10pt 4pt 0; }
+.r-doc .logo-center { display: block; margin: 0 auto 6pt; }
+.r-doc.m-band .r-head, .r-doc.m-band .n-mast { background: {{ design.accent }}; border: 0; padding: 10pt 12pt; }
+.r-doc.m-band .r-head h1, .r-doc.m-band .n-mast h1, .r-doc.m-band .r-meta, .r-doc.m-band .n-date { color: {{ design.on_accent }}; }
+.r-doc.m-centered .r-head, .r-doc.m-centered .n-mast { text-align: center; }
+.r-doc.h-plain .n-section > h2 { border-bottom: 0; }
+.r-doc.h-band .n-section > h2, .r-doc.h-band .r-section h2 { background: {{ design.accent }}; color: {{ design.on_accent }}; border: 0; padding: 3pt 7pt; margin-bottom: 3pt; }
 </style>

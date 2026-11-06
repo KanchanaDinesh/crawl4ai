@@ -1,3 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{ report.name }}</title>
-<style>@page { size: A4; margin: 18mm 16mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: Helvetica, Arial, sans-serif; font-size: 8pt; color: #5b6a75; } @bottom-left { content: "{{ report.name|escapejs }}"; font-family: Helvetica, Arial, sans-serif; font-size: 8pt; color: #5b6a75; } }</style>
-{% include "reports/_style.html" %}</head><body class="r-doc">{% include "reports/_body.html" %}</body></html>
+{% load report_design %}<style>@page { size: {{ design.page_size }} {{ design.orientation }}; margin: {{ design.page_margin }};
+  {% if design.header_text %}@top-left { content: {{ design.header_text|css_string }}; font-family: {{ design.body_stack|safe }}; font-size: 8pt; color: {{ design.muted }}; }{% endif %}
+  {% if design.show_page_numbers %}@bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: {{ design.body_stack|safe }}; font-size: 8pt; color: {{ design.muted }}; }{% endif %}
+  @bottom-left { content: {% if design.footer_text %}{{ design.footer_text|css_string }}{% else %}{{ report.name|css_string }}{% endif %}; font-family: {{ design.body_stack|safe }}; font-size: 8pt; color: {{ design.muted }}; } }</style>
+{% include "reports/_style.html" %}</head><body class="r-doc {{ design.classes }}">{% include "reports/_body.html" %}</body></html>

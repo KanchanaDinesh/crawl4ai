@@ -12,9 +12,9 @@ from django.utils import timezone
 import project_paths
 from webapp.charts.data import ChartProblem, chart_data, show_number, table_rows
 from webapp.charts.models import Chart
-from webapp.charts.svg import chart_svg
+from webapp.charts.svg import SERIES, chart_svg
 
-from . import newsletter
+from . import designs, newsletter
 from .models import Report, ReportRun
 
 TABLE_ROWS = 25
@@ -30,7 +30,12 @@ def reports_dir() -> Path:
     return folder
 
 
-def _section(chart: Chart, user, with_table: bool) -> dict:
+def _chart_svg(data, design) -> str:
+    """A chart with one colour takes the report's main colour; with several, the first of them does and the rest keep theirs, so they can still be told apart."""
+    return chart_svg(data).replace(SERIES[0], design.accent)
+
+
+def _section(chart: Chart, user, with_table: bool, design) -> dict:
     section = {"name": chart.name, "dataset": chart.dataset.label}
     try:
         data = chart_data(chart, user)
@@ -42,7 +47,7 @@ def _section(chart: Chart, user, with_table: bool) -> dict:
         section.update(number=show_number(data.number), measure=data.measure_label)
         return section
     if data.kind != Chart.TABLE:
-        section["svg"] = chart_svg(data)
+        section["svg"] = _chart_svg(data, design)
     if data.kind == Chart.TABLE or with_table:
         heads, rows = table_rows(data, TABLE_ROWS)
         section.update(heads=heads, rows=[[row[0], *[show_number(v) for v in row[1:]]] for row in rows],
@@ -54,12 +59,13 @@ def _section(chart: Chart, user, with_table: bool) -> dict:
 
 def report_context(report: Report, user, now: datetime | None = None) -> dict:
     now = timezone.localtime(now or timezone.now())
-    context = {"report": report, "made_at": now, "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()],
+    design = report.design
+    context = {"report": report, "design": design, "made_at": now, "paragraphs": [p.strip() for p in report.intro.split("\n\n") if p.strip()],
                "sections": newsletter.sections_for(report, user)}
     if report.is_newsletter:
         context["issue"] = report.runs.filter(problem="").count() + 1
     else:
-        context["charts"] = [_section(i.chart, user, report.include_tables) for i in report.dashboard.items.select_related("chart", "chart__dataset")]
+        context["charts"] = [_section(i.chart, user, report.include_tables, design) for i in report.dashboard.items.select_related("chart", "chart__dataset")]
     return context
 
 
@@ -94,11 +100,13 @@ def _weasyprint():
 
 def no_fetching():
     """A report is made only from what's in its page. Text from collected pages must never make the server fetch anything.
-    A refused address is passed over: the PDF is still made."""
+    A refused address is passed over: the PDF is still made. The one thing let through is a logo, which is already in the page (`designs.read_logo`)."""
     import weasyprint.urls
 
     class NoFetching(weasyprint.urls.URLFetcher):
         def fetch(self, url, headers=None):
+            if str(url).startswith(designs.LOGO_PREFIX):
+                return super().fetch(url, headers)
             raise ValueError(f"Reports don't fetch anything ({str(url)[:80]})")
     return NoFetching()
 
@@ -155,7 +163,7 @@ def run_due(now: datetime | None = None) -> list[ReportRun]:
     from webapp.audit.log import record
     now = now or timezone.now()
     runs = []
-    for report in Report.objects.exclude(schedule="").select_related("owner", "dashboard"):
+    for report in Report.objects.exclude(schedule="").select_related("owner", "dashboard", "template"):
         if not is_due(report, now):
             continue
         if not report.owner.is_active:

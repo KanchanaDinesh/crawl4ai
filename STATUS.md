@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 471 tests pass.
+All 495 tests pass.
 
 ## Parts and how to run them
 
@@ -466,6 +466,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Deleting a dashboard also deletes the reports that print it, without a word. The question now names them. A chart's question names the dashboards it comes off.
     - Kanchana's "News from Oxsora" was made with the "New report from a dashboard" form, and that kind had no sections. Now any report can: it prints the dashboard's charts, then the sections (`_sections.html`, shared with newsletters). A file is given to someone else only if they may see the data of both.
     - Checked in the browser on a temporary copy of the database, then deleted. The real reports weren't touched.
+57. **Report templates (Kanchana, 2026-11-06): people design how reports look.** New menu Report templates (`/report-templates/`, whoever has Reports gets it). A form with a live preview on made-up content: six colours, fonts, text size, top of the first page (line, band, centred), section headings, one or two columns of articles, a logo, paper, direction, margins, a line at the top and bottom of each page, page numbers. Four starting designs (Plain, Newsroom, Boardroom, Quiet). Then choose it under Design on any report, or when making a newsletter. Shared templates can be used and copied; only the owner or an administrator changes them.
+    - `ReportTemplate` in `webapp/reports/models.py` (an unsaved one is the plain design; the old stylesheet came out line for line the same), `designs.py`, `template_views.py`, `_style.html` and `document.html` follow it.
+    - It's a form, not free HTML or CSS: every value is from a list or a checked colour, because it all goes into the stylesheet. Logos must be PNG or JPEG up to 2 MB, and are redrawn as a PNG kept in the database, so a PDF still fetches nothing. SVG is refused.
+    - Bug fixed on the way: the footer's report name went through a JavaScript escape, so "Sales-team" printed as "Salesu002Dteam".
+    - Migrated on the Mac after a backup. Checked in the browser on a temporary copy of the database, then deleted: no template is in the real database yet.
+    - Not done: fonts beyond the two families, free HTML/CSS, a template that also carries sections, colours for charts' second series onwards.
 
 ## Open issues and things to watch
 

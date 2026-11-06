@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% load tz %}{% block title %}{{ report.name }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ report.name }}</h1><p class="muted">{% if report.is_newsletter %}A newsletter{% else %}A report of the dashboard <a href="{% url 'dashboard_page' report.dashboard_id %}">{{ report.dashboard.name }}</a>{% endif %}{% if report.owner_id != user.pk %}, from {{ report.owner.get_username }}{% endif %}.</p></div>
+<div class="page-head"><div><h1>{{ report.name }}</h1><p class="muted">{% if report.is_newsletter %}A newsletter{% else %}A report of the dashboard <a href="{% url 'dashboard_page' report.dashboard_id %}">{{ report.dashboard.name }}</a>{% endif %}{% if report.owner_id != user.pk %}, from {{ report.owner.get_username }}{% endif %}. Design: {% if report.template %}{{ report.template.name }}{% else %}Plain{% endif %}.</p></div>
   <div class="toolbar"><a class="btn" href="{% url 'report_preview' report.pk %}">See it on screen</a>
     <form method="post" action="{% url 'report_make' report.pk %}">{% csrf_token %}<button class="btn primary" type="submit">Make the PDF now</button></form><a href="{% url 'reports' %}">All reports</a></div></div>
 <section class="card"><div class="page-head"><h2>What's in it</h2>{% if may_change %}<a class="btn" href="{% url 'report_section_new' report.pk %}">Add a section</a>{% endif %}</div>

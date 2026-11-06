@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Report templates{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Report templates</h1><p class="muted">How your reports look: colours, fonts, logo and page layout. Make a template once, then choose it under Design on any report.</p></div><a class="btn primary" href="{% url 'report_template_new' %}">New template</a></div>
+<section class="card"><h2>Templates</h2>
+  {% if templates %}<div class="table-wrap"><table class="list"><thead><tr><th>Template</th><th>Colours</th><th>Used by</th><th>Who</th></tr></thead><tbody>
+  {% for t in templates %}<tr><td><a href="{% url 'report_template' t.pk %}">{{ t.name }}</a></td><td><span class="swatches" aria-hidden="true"><i style="background:{{ t.accent }}"></i><i style="background:{{ t.heading }}"></i><i style="background:{{ t.tint }}"></i></span></td><td class="small">{{ t.used }} report{{ t.used|pluralize }}</td><td class="small muted">{% if t.owner_id != user.pk %}{{ t.owner.get_username }}{% elif t.shared %}Shared{% else %}Private{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">None yet. Start from one of the designs below, and change whatever you like.</p>{% endif %}</section>
+<section class="card"><h2>Start from a design</h2>
+  <div class="toolbar">{% for code, label in presets %}<a class="btn" href="{% url 'report_template_new' %}?start={{ code }}">{{ label }}</a>{% endfor %}</div></section>
+{% endblock %}

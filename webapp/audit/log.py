@@ -14,7 +14,7 @@ ACTIONS = {
     "cell_edited": "Value corrected", "rows_edited": "Rows corrected together", "edit_restored": "Earlier value put back",
     "ai_question": "AI assistant asked", "ai_saved": "AI answer saved as a dataset",
     "chart_saved": "Chart saved", "chart_deleted": "Chart deleted", "dashboard_saved": "Dashboard changed", "dashboard_deleted": "Dashboard deleted",
-    "report_saved": "Report saved", "report_deleted": "Report deleted", "report_made": "Report made", "report_failed": "Report failed",
+    "report_template_saved": "Report template saved", "report_template_deleted": "Report template deleted", "report_saved": "Report saved", "report_deleted": "Report deleted", "report_made": "Report made", "report_failed": "Report failed",
     "table_created": "Own table made", "table_deleted": "Own table deleted", "table_shared": "Own table shared", "field_added": "Field added",
     "field_changed": "Field changed", "field_removed": "Field removed", "rows_imported": "Rows imported", "row_added": "Row added",
     "links_changed": "Links changed", "choice_added": "Choice added",

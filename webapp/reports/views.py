@@ -17,11 +17,11 @@ from webapp.core.confirm import ask_first
 
 from . import sections as section_forms
 from .making import make_report, report_context, reports_dir
-from .models import Report, ReportSection
+from .models import Report, ReportSection, ReportTemplate
 
 
 def _report(request, pk) -> Report:
-    return get_object_or_404(mine_or_shared(Report, request.user).select_related("dashboard", "owner"), pk=pk)
+    return get_object_or_404(mine_or_shared(Report, request.user).select_related("dashboard", "owner", "template"), pk=pk)
 
 
 def _may_change(user, report) -> bool:
@@ -33,6 +33,22 @@ def _changing(request, pk) -> Report:
     if not _may_change(request.user, report):
         raise PermissionDenied("Only its owner or an administrator can change a report.")
     return report
+
+
+def _choosable_templates(user, report: Report | None = None) -> list[ReportTemplate]:
+    """Someone's own and the shared ones. The one a report already has stays on the list, even after its owner stops sharing it."""
+    found = list(mine_or_shared(ReportTemplate, user).defer("logo"))
+    if report is not None and report.template_id and all(t.pk != report.template_id for t in found):
+        found.append(report.template)
+    return found
+
+
+def _read_template(request, report: Report) -> None:
+    wanted = request.POST.get("template", "")
+    if not wanted:
+        report.template = None
+    elif wanted.isdigit() and int(wanted) != report.template_id:
+        report.template = mine_or_shared(ReportTemplate, request.user).filter(pk=wanted).first() or report.template
 
 
 def _read_form(request, report: Report) -> str | None:
@@ -47,6 +63,7 @@ def _read_form(request, report: Report) -> str | None:
             return "Choose which dashboard it prints."
         report.dashboard = board
         report.include_tables = "include_tables" in post
+    _read_template(request, report)
     report.intro = post.get("intro", "").strip()[:3000]
     schedule = post.get("schedule", "")
     report.schedule = schedule if schedule in Report.SCHEDULES else ""
@@ -68,7 +85,7 @@ def overview(request):
             record(request, "report_saved", f"Report “{report.name}” made", target_type="report", target_id=report.pk)
             return redirect("report", report.pk)
     reports = mine_or_shared(Report, request.user).select_related("dashboard", "owner")
-    return render(request, "reports/overview.html", {"reports": reports, "boards": mine_or_shared(Dashboard, request.user), "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS)),
+    return render(request, "reports/overview.html", {"reports": reports, "boards": mine_or_shared(Dashboard, request.user), "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS)), "templates": _choosable_templates(request.user),
                                                      "starts": section_forms.ready_made(request.user), "datasets": section_forms.choosable_datasets(request.user)})
 
 
@@ -84,6 +101,7 @@ def new_newsletter(request):
         messages.error(request, str(e))
         return redirect("reports")
     report = Report(owner=request.user, kind=Report.NEWSLETTER, schedule=schedule, name=" ".join(request.POST.get("name", "").split())[:120] or name)
+    _read_template(request, report)
     with transaction.atomic():
         report.save()
         for i, spec in enumerate(specs):
@@ -109,7 +127,7 @@ def report_page(request, pk):
     return render(request, "reports/report.html", {"report": report, "runs": report.runs.select_related("made_by")[:30], "may_change": _may_change(request.user, report),
                                                    "sections": report.sections.select_related("dataset"),
                                                    "may_download": _may_download(request.user, report), "boards": mine_or_shared(Dashboard, request.user),
-                                                   "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS))})
+                                                   "schedules": Report.SCHEDULES, "weekdays": list(enumerate(Report.WEEKDAYS)), "templates": _choosable_templates(request.user, report)})
 
 
 @menu_required("reports")

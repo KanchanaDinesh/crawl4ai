@@ -1,4 +1,4 @@
-{% if report.is_newsletter and sections|length > 1 %}<nav class="n-toc"><h2>In this issue</h2><table>{% for s in sections %}<tr><td><a href="#{{ s.anchor }}">{{ s.heading }}</a></td><td>{% if s.problem %}Not included{% else %}{{ s.total|default:0 }} {% if s.period %}new{% else %}row{{ s.total|pluralize }}{% endif %}{% endif %}</td></tr>{% endfor %}</table></nav>{% endif %}
+{% if report.is_newsletter and design.show_contents and sections|length > 1 %}<nav class="n-toc"><h2>In this issue</h2><table>{% for s in sections %}<tr><td><a href="#{{ s.anchor }}">{{ s.heading }}</a></td><td>{% if s.problem %}Not included{% else %}{{ s.total|default:0 }} {% if s.period %}new{% else %}row{{ s.total|pluralize }}{% endif %}{% endif %}</td></tr>{% endfor %}</table></nav>{% endif %}
 {% for s in sections %}<section class="n-section" id="{{ s.anchor }}"><h2>{{ s.heading }}</h2>
   {% if s.problem %}<p class="n-none">{{ s.problem }}</p>{% else %}
   <p class="n-sub">{{ s.dataset }}{% if s.period %} · {{ s.period }}{% endif %} · {{ s.total }} row{{ s.total|pluralize }}{% if s.more %}, the first {{ s.shown }} shown{% endif %}</p>

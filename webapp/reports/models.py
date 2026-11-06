@@ -8,6 +8,94 @@ from webapp.catalog.models import Dataset
 from webapp.charts.models import Dashboard
 
 
+class ReportTemplate(models.Model):
+    """How a report looks, apart from what's in it: people choose colours, fonts, a logo and a page layout from a form. Every value ends up in
+    the PDF's stylesheet, so each one is a choice from these lists or a checked colour (`designs.apply_design`), never free text. An unsaved
+    one, with these defaults, is the plain design every report had before templates."""
+
+    FONTS = {"sans": 'Helvetica, Arial, "Noto Sans", sans-serif', "serif": 'Georgia, "Times New Roman", "Noto Serif", serif'}
+    FONT_NAMES = {"sans": "Clean (Helvetica, Arial)", "serif": "Bookish (Georgia, Times)"}
+    TEXT_SIZES = {"small": "Smaller", "normal": "Normal", "large": "Larger"}
+    SCALES = {"small": 0.92, "normal": 1.0, "large": 1.1}
+    MASTHEADS = {"line": "Title under a coloured line", "band": "Title on a coloured band", "centered": "Title in the centre"}
+    HEADINGS = {"underlined": "Coloured, with a line under", "plain": "Coloured, no line", "band": "On a coloured band"}
+    LOGO_PLACES = {"right": "On the right", "left": "On the left", "center": "In the centre, above the title"}
+    LOGO_SIZES = {"small": "Small", "medium": "Medium", "large": "Large"}
+    LOGO_HEIGHTS = {"small": 28, "medium": 44, "large": 64}
+    PAGES = {"A4": "A4", "Letter": "US Letter"}
+    ORIENTATIONS = {"portrait": "Upright", "landscape": "Sideways"}
+    MARGINS = {"normal": "Normal", "narrow": "Narrow", "wide": "Wide"}
+    MARGIN_SIZES = {"normal": "18mm 16mm", "narrow": "12mm 12mm", "wide": "24mm 22mm"}
+    COLUMNS = {2: "Two columns", 1: "One column"}
+    COLOURS = {"accent": "Main colour", "heading": "Headings", "text": "Text", "muted": "Small print", "tint": "Shaded box", "rule": "Thin lines"}
+    CHOICES = {"body_font": FONT_NAMES, "heading_font": FONT_NAMES, "text_size": TEXT_SIZES, "masthead": MASTHEADS, "heading_style": HEADINGS,
+               "logo_place": LOGO_PLACES, "logo_size": LOGO_SIZES, "page_size": PAGES, "orientation": ORIENTATIONS, "margins": MARGINS}
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="report_templates")
+    name = models.CharField(max_length=80)
+    shared = models.BooleanField(default=False, help_text="Everyone with Report templates can use it and copy it")
+    accent = models.CharField(max_length=7, default="#0b6e8a")
+    heading = models.CharField(max_length=7, default="#18232b")
+    text = models.CharField(max_length=7, default="#18232b")
+    muted = models.CharField(max_length=7, default="#5b6a75")
+    tint = models.CharField(max_length=7, default="#eef2f4")
+    rule = models.CharField(max_length=7, default="#d7dfe4")
+    body_font = models.CharField(max_length=10, default="sans")
+    heading_font = models.CharField(max_length=10, default="sans")
+    text_size = models.CharField(max_length=10, default="normal")
+    masthead = models.CharField(max_length=10, default="line")
+    heading_style = models.CharField(max_length=10, default="underlined")
+    columns = models.PositiveSmallIntegerField(default=2)
+    show_contents = models.BooleanField(default=True, help_text="The list of sections at the start of a newsletter")
+    logo = models.TextField(blank=True, help_text="A checked PNG, as a data address, so a PDF never has to fetch it")
+    logo_place = models.CharField(max_length=10, default="right")
+    logo_size = models.CharField(max_length=10, default="medium")
+    page_size = models.CharField(max_length=10, default="A4")
+    orientation = models.CharField(max_length=10, default="portrait")
+    margins = models.CharField(max_length=10, default="normal")
+    header_text = models.CharField(max_length=120, blank=True)
+    footer_text = models.CharField(max_length=120, blank=True, help_text="Empty: the report's name")
+    show_page_numbers = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def body_stack(self) -> str:
+        return self.FONTS.get(self.body_font, self.FONTS["sans"])
+
+    @property
+    def heading_stack(self) -> str:
+        return self.FONTS.get(self.heading_font, self.FONTS["sans"])
+
+    @property
+    def scale(self) -> float:
+        return self.SCALES.get(self.text_size, 1.0)
+
+    @property
+    def logo_height(self) -> int:
+        return self.LOGO_HEIGHTS.get(self.logo_size, 44)
+
+    @property
+    def page_margin(self) -> str:
+        return self.MARGIN_SIZES.get(self.margins, self.MARGIN_SIZES["normal"])
+
+    @property
+    def classes(self) -> str:
+        return f"m-{self.masthead} h-{self.heading_style}"
+
+    @property
+    def on_accent(self) -> str:
+        """Text on the main colour: whichever of black and white can be read on it, so nobody has to think about it when choosing."""
+        red, green, blue = (int(self.accent[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        return "#18232b" if 0.2126 * red ** 2.2 + 0.7152 * green ** 2.2 + 0.0722 * blue ** 2.2 > 0.3 else "#ffffff"
+
+
 class Report(models.Model):
     DASHBOARD, NEWSLETTER = "dashboard", "newsletter"
     NEVER, DAILY, WEEKLY, MONTHLY = "", "daily", "weekly", "monthly"
@@ -19,6 +107,7 @@ class Report(models.Model):
     intro = models.TextField(blank=True, max_length=3000)
     kind = models.CharField(max_length=10, default=DASHBOARD)
     dashboard = models.ForeignKey(Dashboard, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
+    template = models.ForeignKey(ReportTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name="reports", help_text="How it looks. Empty: the plain design")
     include_tables = models.BooleanField(default=True, help_text="Print the numbers under each chart")
     schedule = models.CharField(max_length=7, blank=True, default=NEVER)
     weekday = models.PositiveSmallIntegerField(default=0)
@@ -39,6 +128,10 @@ class Report(models.Model):
     @property
     def is_newsletter(self) -> bool:
         return self.kind == self.NEWSLETTER
+
+    @property
+    def design(self) -> ReportTemplate:
+        return self.template or ReportTemplate()
 
 
 class ReportSection(models.Model):

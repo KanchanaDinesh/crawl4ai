@@ -1,3 +1,3 @@
-<header class="n-mast"><p class="n-date">{{ made_at|date:"l, j F Y" }}{% if issue %} · Issue {{ issue }}{% endif %}</p><h1>{{ report.name }}</h1></header>
+<header class="n-mast">{% include "reports/_logo.html" %}<p class="n-date">{{ made_at|date:"l, j F Y" }}{% if issue %} · Issue {{ issue }}{% endif %}</p><h1>{{ report.name }}</h1></header>
 {% for p in paragraphs %}<p class="n-intro">{{ p }}</p>{% endfor %}
 {% include "reports/_sections.html" %}

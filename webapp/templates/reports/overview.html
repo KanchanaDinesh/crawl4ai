@@ -13,6 +13,8 @@
     <optgroup label="One dataset">{% for d in datasets %}<option value="dataset:{{ d.ref }}">{{ d.label }}</option>{% endfor %}</optgroup>
     <option value="blank">Empty: I'll add the sections myself</option></select></div>
   <div class="field"><label for="nl-name">Name (optional)</label><input type="text" id="nl-name" name="name" maxlength="120"></div>
+  <div class="field"><label for="nl-template">Design</label><select id="nl-template" name="template"><option value="">Plain</option>{% for t in templates %}<option value="{{ t.pk }}">{{ t.name }}</option>{% endfor %}</select>
+    <span class="help">Colours, fonts, logo and page layout. Make your own under <a href="{% url 'report_templates' %}">Report templates</a>.</span></div>
   <div class="field"><label for="nl-schedule">Make it on its own</label><select id="nl-schedule" name="schedule">{% for code, name in schedules.items %}<option value="{{ code }}"{% if code == "daily" %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
     <span class="help">Made by the <code>reports</code> step of <code>./run_all.sh</code>, into output/reports/. Weekly reports start on Mondays; change that in its settings.</span></div>
   <div class="form-actions"><button class="btn primary" type="submit">Make the newsletter</button></div>

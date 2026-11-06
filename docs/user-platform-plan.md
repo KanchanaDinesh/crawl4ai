@@ -324,6 +324,12 @@ Someone else can download a PDF only if they may see all the datasets in it. Tex
 - Stories aren't merged: the same story from several sources appears each time. `worldnews analyze` already finds these and could feed a "biggest stories" section.
 - These are for people inside the team. The business plan's rule still holds for anything published: our own analysis, not sources' text.
 
+## Report templates (2026-11-06)
+
+Kanchana's request: a separate place to define how reports look, so people can add their own design. Menu Report templates; a report chooses one under Design. A template holds only the look (`ReportTemplate`), never what's in a report, so one design serves many reports. Deleting one asks first, names the reports using it, and they go back to the plain design.
+
+**Form, not code:** every value goes into the PDF's stylesheet, so it's a checked colour or a choice from a list, and header and footer text is written as CSS escapes (`css_string`). Free HTML or CSS was left out on purpose: it would need a sandboxed preview and more checks, and the people using it aren't writing code. Say if it's wanted. Logos are redrawn as a PNG (`designs.read_logo`), and `no_fetching` lets through only that kind of data address.
+
 ## Phase 7 results (2026-11-06)
 
 **The AI assistant** (`webapp/assistant/`, menu AI assistant). Someone asks in plain words; Claude Opus 5.5 writes one query from a description of the

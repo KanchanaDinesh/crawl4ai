@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}{{ saved.name|default:"New template" }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ saved.name|default:"New template" }}</h1>{% if saved %}<p class="muted small">Used by {{ used_by }} report{{ used_by|pluralize }}{% if saved.owner_id != user.pk %}, from {{ saved.owner.get_username }}{% endif %}.</p>{% endif %}</div>
+  <div class="toolbar">{% if saved %}<form method="post" action="{% url 'report_template_copy' saved.pk %}">{% csrf_token %}<button class="btn" type="submit">Make a copy</button></form>{% endif %}<a href="{% url 'report_templates' %}">All templates</a></div></div>
+{% if may_change %}
+<form method="post" enctype="multipart/form-data" class="chart-builder" id="template-form" hx-get="{% url 'report_template_preview' %}" hx-target="#preview" hx-trigger="load, change, input delay:400ms" hx-sync="this:replace" hx-params="not csrfmiddlewaretoken,logo">{% csrf_token %}
+  {% if saved %}<input type="hidden" name="saved" value="{{ saved.pk }}">{% endif %}
+  <div class="card form builder-side">
+    <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" value="{{ template.name }}" maxlength="80" placeholder="e.g. Company style"></div>
+    <h2>Colours</h2>
+    <div class="colour-grid">{% for name, label, value in colours %}<div class="field"><label for="{{ name }}">{{ label }}</label><input type="color" id="{{ name }}" name="{{ name }}" value="{{ value }}"></div>{% endfor %}</div>
+    <h2>Text</h2>
+    <div class="field"><label for="heading_font">Headings font</label><select id="heading_font" name="heading_font">{% for code, label in fonts.items %}<option value="{{ code }}"{% if template.heading_font == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="body_font">Text font</label><select id="body_font" name="body_font">{% for code, label in fonts.items %}<option value="{{ code }}"{% if template.body_font == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="text_size">Text size</label><select id="text_size" name="text_size">{% for code, label in text_sizes.items %}<option value="{{ code }}"{% if template.text_size == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <h2>Layout</h2>
+    <div class="field"><label for="masthead">Top of the first page</label><select id="masthead" name="masthead">{% for code, label in mastheads.items %}<option value="{{ code }}"{% if template.masthead == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="heading_style">Section headings</label><select id="heading_style" name="heading_style">{% for code, label in headings.items %}<option value="{{ code }}"{% if template.heading_style == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="columns">Articles</label><select id="columns" name="columns">{% for n, label in columns.items %}<option value="{{ n }}"{% if template.columns == n %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <label class="small" style="font-weight:400"><input type="checkbox" name="show_contents"{% if template.show_contents %} checked{% endif %}> List the sections at the start of a newsletter</label>
+    <h2>Logo</h2>
+    {% if template.logo %}<div class="logo-now"><img src="{{ template.logo }}" alt="The saved logo" style="max-height:60px;max-width:100%;background:#fff;padding:4px;border-radius:4px"><label class="small" style="font-weight:400;display:block"><input type="checkbox" name="remove_logo"> Remove it</label></div>{% endif %}
+    <div class="field"><label for="logo">{% if template.logo %}Replace it{% else %}A PNG or JPEG picture{% endif %}</label><input type="file" id="logo" name="logo" accept="image/png,image/jpeg"><span class="help">Up to 2 MB. It shows in the preview after saving.</span></div>
+    <div class="field"><label for="logo_place">Where</label><select id="logo_place" name="logo_place">{% for code, label in logo_places.items %}<option value="{{ code }}"{% if template.logo_place == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="logo_size">Size</label><select id="logo_size" name="logo_size">{% for code, label in logo_sizes.items %}<option value="{{ code }}"{% if template.logo_size == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <h2>Page</h2>
+    <div class="field"><label for="page_size">Paper</label><select id="page_size" name="page_size">{% for code, label in pages.items %}<option value="{{ code }}"{% if template.page_size == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="orientation">Direction</label><select id="orientation" name="orientation">{% for code, label in orientations.items %}<option value="{{ code }}"{% if template.orientation == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="margins">Margins</label><select id="margins" name="margins">{% for code, label in margins.items %}<option value="{{ code }}"{% if template.margins == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="header_text">Line at the top of each page (optional)</label><input type="text" id="header_text" name="header_text" value="{{ template.header_text }}" maxlength="120" placeholder="e.g. Oxsora · Internal"></div>
+    <div class="field"><label for="footer_text">Line at the bottom of each page (optional)</label><input type="text" id="footer_text" name="footer_text" value="{{ template.footer_text }}" maxlength="120" placeholder="Empty: the report's name"></div>
+    <label class="small" style="font-weight:400"><input type="checkbox" name="show_page_numbers"{% if template.show_page_numbers %} checked{% endif %}> Page numbers</label>
+    <label class="small" style="font-weight:400"><input type="checkbox" name="shared"{% if template.shared %} checked{% endif %}> Share with everyone who has Report templates</label>
+    <div class="form-actions"><button class="btn primary" type="submit">{% if saved %}Save{% else %}Save the template{% endif %}</button></div>
+  </div>
+  <div class="card builder-preview"><h2>Preview</h2><p class="muted small">Made-up content, to judge the design. To see a real report in it, choose it under Design on that report and press See it on screen.</p><div id="preview" class="muted">Working it out…</div></div>
+</form>
+{% if saved %}<form method="post" action="{% url 'report_template_delete' saved.pk %}" class="toolbar">{% csrf_token %}<button class="btn link danger" type="submit">Delete this template</button></form>{% endif %}
+{% else %}
+<section class="card"><h2>Preview</h2><p class="muted small">{{ saved.owner.get_username }} shares this template. You can use it on your reports. To change it, make a copy.</p>{% include "reports/_sheet.html" %}</section>
+{% endif %}
+{% endblock %}

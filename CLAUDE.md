@@ -44,7 +44,7 @@ webapp/          the user platform (Django + HTMX): python -m webapp runserver 8
                  catalog/ = automatic list of datasets and fields; explore/ = one generic grid page for all of them;
                  insights/ = the dashboard's five tabs (queries.py is the SQL, also used by the tools' `show` commands);
                  userdata/ = own tables, own fields, links, imports (schema `userdata`, values in JSONB);
-                 charts/ = chart builder, dashboards; reports/ = PDFs: dashboards and newsletters (sections of a dataset's latest rows) (WeasyPrint needs Pango: brew install pango);
+                 charts/ = chart builder, dashboards; reports/ = PDFs: dashboards and newsletters (sections of a dataset's latest rows), report templates for how they look (WeasyPrint needs Pango: brew install pango);
                  assistant/ = AI assistant (Claude sees the catalog, never rows; sqlcheck.py + login crawl4ai_agent; saved answers are views userdata.a_*)
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)

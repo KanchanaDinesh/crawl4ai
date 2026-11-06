@@ -1,0 +1,4 @@
+{% include "reports/_style.html" %}<style>.r-sheet { background: #fff; padding: 28px 32px; border-radius: 4px; max-width: 800px; } .r-sheet .r-running { color: {{ design.muted }}; font-size: 8pt; margin: 0 0 12pt; display: flex; justify-content: space-between; gap: 12px; } .r-sheet .r-running.foot { margin: 16pt 0 0; }</style>
+<div class="r-sheet r-doc {{ design.classes }}">{% if design.header_text %}<p class="r-running">{{ design.header_text }}</p>{% endif %}
+{% include "reports/_body.html" %}
+<p class="r-running foot"><span>{{ design.footer_text|default:report.name }}</span>{% if design.show_page_numbers %}<span>Page 1 of 1</span>{% endif %}</p></div>
