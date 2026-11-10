@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-07. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-10. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 654 tests pass.
+All 658 tests pass.
 
 ## Parts and how to run them
 
@@ -32,7 +32,7 @@ Run every command from the project folder, after `source env.sh`.
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
-| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan` | The user platform, phases 1-7: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, charts, dashboards and PDF reports, and the AI assistant (needs an API key). Django; schema `app`. The server restarts by itself after a code change |
+| Web app (new) | `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan`, `starter_charts` | The user platform, phases 1-7: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, charts, dashboards and PDF reports, and the AI assistant (needs an API key). Django; schema `app`. The server restarts by itself after a code change |
 | Dashboard | In the web app: http://localhost:8060/dashboard/ (`webapp/insights/`) | Tabs: World News (with analysis), Tech Intel, Markets, Vehicles, Companies. Charts in Plotly. `python -m dashboard` (the old aiohttp page on port 8050) only says where it went |
 | Database queries | `uv run python -m warehouse info`, `sql "..."` (read-only login), `examples`; `setup`, `pg-check`, `backup` | PostgreSQL. Prefix tables with the schema: `news.`, `tech.`, `markets.`, `vehicles.`, `companies.`, `scrapers.`. Or `psql -U crawl4ai_reader crawl4ai` |
 | Health check | `uv run python doctor.py [--verbose]`; `./schedule.sh doctor` runs it inside the scheduler | Checks that Chromium starts and that the drive supports symlinks |
@@ -516,6 +516,22 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **The page (Kanchana, 2026-11-07):** menu Articles, `/articles/` (`webapp/articles/`, queries in `articles/queries.py`). Read and filter by tag, country, company, date and words in the text; the full text opens in a side panel, with a link to the original. A Companies tab shows who we can't reach. It goes to whoever has Datasets, and follows the rights of the dataset Tech articles. Migrated after a backup (`accounts.0011`), checked in the browser on the real data, including at phone width.
     - `worldnews/cleaning.py` now also cuts WordPress's default "The post ... appeared first on ...". It only caught the other wording before. Run `python -m worldnews clean` to apply it to saved headlines.
     - **Next:** cover more companies (see Open issues).
+
+64. **Ready-made dashboards in Charts (Kanchana, 2026-11-10).** The Charts menu was empty (0 charts). Now six shared dashboards, one per
+    section, 49 charts: **Markets** (14: Stochastic RSI zones and counts for the CSE and crypto, highest %K, the oversold ones, Bitcoin and
+    JKH daily closes, crypto market-cap share, today's biggest rises), **World news** (8), **Tech intel** (8), **Companies** (7),
+    **Vehicles** (7), **Articles** (5). Each has one-number tiles first and its time charts full width. They're ordinary charts owned by
+    `admin`: anyone may change or delete them.
+    - `webapp/charts/starters.py` holds what each chart is; `uv run python -m webapp starter_charts [--owner NAME] [--private] [--check]`
+      makes them. Each chart is worked out first, and one that can't be drawn (a tool that hasn't run, a renamed field) is left out and
+      named. A dashboard already there is left alone, so it's safe to repeat (also on a new server, after `catalog_scan`).
+    - Chosen from the real data: riyasewana gives no location and ikman no year of make, so those charts take one site each; the
+      registrar chart leaves out lookups that failed (535 empty); CSE "highest %K" was dropped because dozens tie at 100, and its
+      oversold shares are a table, as their %K is 0.
+    - Made on the Mac after a backup, and every tile checked in the browser: 49 load, no errors.
+    - **What the builder can't do yet** (offered to Kanchana, not built): lowest first (e.g. the 10 most oversold), two numbers on one
+      chart, % change to compare prices, number bands, "vs last week" on a number tile, one date filter for a whole dashboard, and
+      doughnut colours by name (the two zone doughnuts give "overbought" different colours, as colours follow size).
 
 ## Open issues and things to watch
 

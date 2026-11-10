@@ -508,3 +508,53 @@ def test_a_pdf_is_written_whole(tmp_path):
 def test_the_step_is_in_the_automation():
     root = Path(__file__).resolve().parent.parent
     assert "STEP_reports" in (root / "run_all.sh").read_text() and " reports backup" in (root / "automation.conf").read_text()
+
+
+# ── ready-made dashboards (webapp/charts/starters.py) ─────────────────────────────────────────────────────────
+def test_the_ready_made_dashboards_are_well_formed():
+    from webapp.charts import starters
+    names = [b.name for b in starters.BOARDS]
+    assert len(names) == len(set(names)) == 6
+    for board in starters.BOARDS:
+        charts = [s.name for s in board.charts]
+        assert len(charts) == len(set(charts)), board.name
+        for s in board.charts:
+            assert s.kind in Chart.KINDS and s.measure in Chart.MEASURES and s.unit in ("", *Chart.TIME_UNITS), s.name
+            assert (s.measure == Chart.COUNT) == (not s.of), s.name                   # a sum or an average needs its number
+            assert (s.kind == Chart.NUMBER) == (not s.group), s.name
+            assert len(s.filters) <= 4 and "." in s.dataset, s.name                    # the builder's form shows four filters
+
+
+def test_ready_made_dashboards_are_made_once_with_what_is_there(ada):
+    from webapp.charts import starters
+    out = starters.build(ada)
+    assert set(out.made) == {"Companies", "Vehicles"} and out.kept == []               # the test database has only these two tools
+    assert {b for b, _, _ in out.left_out} == {"Markets", "World news", "Tech intel", "Articles"}
+    assert all("isn't in the catalog" in why for _, _, why in out.left_out)
+    board = Dashboard.objects.get(name="Companies")
+    assert board.shared and board.owner == ada and board.items.count() == out.made["Companies"]
+    assert [i.chart.name for i in board.items.all()][:2] == ["Company records", "Websites read"]
+    assert board.items.get(chart__name="New records per week").wide
+    assert chart_data(board.items.get(chart__name="Companies by country (top 15)").chart, ada).categories[0] == "LK"
+    assert AuditEvent.objects.filter(action="dashboard_saved", target_id=str(board.pk), user=ada).exists()
+    charts = Chart.objects.count()
+    again = starters.build(ada)
+    assert again.made == {} and set(again.kept) == {"Companies", "Vehicles"} and Chart.objects.count() == charts
+
+
+def test_a_ready_made_chart_that_cant_be_drawn_is_left_out_and_named(ada):
+    from webapp.charts import starters
+    board = starters.Board("Odd", "", (starters.Spec("Renamed field", "companies.v_companies", Chart.BAR, group="no_such_field"),))
+    out = starters.build(ada, boards=(board,))
+    assert out.made == {} and out.left_out[0][:2] == ("Odd", "Renamed field") and not Dashboard.objects.filter(name="Odd").exists()
+
+
+def test_the_ready_made_command(ada):
+    out = StringIO()
+    call_command("starter_charts", "--owner", "ada", "--check", stdout=out)
+    assert "Would make “Companies”" in out.getvalue() and Chart.objects.count() == 0     # --check saves nothing
+    call_command("starter_charts", "--owner", "ada", "--private", stdout=out)
+    assert "Made “Vehicles”" in out.getvalue() and "Left out of “Markets”" in out.getvalue()
+    assert not Dashboard.objects.get(name="Vehicles").shared and not Chart.objects.filter(shared=True).exists()
+    with pytest.raises(CommandError, match="No active account"):
+        call_command("starter_charts", "--owner", "nobody", stdout=out)
