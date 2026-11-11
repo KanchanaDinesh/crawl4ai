@@ -25,6 +25,7 @@ class Chart(models.Model):
     measure_field = models.CharField(max_length=200, blank=True)
     filters = models.JSONField(default=list, blank=True)
     limit = models.PositiveSmallIntegerField(default=12)
+    lowest_first = models.BooleanField(default=False, help_text="Show the smallest values first (the 10 most oversold, the biggest falls); dates stay in time order")
     shared = models.BooleanField(default=False, help_text="Everyone with the Charts menu can open it, if they may see its data")
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

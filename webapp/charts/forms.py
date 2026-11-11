@@ -88,6 +88,7 @@ def read_chart(post, user, chart: Chart | None = None) -> Chart:
         chart.limit = max(1, min(50, int(post.get("limit") or 12)))
     except ValueError:
         chart.limit = 12
+    chart.lowest_first = post.get("order") == "lowest"
     chart.shared = "shared" in post
     return chart
 

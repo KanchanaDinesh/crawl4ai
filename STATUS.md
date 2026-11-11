@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-10. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-11. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 658 tests pass.
+All 661 tests pass.
 
 ## Parts and how to run them
 
@@ -529,9 +529,21 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       registrar chart leaves out lookups that failed (535 empty); CSE "highest %K" was dropped because dozens tie at 100, and its
       oversold shares are a table, as their %K is 0.
     - Made on the Mac after a backup, and every tile checked in the browser: 49 load, no errors.
-    - **What the builder can't do yet** (offered to Kanchana, not built): lowest first (e.g. the 10 most oversold), two numbers on one
-      chart, % change to compare prices, number bands, "vs last week" on a number tile, one date filter for a whole dashboard, and
-      doughnut colours by name (the two zone doughnuts give "overbought" different colours, as colours follow size).
+    - **What the builder can't do yet** (offered to Kanchana, not built): two numbers on one chart, % change to compare prices, number
+      bands, "vs last week" on a number tile, one date filter for a whole dashboard, and doughnut colours by name (the two zone
+      doughnuts give "overbought" different colours, as colours follow size). Lowest first is done (item 65).
+
+65. **Charts: smallest first (Kanchana's pick, 2026-11-11).** The builder has an **Order** list: Biggest first / Smallest first
+    (`Chart.lowest_first`, migration `charts.0002`). Smallest first sorts in SQL too, so the smallest aren't cut off in big datasets.
+    It never folds the rest into Other (one huge Other bar would dwarf the small ones), and says "N bigger ones not shown". Dates stay in
+    time order, and a doughnut refuses it (it shows shares of the whole). A group with nothing to work out (an average of no values) goes
+    last either way, never first as a 0.
+    - PDFs: a bar chart whose values are all zero or below (the biggest falls) now draws its bars by size. Before, it drew no bars,
+      only the numbers. Mixed signs are as before: only values above zero get a bar.
+    - Markets dashboard: 3 new charts, **CSE: lowest %K**, **Crypto: biggest falls today (%)** and **CSE: biggest falls today (%)**
+      (17 in all). They were added to the real dashboard after a backup, and every tile was checked as test-admin through Django's test
+      client: all 17 answer, none with a problem.
+      The browser check needs a sign-in, so it was skipped.
 
 ## Open issues and things to watch
 

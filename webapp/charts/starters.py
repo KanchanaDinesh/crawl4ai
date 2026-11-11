@@ -32,6 +32,7 @@ class Spec:
     filters: tuple = ()              # ((path, value), ...): a list is "one of these", text as the grid's filters
     limit: int = 12
     wide: bool = False
+    lowest: bool = False             # smallest first
 
 
 @dataclass(frozen=True)
@@ -61,11 +62,14 @@ BOARDS = (
         Spec("CSE: oversold shares (%K)", RSI, Chart.TABLE, group="symbol", measure=Chart.MAX, of="pct_k", filters=(CSE, OK, ("zone", ["oversold"])), limit=15),
         Spec("Crypto: highest %K", RSI, BAR, group="symbol", measure=Chart.MAX, of="pct_k", filters=(COINS, OK), limit=15),
         Spec("Crypto: oversold coins (%K)", RSI, BAR, group="symbol", measure=Chart.MAX, of="pct_k", filters=(COINS, OK, ("zone", ["oversold"])), limit=15),
+        Spec("CSE: lowest %K", RSI, BAR, group="symbol", measure=Chart.MAX, of="pct_k", filters=(CSE, OK), limit=15, lowest=True),
         Spec("Bitcoin: daily close (USD)", CLOSES, LINE, group="day", unit="day", measure=Chart.MAX, of="close", filters=(COINS, ("symbol", ["BTC"])), wide=True),
         Spec("John Keells (JKH): daily close (LKR)", CLOSES, LINE, group="day", unit="day", measure=Chart.MAX, of="close", filters=(CSE, ("symbol", ["JKH.N0000"])), wide=True),
         Spec("Crypto: share of market cap", LATEST, PIE, group="symbol", measure=Chart.SUM, of="market_cap", filters=(COINS,)),
         Spec("Crypto: biggest rises today (%)", LATEST, BAR, group="symbol", measure=Chart.MAX, of="change_pct", filters=(COINS,)),
         Spec("CSE: biggest rises today (%)", LATEST, BAR, group="symbol", measure=Chart.MAX, of="change_pct", filters=(CSE,)),
+        Spec("Crypto: biggest falls today (%)", LATEST, BAR, group="symbol", measure=Chart.MIN, of="change_pct", filters=(COINS,), lowest=True),
+        Spec("CSE: biggest falls today (%)", LATEST, BAR, group="symbol", measure=Chart.MIN, of="change_pct", filters=(CSE,), lowest=True),
     )),
     Board("World news", "What the news sites wrote: how much, from where and about what.", (
         Spec("Headlines in the last 7 days", NEWS, N, filters=(WEEK,)),
@@ -133,7 +137,8 @@ def _chart(spec: Spec, owner, shared: bool) -> Chart:
     if ds is None:
         raise ChartProblem(f"the dataset {spec.dataset} isn't in the catalog (run catalog_scan, or that tool hasn't run yet)")
     return Chart(owner=owner, name=spec.name, dataset=ds, kind=spec.kind, group_field=spec.group, time_unit=spec.unit, split_field=spec.split,
-                 measure=spec.measure, measure_field=spec.of, filters=[{"field": p, "value": v} for p, v in spec.filters], limit=spec.limit, shared=shared)
+                 measure=spec.measure, measure_field=spec.of, filters=[{"field": p, "value": v} for p, v in spec.filters], limit=spec.limit,
+                 lowest_first=spec.lowest, shared=shared)
 
 
 def _works(chart: Chart, owner) -> bool:

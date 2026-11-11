@@ -62,6 +62,17 @@ def _stack_max(data: ChartData) -> float:
     return max((sum(s["values"][i] or 0 for s in data.series) for i in range(len(data.categories))), default=0)
 
 
+def _stack_min(data: ChartData) -> float:
+    return min((sum(s["values"][i] or 0 for s in data.series) for i in range(len(data.categories))), default=0)
+
+
+def _all_below_zero(data: ChartData) -> int:
+    """-1 when every bar is zero or below (the biggest falls): bars are then drawn by size, each still printed with its minus sign.
+    Mixed signs keep 1, so only the values above zero get a bar."""
+    values = [v for s in data.series for v in s["values"] if v is not None]
+    return -1 if values and max(values) <= 0 and min(values) < 0 else 1
+
+
 def _grid(left: float, right: float, top: float, bottom: float, biggest: float) -> str:
     parts = []
     for i in range(5):
@@ -113,7 +124,8 @@ def _bars(data: ChartData) -> str:
     legend = 22 if len(data.series) > 1 else 0
     height = legend + row * n + 8
     left, right = 170, WIDTH - 60
-    biggest = _nice_max(_stack_max(data))
+    sign = _all_below_zero(data)
+    biggest = _nice_max(_stack_max(data) if sign == 1 else -_stack_min(data))
     parts = [_legend(data.series, 12) if legend else ""]
     for i, c in enumerate(data.categories):
         y = legend + row * i
@@ -123,7 +135,7 @@ def _bars(data: ChartData) -> str:
         for s in data.series:
             value = s["values"][i] or 0
             total += value
-            w = (right - left) * max(value, 0) / biggest
+            w = (right - left) * max(sign * value, 0) / biggest
             if w > 0:
                 parts.append(f'<rect x="{x:.1f}" y="{y + 4:.1f}" width="{w:.1f}" height="{row - 8}" fill="{SERIES[s["slot"] % 8]}"/>')
                 x += w

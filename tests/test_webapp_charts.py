@@ -124,6 +124,40 @@ def test_the_rest_go_into_other_when_they_can(ada):
     assert avg.categories == ["Honda"] and "not shown" in avg.note                   # an average can't be added into Other
 
 
+def test_smallest_first_with_no_other_and_dates_kept_in_time_order(ada):
+    data = chart_data(chart_of(ada, "Country", lowest_first=True), ada)
+    assert data.categories == ["(empty)", "GB", "US", "LK"] and not data.note
+    two = chart_data(chart_of(ada, "Country", lowest_first=True, limit=2), ada)
+    assert two.categories == ["(empty)", "GB"] and two.note == "2 bigger ones not shown"   # an Other of everything bigger would dwarf them
+    ref = "vehicles.v_vehicle_ads_latest"
+    cheapest = chart_data(chart_of(ada, "Title", ref, kind=Chart.BAR, measure="min", measure_field=path("Price LKR", ref), lowest_first=True), ada)
+    assert cheapest.categories == ["Suzuki", "Toyota", "Honda"]
+    day = chart_data(chart_of(ada, "First seen", kind="line", time_unit="day", lowest_first=True), ada)
+    assert day.categories == ["2026-11-02", "2026-11-15"]
+    with pytest.raises(ChartProblem, match="shares of the whole"):
+        chart_data(chart_of(ada, "Country", kind=Chart.PIE, lowest_first=True), ada)
+
+
+def test_pdf_bars_of_falls_are_drawn_by_size():
+    from webapp.charts.data import ChartData
+    falls = ChartData(kind=Chart.BAR, name="Falls", categories=["A", "B"], series=[{"name": "%", "slot": 0, "values": [-12.0, -3.0]}])
+    svg = chart_svg(falls)
+    widths = [float(r.get("width")) for r in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}rect")]
+    assert len(widths) == 2 and widths[0] > widths[1] > 0 and "-12" in svg
+    mixed = ChartData(kind=Chart.BAR, name="Moves", categories=["A", "B"], series=[{"name": "%", "slot": 0, "values": [5.0, -3.0]}])
+    assert chart_svg(mixed).count("<rect") == 1                                      # only the rise gets a bar; the fall keeps its number
+
+
+def test_a_group_with_nothing_to_work_out_goes_last_either_way():
+    from webapp.charts.data import ChartData, _pivot
+    group = Field(label="G", type=Field.TEXT)
+    rows = [("a", None, 5.0), ("b", None, None), ("c", None, -2.0)]
+    for lowest, order in ((True, ["c", "a", "b"]), (False, ["a", "c", "b"])):
+        data = ChartData(kind=Chart.BAR, name="C")
+        _pivot(data, Chart(measure="avg", limit=12, lowest_first=lowest), group, None, rows)
+        assert data.categories == order, lowest
+
+
 def test_series_stop_at_eight_colours(ada, world):
     from companies.store import CompanyStore
     c = CompanyStore.__new__(CompanyStore)
@@ -256,6 +290,10 @@ def test_build_preview_save_and_change(client, ada):
     page = client.get(reverse("chart", args=[ch.pk])).content.decode()
     assert "Renamed" in page and "LK, GB" in page
     assert AuditEvent.objects.filter(action="chart_saved").count() == 2
+    assert not ch.lowest_first and "Smallest first" in page
+    client.post(reverse("chart", args=[ch.pk]), form(name="Renamed", order="lowest"))
+    ch.refresh_from_db()
+    assert ch.lowest_first and 'value="lowest" selected' in client.get(reverse("chart", args=[ch.pk])).content.decode()
 
 
 def test_a_chart_that_cant_be_drawn_isnt_kept(client, ada):
@@ -523,6 +561,7 @@ def test_the_ready_made_dashboards_are_well_formed():
             assert (s.measure == Chart.COUNT) == (not s.of), s.name                   # a sum or an average needs its number
             assert (s.kind == Chart.NUMBER) == (not s.group), s.name
             assert len(s.filters) <= 4 and "." in s.dataset, s.name                    # the builder's form shows four filters
+            assert not (s.lowest and s.kind == Chart.PIE), s.name                       # a doughnut always starts with the biggest
 
 
 def test_ready_made_dashboards_are_made_once_with_what_is_there(ada):

@@ -124,12 +124,14 @@ def chart_data(chart: Chart, user) -> ChartData:
         raise ChartProblem("The field it splits by isn't there any more.")
     if chart.kind == Chart.PIE and split:
         raise ChartProblem("A doughnut shows one measure: remove the split, or choose columns.")
+    if chart.kind == Chart.PIE and chart.lowest_first:
+        raise ChartProblem("A doughnut shows shares of the whole, so it starts with the biggest. Choose bars or columns to show the smallest first.")
     group_sql, join = _group_sql(group, chart.time_unit, "g")
     split_sql, split_join = _group_sql(split, chart.time_unit, "s") if split else ("null", "")
     data.group_label = group.label
     data.is_time = group.base in (Field.DATETIME, Field.DATE)
     data.time_unit = (chart.time_unit or "month") if data.is_time else ""
-    order = "1, 2" if data.is_time else "3 desc nulls last, 1, 2"
+    order = "1, 2" if data.is_time else f"3 {'asc' if chart.lowest_first else 'desc'} nulls last, 1, 2"
     rows = _fetch(f"select {group_sql}, {split_sql}, {measure} from {rel} d{join}{split_join}{where} group by 1, 2 order by {order} limit {MAX_ROWS}", params)
     _pivot(data, chart, group, split, rows)
     return data
@@ -139,8 +141,11 @@ def _pivot(data: ChartData, chart: Chart, group: Field, split: Field | None, row
     folds = chart.measure in (Chart.COUNT, Chart.SUM)     # only counts and sums can be added into an Other
     named = [(_name(group, g), _name(split, s) if split else "", _float(m)) for g, s, m in rows if not (data.is_time and g is None)]
     totals: dict[str, float] = {}
+    measured = set()                      # groups with a value: one with none (an average of nothing) goes last, never first as a 0
     for g, _, m in named:
         totals[g] = totals.get(g, 0) + (m or 0)
+        if m is not None:
+            measured.add(g)
     if data.is_time:
         categories = sorted(totals)[-MAX_POINTS:]
         hidden = len(totals) - len(categories)
@@ -148,9 +153,10 @@ def _pivot(data: ChartData, chart: Chart, group: Field, split: Field | None, row
         fold_rest = False
     else:
         limit = min(chart.limit or 12, MAX_PIE - 1) if chart.kind == Chart.PIE else (chart.limit or 12)
-        ranked = sorted(totals, key=lambda k: (-totals[k], k))
+        lowest = chart.lowest_first
+        ranked = sorted(totals, key=lambda k: (k not in measured, totals[k] if lowest else -totals[k], k))
         categories, hidden, keep = ranked[:limit], max(0, len(ranked) - limit), set(ranked[:limit])
-        fold_rest = folds and hidden > 0
+        fold_rest = folds and hidden > 0 and not lowest      # an Other of everything bigger would dwarf the smallest ones
         if fold_rest:
             categories = [*categories, OTHER]
     series_total: dict[str, float] = {}
@@ -170,7 +176,9 @@ def _pivot(data: ChartData, chart: Chart, group: Field, split: Field | None, row
         series_names.append(OTHER)
     data.categories = categories
     data.series = [{"name": s or data.measure_label, "slot": i, "values": [cells.get((c, s)) for c in categories]} for i, s in enumerate(series_names)]
-    if hidden and not fold_rest:
+    if hidden and chart.lowest_first and not data.is_time:
+        data.note = f"{hidden:,} bigger ones not shown"
+    elif hidden and not fold_rest:
         data.note = f"{hidden:,} more not shown"
     elif hidden:
         data.note = f"{hidden:,} smaller ones are in Other"
