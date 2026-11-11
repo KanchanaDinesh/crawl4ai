@@ -22,7 +22,7 @@ The parts:
   See [briefing/README.md](briefing/README.md). Quick start: `uv run python -m briefing run`.
 - **`webapp/`**: the web app (Django): sign-in, roles, every dataset in a grid, and the dashboard for World News, Tech Intel,
   Markets, Vehicles and Companies, reading live from the database.
-  `uv run python -m webapp runserver 8060` (see [Dashboard](#dashboard)).
+  `./dashboard.sh` (see [Dashboard](#dashboard)).
 
 All of them use
 [crawl4ai](https://github.com/unclecode/crawl4ai) ([docs](https://docs.crawl4ai.com/)) as an
@@ -137,7 +137,9 @@ kept running by a cron check every 5 minutes and restarted at boot.
 ## Dashboard
 
 ```bash
-uv run python -m webapp runserver 8060   # then open http://localhost:8060/dashboard/ and sign in
+./dashboard.sh                           # starts the web app in the background and opens http://localhost:8060/dashboard/
+./dashboard.sh stop                      # also: status, restart, open, log, run (in this window), --no-open
+uv run python -m webapp runserver 8060   # the same by hand, in this window
 ```
 
 The dashboard is a part of the web app (`webapp/insights/`): one page per tab, on the **Dashboard** menu. A role opens
@@ -177,6 +179,9 @@ a tab when it has that menu and the right to see the tab's main dataset (Catalog
   new script (no stale browser cache).
 - Pages read with the read-only login, so they never wait for a collection run and never block one. While a run is
   saving, they show what was saved before it.
+- `./dashboard.sh` checks PostgreSQL is running and the port is free, starts the web app in the background (it keeps running when
+  Terminal is closed), waits until it answers, and opens the browser. It never applies database changes itself: if some are waiting
+  it says to back up first and run `migrate`. Its log is `logs/webapp.log`. Another port: `WEBAPP_PORT=8061 ./dashboard.sh`.
 - `runserver 8060` listens on this computer only. **The server restarts by itself after a code change**, except
   with `--noreload`.
 

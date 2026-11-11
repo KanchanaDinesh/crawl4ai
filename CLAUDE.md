@@ -50,6 +50,7 @@ webapp/          the user platform (Django + HTMX): python -m webapp runserver 8
                  articles/ = the Articles page, reading what `python -m articles` saved;
                  foresight/ = the Foresight page, a thin view of what `python -m foresight` saved;
                  assistant/ = AI assistant (Claude sees the catalog, never rows; sqlcheck.py + login crawl4ai_agent; saved answers are views userdata.a_*)
+dashboard.sh     start/stop/status of the web app in the background (port 8060, log logs/webapp.log); never migrates by itself
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/
 schedule.sh      launchd (Mac) / cron (Linux) schedules and the always-on tech listener (watch.sh)
 automation.conf  user settings for run_all.sh / schedule.sh (Kanchana edits this; see STATUS.md "Open issues")
