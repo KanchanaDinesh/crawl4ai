@@ -586,8 +586,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Not every figure is found: a report that words a row differently has none for it (e.g. no total assets for Access Engineering), and
       its table is still saved whole. People are only taken from board/management pages; one person written two ways stays two rows.
     - Fixed by hand in settings: the Chamber report (a member company's name repeats with "Annual Report 2023/24"), HSBC's link.
-    - **Open question for Kanchana:** may the PDFs' text go to the Claude API for better extraction (directors in running text, figures
-      worded differently)? Default no, as the AI step is last.
+    - **Decision (Kanchana, 2026-11-13): the PDFs stay offline.** Their text is never sent to the Claude API or any other service, not even
+      for better extraction. Don't add it unless Kanchana asks again.
 
 ## Open issues and things to watch
 

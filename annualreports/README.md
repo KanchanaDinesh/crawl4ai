@@ -60,6 +60,6 @@ select * from annualreports.v_cells where document_id = 2 and page_no = 80;
 
 ## Not done (yet)
 
-- No Claude API: better extraction (directors in free text, figures worded differently) could come from the AI step, which is last by Kanchana's decision.
+- No Claude API, by Kanchana's decision (2026-11-13): the PDFs' text stays on this computer, even if the AI could extract more (directors in free text, figures worded differently).
 - Pictures and charts aren't saved, only their count per page; a chart's numbers are only there if the PDF prints them as text.
 - OCR is English only (the Chinese HSBC report has a text layer, so it didn't need OCR).
