@@ -169,11 +169,21 @@ create or replace view annualreports.v_pages as
 create or replace view annualreports.v_cells as
     select r.document_id, t.page_no, r.table_no, t.title as table_title, r.row_no, r.kind, r.cells[1] as row_label,
            c.col_no - 1 as col_no, case when c.col_no > 1 then t.columns[c.col_no - 1] end as column_header,
-           c.cell as value_text, annualreports.num(c.cell) as value
+           c.cell as value_text, annualreports.num(c.cell) as value, d.company, d.fiscal_year
     from annualreports.table_rows r
     join annualreports.tables t on t.document_id = r.document_id and t.table_no = r.table_no
+    join annualreports.documents d on d.id = r.document_id
     cross join lateral unnest(r.cells) with ordinality as c(cell, col_no)
     where c.col_no > 1;
+
+create or replace view annualreports.v_sections as
+    select d.company, d.fiscal_year, s.section_no, s.title, s.level, s.page_no, s.page_to, s.source, s.text, s.document_id
+    from annualreports.sections s join annualreports.documents d on d.id = s.document_id;
+
+create or replace view annualreports.v_tables as
+    select d.company, d.fiscal_year, t.page_no, t.table_no, t.title, t.statement, t.method, t.columns, t.unit_text, t.currency,
+           t.n_rows, t.n_cols, t.columns_from, t.document_id
+    from annualreports.tables t join annualreports.documents d on d.id = t.document_id;
 
 create or replace view annualreports.v_figures as
     select d.company, d.fiscal_year, d.company_id, d.cse_symbol, f.*

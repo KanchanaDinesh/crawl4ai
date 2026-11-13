@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-685 tests: 682 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+686 tests: 683 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -586,6 +586,12 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Not every figure is found: a report that words a row differently has none for it (e.g. no total assets for Access Engineering), and
       its table is still saved whole. People are only taken from board/management pages; one person written two ways stays two rows.
     - Fixed by hand in settings: the Chamber report (a member company's name repeats with "Annual Report 2023/24"), HSBC's link.
+    - **In the web app: Datasets → "Annual reports", "Annual report key figures", "... people", "... pages", "... sections",
+      "... tables", "... table cells", "... figures (every column)"** (labels in `webapp/catalog/defaults.py`; raw tables off). Visible to
+      Editors, Analysts and Viewers. No dashboard tab or own page yet. All 8 checked as an administrator through Django's test client.
+    - Bug fixed in the catalog on the way: a column holding a list of numbers (`people.pages`, an `integer[]`) stopped `catalog_scan`
+      ("descriptor 'casefold' ... 'int'"), and filtering on one in the grid would have been an SQL error (`int[] && text[]`). Lists are now
+      read as text in both places, with a test.
     - **Decision (Kanchana, 2026-11-13): the PDFs stay offline.** Their text is never sent to the Claude API or any other service, not even
       for better extraction. Don't add it unless Kanchana asks again.
 

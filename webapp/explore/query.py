@@ -116,6 +116,8 @@ def value_expr(f: Field) -> str:
     if not f.json_key:
         if base == Field.LIST and f.is_jsonb:
             return f"(case when jsonb_typeof({col}) = 'array' then {col} end)"
+        if base == Field.LIST:
+            return f"({col})::text[]"            # an int[] of page numbers filters like a list of words (&& text[])
         return col
     key = lit(f.json_key)
     text, raw = f"{col} ->> {key}", f"{col} -> {key}"

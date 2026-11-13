@@ -183,6 +183,19 @@ def test_admin_renames_and_hides_a_field_and_it_stops_being_served(data, admin):
 
 
 # ── rows: sorting, filters, safety ───────────────────────────────────────────────────────────────────────────
+def test_lists_of_numbers_scan_and_filter(data, admin):
+    """annualreports.people has pages int[]: the scan once stopped on it (sorting numbers as text), and a filter on it was an SQL error."""
+    with connection.cursor() as cur:
+        cur.execute("""create table vehicles.people (name text primary key, pages integer[], box double precision[]);
+                       insert into vehicles.people values ('Ana', '{2,10}', '{1.5,2}'), ('Ben', '{3}', null)""")
+    scan()
+    f = {x.path: x for x in Dataset.objects.get(schema="vehicles", name="people").fields.all()}
+    assert f["pages"].type == "list" and f["pages"].values == ["10", "2", "3"] and f["box"].type == "list"
+    got = names(rows(admin, "vehicles.people", cols=["name", "pages"], filters=[{"field": "pages", "value": ["10"]}]))
+    assert got == ["Ana"]
+    assert rows(admin, "vehicles.people", cols=["name", "pages"]).json()["rows"][0]["pages"] == ["2", "10"]
+
+
 def test_rows_sort_page_and_count(data, admin):
     res = rows(admin, cols=["name", "employees"], sorts=[{"field": "employees", "dir": "desc"}], limit=2, start=1)
     data_ = res.json()

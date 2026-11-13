@@ -101,7 +101,7 @@ def _text_details(cur, sample: str, expr: str) -> tuple[str, list[str]]:
 
 
 def _list_values(cur, sample: str, expr: str, is_jsonb: bool) -> list[str]:
-    each = f"jsonb_array_elements_text({expr})" if is_jsonb else f"unnest({expr})"
+    each = f"jsonb_array_elements_text({expr})" if is_jsonb else f"unnest({expr})::text"      # int[] too (page numbers)
     guard = f"where jsonb_typeof({expr}) = 'array'" if is_jsonb else ""
     found = _rows(cur, f"""select v from (select {each} as v from {sample} s {guard}) t where v is not null
         group by 1 order by count(*) desc, 1 limit {MAX_VALUES + 1}""")

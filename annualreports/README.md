@@ -17,6 +17,23 @@ uv run python -m annualreports search dividend policy # pages with all these wor
 
 To add reports: put the PDFs in `Anual reports/` and run `run`. A file that's already saved is skipped in a second (its SHA-256 is compared, not its name), so it costs nothing to run every time.
 
+## In the web app
+
+Side menu **Datasets** (http://localhost:8060/datasets/), then any of these. Each opens in the grid, with filters, sorting, saved views and CSV/Excel,
+and works in Charts and Reports like every other dataset. Editors, Analysts and Viewers can see them (Catalog page to change that).
+
+| Dataset | What's in it |
+|---|---|
+| **Annual reports** | one row per PDF: company, year, pages, counts, link to the company / CSE share |
+| **Annual report key figures** | revenue, profit before tax, total assets, EPS, ... one value per report, with its page |
+| **Annual report figures (every column)** | the same figures in every column: group and company, this year and last |
+| **Annual report people** | directors and managers, with their roles |
+| **Annual report pages** | every page's full text (filter on Full text to search) |
+| **Annual report sections** | sections with their text |
+| **Annual report tables** / **table cells** | every table, and every cell of it as printed |
+
+There's no dashboard tab for them yet: the Dashboard's five tabs are fixed pages.
+
 ## What's stored
 
 | Table | One row per | Key |
