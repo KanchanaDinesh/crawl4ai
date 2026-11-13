@@ -169,9 +169,10 @@ def build_markets(root, now: datetime | None = None, runs: int = 6) -> None:
     store.close()
 
 
-def build_vehicles(runs: int = 3) -> None:
+def build_vehicles(runs: int = 3, bikes: bool = False) -> None:
     """Saved through the vehicles database (as the real scraper does): a few runs, new ads, a price drop.
-    Uses PROJECT_DATA_DIR from the environment."""
+    `bikes` adds each site's motorcycle listing too: ikman 2 bikes (the Pulsar drops in price on the last run),
+    riyasewana 1. Uses PROJECT_DATA_DIR from the environment."""
     import importlib
     import time as _time
     import project_paths
@@ -192,7 +193,19 @@ def build_vehicles(runs: int = 3) -> None:
                   "price": f"Rs. {p:,}", "price_lkr": p, "year": t.split()[-1], "mileage": f"{80 + i * 15},000 km",
                   "posted": "2026-11-02", "image": None} for i, (t, _, p) in enumerate(riya[: 1 + n])]
         store = VehicleStore()
-        store.save_report({"site": "ikman", "success": True, "count": len(ads_i), "ads": ads_i})
-        store.save_report({"site": "riyasewana", "success": True, "count": len(ads_r), "ads": ads_r})
+        store.save_report({"site": "ikman", "category": "car", "success": True, "count": len(ads_i), "ads": ads_i})
+        store.save_report({"site": "riyasewana", "category": "car", "success": True, "count": len(ads_r), "ads": ads_r})
+        if bikes:
+            bikes_i = [{"rank": 1, "title": "Bajaj Pulsar 150 2018", "url": "https://ikman.lk/en/ad/bajaj-pulsar-150-2018",
+                        "price": "Rs 545,000", "price_lkr": 545_000 - (20_000 if n == runs - 1 else 0),
+                        "location": "Galle, Motorbikes", "posted": "1 minute", "image": None},
+                       {"rank": 2, "title": "Honda Dio 2020", "url": "https://ikman.lk/en/ad/honda-dio-2020",
+                        "price": "Rs 395,000", "price_lkr": 395_000, "location": "Colombo, Motorbikes",
+                        "posted": "4 minutes", "image": None}]
+            bikes_r = [{"rank": 1, "title": "Yamaha FZ-S Motorbike", "url": "https://riyasewana.com/buy/yamaha-fz-s-sale-matara-12660825",
+                        "price": "Rs. 1,045,000", "price_lkr": 1_045_000, "year": "2025", "mileage": "Matara · 6,430 km",
+                        "posted": "Just now", "image": None}]
+            store.save_report({"site": "ikman", "category": "motorcycle", "success": True, "count": 2, "ads": bikes_i})
+            store.save_report({"site": "riyasewana", "category": "motorcycle", "success": True, "count": 1, "ads": bikes_r})
         store.close()
         _time.sleep(0.02)

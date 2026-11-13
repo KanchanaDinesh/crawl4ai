@@ -364,6 +364,35 @@ def test_vehicles_tab(dash, tmp_path, monkeypatch):
     assert text_of(riya).count('class="ad"') == 3 and json.loads(riya["HX-Trigger"])["listCount"] == "3 · newest first"
 
 
+def test_vehicles_tab_cars_and_motorcycles(dash, tmp_path, monkeypatch):
+    """Motorcycles are saved next to cars; the switch at the top shows one kind, numbers and charts included."""
+    client, _ = dash
+    monkeypatch.setenv("SCRAPERS_OUTPUT_DIR", str(tmp_path / "out"))
+    from sample_data import build_vehicles
+    build_vehicles(runs=3, bikes=True)
+    every = read(queries.vehicles_summary)
+    # "new in the last run" is per listing: ikman's bikes were read after its cars, and the cars' new ad still counts
+    assert (every["counts"]["ads"], every["counts"]["new_last_run"]) == (10, 2)
+    assert {c["category"]: c["ads"] for c in every["categories"]} == {"car": 7, "motorcycle": 3}
+    bikes = read(queries.vehicles_summary, category="motorcycle")
+    assert (bikes["counts"]["ads"], bikes["counts"]["new_last_run"], bikes["counts"]["price_drops"]) == (3, 0, 1)
+    assert [r["range"] for r in bikes["price_ranges"]] == ["250K - 500K", "500K - 1M", "1M - 2M"]   # bike price bands
+    assert {(x["site"], x["category"]) for x in bikes["sites"]} == {("ikman", "motorcycle"), ("riyasewana", "motorcycle")}
+    assert read(queries.vehicle_ads, category="motorcycle")["total"] == 3
+    assert [c["title"] for c in read(queries.vehicle_price_changes, category="motorcycle")] == ["Bajaj Pulsar 150 2018"]
+    assert [c["title"] for c in read(queries.vehicle_price_changes, category="car")] == ["Honda Vezel 2016"]
+
+    page = text_of(client.get(reverse("insights_vehicles"), {"category": "motorcycle"}))
+    assert kpi_values(page)[0] == "3" and page.count('class="ad"') == 3 and "Toyota" not in page
+    assert 'class="fchip on" href="/dashboard/vehicles/?days=30&amp;category=motorcycle"' in page and "Motorcycles" in page
+    assert page.index(">Cars<") < page.index(">Motorcycles<")
+    assert '<input type="hidden" name="category" value="motorcycle">' in page    # the list's filters keep the category
+    assert "ikman · motorcycle · first seen" in page
+    rows = client.get(reverse("insights_vehicle_ads"), {"category": "car", "site": "ikman"})
+    assert text_of(rows).count('class="ad"') == 4 and "Pulsar" not in text_of(rows)
+    assert kpi_values(text_of(client.get(reverse("insights_vehicles"), {"category": "nonsense"})))[0] == "10"   # unknown: all
+
+
 # ── nothing yet, or something wrong ──────────────────────────────────────────────────────────────────────────
 def test_tabs_say_what_to_run_when_no_tool_has_run_yet(pg_env, client):
     from warehouse import postgres

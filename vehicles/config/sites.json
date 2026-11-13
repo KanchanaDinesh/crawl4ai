@@ -1,7 +1,8 @@
 [
   {
     "name": "ikman",
-    "url": "https://ikman.lk/en/ads/sri-lanka/vehicles",
+    "url": "https://ikman.lk/en/ads/sri-lanka/cars",
+    "category": "car",
     "output_file": "vehicles_ikman.json",
     "limit": 10,
     "enabled": true,
@@ -9,34 +10,273 @@
     "exclude_selector": "li.gtm-top-ad, li[class*='top-ad']",
     "image_by_slug": "https://i.ikman-st.com/",
     "fields": {
-      "title":    {"selector": ["h2[class*='heading--']", "[class*='title--']"], "type": "text"},
-      "url":      {"selector": ["a.gtm-ad-item", "a[href*='/ad/']"], "type": "attribute", "attribute": "href"},
-      "price":    {"selector": ["[class*='price--']"], "type": "text"},
-      "location": {"selector": ["[class*='description--']"], "type": "text"},
-      "posted":   {"selector": ["[class*='updated-time--']"], "type": "text"},
-      "image":    {"selector": ["img"], "type": "attribute", "attribute": ["data-src", "src"]}
+      "title": {
+        "selector": [
+          "h2[class*='heading--']",
+          "[class*='title--']"
+        ],
+        "type": "text"
+      },
+      "url": {
+        "selector": [
+          "a.gtm-ad-item",
+          "a[href*='/ad/']"
+        ],
+        "type": "attribute",
+        "attribute": "href"
+      },
+      "price": {
+        "selector": [
+          "[class*='price--']"
+        ],
+        "type": "text"
+      },
+      "location": {
+        "selector": [
+          "[class*='description--']"
+        ],
+        "type": "text"
+      },
+      "posted": {
+        "selector": [
+          "[class*='updated-time--']"
+        ],
+        "type": "text"
+      },
+      "image": {
+        "selector": [
+          "img"
+        ],
+        "type": "attribute",
+        "attribute": [
+          "data-src",
+          "src"
+        ]
+      }
     },
-    "crawl": {"delay_before_return_html": 2.0, "page_timeout": 60000}
+    "crawl": {
+      "delay_before_return_html": 2.0,
+      "page_timeout": 60000
+    }
   },
   {
     "name": "riyasewana",
     "url": "https://riyasewana.com/search/cars",
+    "category": "car",
     "output_file": "vehicles_riyasewana.json",
     "limit": 10,
     "enabled": true,
     "item_selector": "li.v-card",
     "exclude_selector": "",
-    "sort": {"by": "url", "pattern": "-(\\d+)/?$", "order": "desc"},
-    "fields": {
-      "title":    {"selector": ["div.v-card-title a", "a[href*='/buy/']"], "type": "text"},
-      "url":      {"selector": ["div.v-card-title a", "a[href*='/buy/']"], "type": "attribute", "attribute": "href"},
-      "price":    {"selector": ["div.v-card-price"], "type": "text"},
-      "year":     {"selector": ["div.v-card-year"], "type": "text"},
-      "mileage":  {"selector": ["div.v-card-meta *", "div.v-card-meta"], "type": "text", "contains": "km"},
-      "details":  {"selector": ["div.v-card-meta"], "type": "text"},
-      "posted":   {"selector": ["div.v-card-date"], "type": "text"},
-      "image":    {"selector": ["div.v-card-img img", "img"], "type": "attribute", "attribute": ["data-src", "data-lazy", "src"]}
+    "sort": {
+      "by": "url",
+      "pattern": "-(\\d+)/?$",
+      "order": "desc"
     },
-    "crawl": {"delay_before_return_html": 2.0, "page_timeout": 60000}
+    "fields": {
+      "title": {
+        "selector": [
+          "div.v-card-title a",
+          "a[href*='/buy/']"
+        ],
+        "type": "text"
+      },
+      "url": {
+        "selector": [
+          "div.v-card-title a",
+          "a[href*='/buy/']"
+        ],
+        "type": "attribute",
+        "attribute": "href"
+      },
+      "price": {
+        "selector": [
+          "div.v-card-price"
+        ],
+        "type": "text"
+      },
+      "year": {
+        "selector": [
+          "div.v-card-year"
+        ],
+        "type": "text"
+      },
+      "mileage": {
+        "selector": [
+          "div.v-card-meta *",
+          "div.v-card-meta"
+        ],
+        "type": "text",
+        "contains": "km"
+      },
+      "details": {
+        "selector": [
+          "div.v-card-meta"
+        ],
+        "type": "text"
+      },
+      "posted": {
+        "selector": [
+          "div.v-card-date"
+        ],
+        "type": "text"
+      },
+      "image": {
+        "selector": [
+          "div.v-card-img img",
+          "img"
+        ],
+        "type": "attribute",
+        "attribute": [
+          "data-src",
+          "data-lazy",
+          "src"
+        ]
+      }
+    },
+    "crawl": {
+      "delay_before_return_html": 2.0,
+      "page_timeout": 60000
+    }
+  },
+  {
+    "name": "ikman",
+    "url": "https://ikman.lk/en/ads/sri-lanka/motorbikes-scooters",
+    "category": "motorcycle",
+    "output_file": "vehicles_ikman_motorcycles.json",
+    "limit": 10,
+    "enabled": true,
+    "item_selector": "li.gtm-normal-ad, li[class*='normal--']",
+    "exclude_selector": "li.gtm-top-ad, li[class*='top-ad']",
+    "image_by_slug": "https://i.ikman-st.com/",
+    "fields": {
+      "title": {
+        "selector": [
+          "h2[class*='heading--']",
+          "[class*='title--']"
+        ],
+        "type": "text"
+      },
+      "url": {
+        "selector": [
+          "a.gtm-ad-item",
+          "a[href*='/ad/']"
+        ],
+        "type": "attribute",
+        "attribute": "href"
+      },
+      "price": {
+        "selector": [
+          "[class*='price--']"
+        ],
+        "type": "text"
+      },
+      "location": {
+        "selector": [
+          "[class*='description--']"
+        ],
+        "type": "text"
+      },
+      "posted": {
+        "selector": [
+          "[class*='updated-time--']"
+        ],
+        "type": "text"
+      },
+      "image": {
+        "selector": [
+          "img"
+        ],
+        "type": "attribute",
+        "attribute": [
+          "data-src",
+          "src"
+        ]
+      }
+    },
+    "crawl": {
+      "delay_before_return_html": 2.0,
+      "page_timeout": 60000
+    }
+  },
+  {
+    "name": "riyasewana",
+    "url": "https://riyasewana.com/search/motorcycles",
+    "category": "motorcycle",
+    "output_file": "vehicles_riyasewana_motorcycles.json",
+    "limit": 10,
+    "enabled": true,
+    "item_selector": "li.v-card",
+    "exclude_selector": "",
+    "sort": {
+      "by": "url",
+      "pattern": "-(\\d+)/?$",
+      "order": "desc"
+    },
+    "fields": {
+      "title": {
+        "selector": [
+          "div.v-card-title a",
+          "a[href*='/buy/']"
+        ],
+        "type": "text"
+      },
+      "url": {
+        "selector": [
+          "div.v-card-title a",
+          "a[href*='/buy/']"
+        ],
+        "type": "attribute",
+        "attribute": "href"
+      },
+      "price": {
+        "selector": [
+          "div.v-card-price"
+        ],
+        "type": "text"
+      },
+      "year": {
+        "selector": [
+          "div.v-card-year"
+        ],
+        "type": "text"
+      },
+      "mileage": {
+        "selector": [
+          "div.v-card-meta *",
+          "div.v-card-meta"
+        ],
+        "type": "text",
+        "contains": "km"
+      },
+      "details": {
+        "selector": [
+          "div.v-card-meta"
+        ],
+        "type": "text"
+      },
+      "posted": {
+        "selector": [
+          "div.v-card-date"
+        ],
+        "type": "text"
+      },
+      "image": {
+        "selector": [
+          "div.v-card-img img",
+          "img"
+        ],
+        "type": "attribute",
+        "attribute": [
+          "data-src",
+          "data-lazy",
+          "src"
+        ]
+      }
+    },
+    "crawl": {
+      "delay_before_return_html": 2.0,
+      "page_timeout": 60000
+    }
   }
 ]

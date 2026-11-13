@@ -1,7 +1,7 @@
 {% load insights_ui %}{% for a in ads %}<div class="ad">{% if a.image|safe_url %}<img src="{{ a.image|safe_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="noimg"></div>{% endif %}
   <div><div class="t">{% if a.is_new %}<span class="badge new">NEW</span>{% endif %}{% outlink a.url a.title %}</div>
     <div class="m">{{ a.meta }}</div>
-    <div class="m">{{ a.site }} · first seen {{ a.first_seen|when }} ({{ a.first_seen|ago }}){% if a.times_seen > 1 %} · seen in {{ a.times_seen }} runs{% endif %}</div></div>
+    <div class="m">{{ a.site }} · {{ a.category_name }} · first seen {{ a.first_seen|when }} ({{ a.first_seen|ago }}){% if a.times_seen > 1 %} · seen in {{ a.times_seen }} runs{% endif %}</div></div>
   <div class="p">{% if a.price_lkr %}{{ a.price_lkr|lkr }}{% else %}{{ a.price|default:"–" }}{% endif %}{% if a.was %}<div class="small {% if a.dropped %}up{% else %}down{% endif %}">was {{ a.was|lkr }}</div>{% endif %}</div></div>
 {% empty %}<div class="empty">No ads match these filters.</div>{% endfor %}
 {% if more %}<button class="btn more" type="button" hx-get="{{ more }}" hx-target="this" hx-swap="outerHTML">Load more</button>{% endif %}

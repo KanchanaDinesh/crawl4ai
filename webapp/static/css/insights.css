@@ -31,6 +31,10 @@
 .fchip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .fchip:has(input:checked) small { color: inherit; opacity: .8; }
 .fchip:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+a.fchip { text-decoration: none; }
+.fchip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.fchip.on small { color: inherit; opacity: .8; }
+.vcats { margin: 0 0 10px; }
 .fchip.picked { background: var(--accent-soft); border-color: var(--accent); }
 .fchip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 3px; }
 .pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }

@@ -1,6 +1,10 @@
-"""Scrape the latest vehicle ads from each site in vehicles/config/sites.json (ikman.lk, riyasewana.com, ...).
+"""Scrape the latest vehicle ads from each listing in vehicles/config/sites.json (ikman.lk, riyasewana.com, ...).
 
-Each site in the config describes:
+Each entry in the config is one listing page of a site, and describes:
+  name              the site ("ikman"); a site can have several listings (cars, motorcycles), each its own entry
+  category          what the listing sells: "car" or "motorcycle". Saved with every ad, so cars and bikes
+                    can be told apart (the dashboard and `vehicles show --category` filter on it)
+  output_file       the latest run's JSON in output/ (one per listing)
   item_selector     CSS selector for one ad on the listing page
   exclude_selector  ads to skip (promoted / "top" ads), optional
   fields            name -> {selector, type, attribute?, contains?}
@@ -22,7 +26,7 @@ The browser is a plain headless Chromium: no stealth settings and no "magic" mod
 hide automation from bot detection, which this project doesn't do). Both sites' robots.txt allow
 these pages.
 
-Each site is written to output/vehicles_<site>.json and kept in PostgreSQL (schema vehicles)
+Each listing is written to its output_file (output/vehicles_<site>[_motorcycles].json) and kept in PostgreSQL (schema vehicles)
 (history, price changes: see store.py). If a site yields no ads, its HTML is saved to output/html_dumps/ so the
 selectors can be fixed with `python -m scrapers.inspect_site <dump file> --base "<selector>"`.
 """
@@ -116,6 +120,12 @@ def images_by_slug(html: str, prefix: str) -> dict[str, str]:
     return out
 
 
+def listing_label(site: dict) -> str:
+    """'ikman' for its car listing, 'ikman motorcycle' for another category: for logs and file names."""
+    category = site.get("category")
+    return site["name"] if category in (None, "car") else f"{site['name']} {category}"
+
+
 def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     photos = images_by_slug(html, site["image_by_slug"]) if site.get("image_by_slug") else {}
@@ -137,6 +147,8 @@ def parse_ads(html: str, site: dict, limit: int) -> list[dict]:
             ad["price_lkr"] = parse_price(ad["price"])
         if photos and not ad.get("image"):
             ad["image"] = photos.get(ad["url"].rstrip("/").rsplit("/", 1)[-1])
+        if site.get("category"):
+            ad["category"] = site["category"]
         ads.append(ad)
 
     if site.get("sort"):
@@ -152,18 +164,19 @@ def save_output(report: dict, filename: str) -> Path:
 
 
 def _dump_html(site: dict, html: str) -> str:
-    path = output_path(f"html_dumps/{site['name']}.html")
+    path = output_path(f"html_dumps/{listing_label(site).replace(' ', '_')}.html")
     path.write_text(html, encoding="utf-8")
     return str(path)
 
 
 async def scrape_site(crawler: AsyncWebCrawler, site: dict, limit: int, save_html: bool) -> dict:
-    logger.info("Crawling %s (%s)", site["name"], site["url"])
+    logger.info("Crawling %s (%s)", listing_label(site), site["url"])
     run_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, **site.get("crawl", {}))
     result = await crawler.arun(url=site["url"], config=run_config)
 
     report = {
         "site": site["name"],
+        "category": site.get("category"),
         "source_url": site["url"],
         "fetched_at": now_str(),
         "success": bool(result.success),
@@ -172,7 +185,7 @@ async def scrape_site(crawler: AsyncWebCrawler, site: dict, limit: int, save_htm
     }
     if not result.success:
         report["error"] = result.error_message
-        logger.error("Failed to crawl %s: %s", site["name"], result.error_message)
+        logger.error("Failed to crawl %s: %s", listing_label(site), result.error_message)
         return report
 
     report["ads"] = parse_ads(result.html, site, limit)
@@ -184,7 +197,7 @@ async def scrape_site(crawler: AsyncWebCrawler, site: dict, limit: int, save_htm
             logger.warning(
                 "%s: 0 ads matched '%s'. Page saved to %s. Inspect it with:\n"
                 "  python -m scrapers.inspect_site %s",
-                site["name"], site["item_selector"], dump, dump,
+                listing_label(site), site["item_selector"], dump, dump,
             )
     return report
 
@@ -195,8 +208,8 @@ CLOSE_SECONDS = 15
 
 
 def _failed(site: dict, error: str) -> dict:
-    return {"site": site["name"], "source_url": site["url"], "fetched_at": now_str(), "success": False,
-            "count": 0, "ads": [], "error": error[:400]}
+    return {"site": site["name"], "category": site.get("category"), "source_url": site["url"], "fetched_at": now_str(),
+            "success": False, "count": 0, "ads": [], "error": error[:400]}
 
 
 async def _open(browser: BrowserConfig) -> AsyncWebCrawler:
@@ -231,7 +244,7 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
     crawler = None
     try:
         for site in sites:
-            n = limit or site.get("limit", 10)
+            n = limit or site.get("limit", 100)
             budget = max_seconds or site.get("max_seconds", SITE_SECONDS)
             began = time.monotonic()
             for attempt in (1, 2):
@@ -244,7 +257,7 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
                 except asyncio.TimeoutError:
                     report = _failed(site, f"gave up after {budget:.0f}s: the page didn't finish loading "
                                            "(slow connection, or the site is blocking the browser)")
-                    logger.error("%s: %s", site["name"], report["error"])
+                    logger.error("%s: %s", listing_label(site), report["error"])
                     await _close(crawler)        # the page may still be hanging: start clean for the next site
                     crawler = None
                     break
@@ -257,9 +270,9 @@ async def run(sites: list[dict], limit: int | None, save_html: bool, quiet: bool
                 await _close(crawler)            # Chromium crashed: start a fresh one and retry this site once
                 crawler = None
                 if attempt == 1:
-                    logger.warning("%s: browser closed unexpectedly; restarting it and retrying", site["name"])
+                    logger.warning("%s: browser closed unexpectedly; restarting it and retrying", listing_label(site))
             report["seconds"] = round(time.monotonic() - began, 1)
-            logger.info("%s: %d ads in %.1fs", site["name"], report["count"], report["seconds"])
+            logger.info("%s: %d ads in %.1fs", listing_label(site), report["count"], report["seconds"])
             path = save_output(report, site["output_file"])
             saved = store.save_report(report)
             logger.info("Saved %s (+%d ads in the vehicles database)", path, saved)

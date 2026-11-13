@@ -4,9 +4,11 @@
 {% if not s %}
 <div class="panel"><div class="empty">No vehicle ads yet.<br>Run <code>./run_all.sh vehicles</code> (or <code>uv run python -m vehicles run</code>), then refresh.</div></div>
 {% else %}
+<nav class="fchips vcats" aria-label="Vehicle type">{% for c in categories %}<a class="fchip{% if c.on %} on{% endif %}" href="{{ c.href }}"{% if c.on %} aria-current="page"{% endif %}>{{ c.name }}<small>{{ c.n|num }}</small></a>{% endfor %}</nav>
 {% include "insights/_kpis.html" %}
 <form class="filters" id="filters" method="get" action="{% url 'insights_vehicles' %}" hx-get="{% url 'insights_vehicle_ads' %}" hx-target="#list" hx-sync="this:replace"
       hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+  {% if f.category %}<input type="hidden" name="category" value="{{ f.category }}">{% endif %}
   <select name="days" title="First seen" aria-label="First seen">
     <option value="1"{% if f.days == 1 %} selected{% endif %}>New in the last 24 hours</option><option value="7"{% if f.days == 7 %} selected{% endif %}>Last 7 days</option>
     <option value="30"{% if f.days == 30 %} selected{% endif %}>Last 30 days</option><option value="3650"{% if f.days == 3650 %} selected{% endif %}>All time</option></select>
@@ -20,10 +22,10 @@
     <div class="panel"><h3>New ads per day <small>14 days</small></h3>{% chart day_chart "New ads per day, last 14 days" %}</div>
     <div class="panel"><h3>Price ranges <small>LKR, ads tracked</small></h3>{% include "insights/_bars.html" with rows=prices %}</div>
     <div class="panel"><h3>Makes <small>ads · median price</small></h3>{% include "insights/_bars.html" with rows=makes %}</div>
-    <div class="panel"><h3>Sites</h3><div class="scroll"><table class="plain"><tr><th>Site</th><th class="num">Ads</th><th class="num">New</th><th>Last collected</th></tr>
-      {% for x in sites %}<tr><td>{{ x.site }}</td><td class="num">{{ x.ads }}</td><td class="num">{{ x.new_last_run }}</td><td class="nowrap">{{ x.last_saved|when }}<div class="muted small">{{ x.last_saved|ago }}</div></td></tr>{% endfor %}</table></div></div>
+    <div class="panel"><h3>Sites</h3><div class="scroll"><table class="plain"><tr><th>Site</th><th>Type</th><th class="num">Ads</th><th class="num">New</th><th>Last collected</th></tr>
+      {% for x in sites %}<tr><td>{{ x.site }}</td><td>{{ x.category_name }}</td><td class="num">{{ x.ads }}</td><td class="num">{{ x.new_last_run }}</td><td class="nowrap">{{ x.last_saved|when }}<div class="muted small">{{ x.last_saved|ago }}</div></td></tr>{% endfor %}</table></div></div>
     <div class="panel"><h3>Price changes</h3>
-      {% for x in changes %}<div class="news-item"><div>{% outlink x.url x.title %}</div><div class="meta"><span class="{% if x.down %}up{% else %}down{% endif %}">{% if x.down %}▼{% else %}▲{% endif %} {{ x.previous_price_lkr|lkr }} → {{ x.price_lkr|lkr }}</span> · {{ x.site }} · {{ x.changed_at|ago }}</div></div>
+      {% for x in changes %}<div class="news-item"><div>{% outlink x.url x.title %}</div><div class="meta"><span class="{% if x.down %}up{% else %}down{% endif %}">{% if x.down %}▼{% else %}▲{% endif %} {{ x.previous_price_lkr|lkr }} → {{ x.price_lkr|lkr }}</span> · {{ x.site }}{% if x.category and x.category != "car" %} · {{ x.category }}{% endif %} · {{ x.changed_at|ago }}</div></div>
       {% empty %}<div class="muted small">No price changes seen yet. They appear when an ad is seen again at a different price.</div>{% endfor %}</div>
   </aside>
 </div>

@@ -419,13 +419,26 @@ def markets_performance(con) -> list[dict]:
 
 
 # ── vehicles: PostgreSQL, schema vehicles ─────────────────────────────────
+# Every ad has a category (car, motorcycle; older ikman ads also three-wheeler, van, ...). "New in the last run" is
+# per listing, a site and category together, because ikman's cars and bikes are read one after the other.
+VEHICLE_CATEGORIES = {"car": "Cars", "motorcycle": "Motorcycles", "three-wheeler": "Three-wheelers", "van": "Vans",
+                      "lorry": "Lorries", "bus": "Buses", "bicycle": "Bicycles", "other": "Other"}
 VEHICLE_BASE = """
-    with site_last as (select site, max(saved_at) as last_saved from vehicles.v_vehicle_ads group by site),
+    with site_last as (select site, category, max(saved_at) as last_saved from vehicles.v_vehicle_ads group by 1, 2),
          changes as (select distinct on (url) url, price_lkr as new_price, previous_price_lkr, saved_at as changed_at
                      from vehicles.v_vehicle_price_changes order by url, saved_at desc)
     select l.*, l.first_seen >= s.last_saved as is_new, c.previous_price_lkr, c.changed_at
-    from vehicles.v_vehicle_ads_latest l join site_last s using (site) left join changes c using (url)
+    from vehicles.v_vehicle_ads_latest l
+    join site_last s on s.site = l.site and s.category is not distinct from l.category
+    left join changes c using (url)
 """
+# Price bands in LKR: a motorcycle costs about a tenth of a car, so it gets its own bands
+PRICE_BANDS = {
+    "car": ((1_000_000, "under 1M"), (3_000_000, "1M - 3M"), (6_000_000, "3M - 6M"), (10_000_000, "6M - 10M"),
+            (20_000_000, "10M - 20M"), (None, "20M and more")),
+    "motorcycle": ((250_000, "under 250K"), (500_000, "250K - 500K"), (1_000_000, "500K - 1M"),
+                   (2_000_000, "1M - 2M"), (None, "2M and more")),
+}
 
 
 def _median(col: str, where: str = "") -> str:
@@ -434,45 +447,61 @@ def _median(col: str, where: str = "") -> str:
     return f"round(percentile_cont(0.5) within group (order by {col}){filt})::bigint"
 
 
-def vehicles_summary(con, days: int = 7) -> dict:
+def _category(category, alias: str = "") -> tuple[str, list]:
+    """' and category = %s' with its parameter, or nothing for every category."""
+    return (f" and {alias}category = %s", [category]) if category else ("", [])
+
+
+def _bands(category) -> str:
+    cases = " ".join(f"when price_lkr < {int(top)} then '{label}'" for top, label in PRICE_BANDS.get(category, PRICE_BANDS["car"])
+                     if top)
+    return f"case {cases} else '{PRICE_BANDS.get(category, PRICE_BANDS['car'])[-1][1]}' end"
+
+
+def vehicles_summary(con, days: int = 7, category: str | None = None) -> dict:
+    """The tab's numbers and charts, for one category or all of them."""
+    cat, p = _category(category)
     counts = one(con, f"""select count(*) as ads,
             count(*) filter (where is_new) as new_last_run,
             count(*) filter (where first_seen >= {_since(1)}) as new_24h,
             count(*) filter (where previous_price_lkr is not null and price_lkr < previous_price_lkr
                              and changed_at >= {_since(days)}) as price_drops,
             {_median('price_lkr')} as median_price
-        from ({VEHICLE_BASE}) b""")
-    sites = rows(con, f"""select site, count(*) as ads, count(*) filter (where is_new) as new_last_run,
-            {_pg_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) b group by site order by site""")
+        from ({VEHICLE_BASE}) b where true{cat}""", p)
+    sites = rows(con, f"""select site, category, count(*) as ads, count(*) filter (where is_new) as new_last_run,
+            {_pg_ts('max(saved_at)')} as last_saved from ({VEHICLE_BASE}) b where true{cat}
+        group by site, category order by site, category""", p)
+    # Every category, whichever is chosen: the switch between them shows these counts
+    categories = rows(con, f"""select category, count(*) as ads, {_median('price_lkr', 'price_lkr >= 50000')} as median_price
+        from vehicles.v_vehicle_ads_latest group by 1 order by 2 desc, 1""")
     per_day = rows(con, f"""select {_day('first_seen')} as day, count(*) as n
-        from vehicles.v_vehicle_ads_latest where first_seen >= {_since(14)} group by 1 order by 1""")
-    price_ranges = rows(con, """select case
-                when price_lkr < 1000000 then 'under 1M' when price_lkr < 3000000 then '1M - 3M'
-                when price_lkr < 6000000 then '3M - 6M' when price_lkr < 10000000 then '6M - 10M'
-                when price_lkr < 20000000 then '10M - 20M' else '20M and more' end as range,
-            min(price_lkr) as lo, count(*) as n
-        from vehicles.v_vehicle_ads_latest where price_lkr >= 50000 group by 1 order by lo""")
+        from vehicles.v_vehicle_ads_latest where first_seen >= {_since(14)}{cat} group by 1 order by 1""", p)
+    price_ranges = rows(con, f"""select {_bands(category)} as range, min(price_lkr) as lo, count(*) as n
+        from vehicles.v_vehicle_ads_latest where price_lkr >= 50000{cat} group by 1 order by lo""", p)
     # The make is the first word of the title ("Toyota Axio 2016" -> Toyota); prices above 50,000 only
     # (smaller numbers are rents or monthly payments)
     makes = rows(con, f"""select lower(split_part(trim(title), ' ', 1)) as make, count(*) as n,
             {_median('price_lkr', 'price_lkr >= 50000')} as median_price
-        from vehicles.v_vehicle_ads_latest where title is not null group by 1 order by 2 desc, 1 limit 12""")
+        from vehicles.v_vehicle_ads_latest where title is not null{cat} group by 1 order by 2 desc, 1 limit 12""", p)
     for r in makes:
         r["make"] = r["make"].capitalize() if r["make"] and r["make"].isalpha() and len(r["make"]) > 3 else (r["make"] or "").upper()
-    return {"counts": counts, "sites": sites, "by_day": per_day, "price_ranges": price_ranges, "makes": makes}
+    return {"counts": counts, "sites": sites, "categories": categories, "by_day": per_day, "price_ranges": price_ranges,
+            "makes": makes}
 
 
-def vehicle_ads(con, *, site=None, q=None, new=False, days=30, limit=100, offset=0) -> dict:
+def vehicle_ads(con, *, site=None, category=None, q=None, new=False, days=30, limit=100, offset=0) -> dict:
     where, params = [f"first_seen >= {_since(days)}"], []
     if site:
         where.append("site = %s"); params.append(site)
+    if category:
+        where.append("category = %s"); params.append(category)
     if new:
         where.append("is_new")
     if q:
         where.append("(title ilike %s or coalesce(location, '') ilike %s)"); params += [_like(q)] * 2
     cond = " and ".join(where)
     total = con.execute(f"select count(*) from ({VEHICLE_BASE}) b where {cond}", params).fetchone()[0]
-    items = rows(con, f"""select site, title, url, price, price_lkr, previous_price_lkr, location, year, mileage, posted,
+    items = rows(con, f"""select site, category, title, url, price, price_lkr, previous_price_lkr, location, year, mileage, posted,
             image, times_seen, is_new, {_pg_ts('first_seen')} as first_seen, {_pg_ts('saved_at')} as last_seen,
             {_pg_ts('changed_at')} as changed_at
         from ({VEHICLE_BASE}) b where {cond} order by b.first_seen desc, b.rank nulls last, b.url
@@ -480,10 +509,11 @@ def vehicle_ads(con, *, site=None, q=None, new=False, days=30, limit=100, offset
     return {"total": total, "items": items}
 
 
-def vehicle_price_changes(con, days: int = 30, limit: int = 30) -> list[dict]:
-    return rows(con, f"""select site, title, url, previous_price_lkr, price_lkr, {_pg_ts('saved_at')} as changed_at
-        from vehicles.v_vehicle_price_changes where saved_at >= {_since(days)}
-        order by v_vehicle_price_changes.saved_at desc limit {int(limit)}""")
+def vehicle_price_changes(con, days: int = 30, limit: int = 30, category: str | None = None) -> list[dict]:
+    cat, p = _category(category)
+    return rows(con, f"""select site, category, title, url, previous_price_lkr, price_lkr, {_pg_ts('saved_at')} as changed_at
+        from vehicles.v_vehicle_price_changes where saved_at >= {_since(days)}{cat}
+        order by v_vehicle_price_changes.saved_at desc limit {int(limit)}""", p)
 
 
 # ── companies (python -m companies): PostgreSQL, schema companies ────────────

@@ -9,14 +9,14 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
   profiled and monitored.
 - **World news:** the latest headlines from about 80 news sites.
 - **Markets:** CSE and US stocks, indices, gold and silver, FX, and the crypto top 100.
-- **Vehicles:** the latest ads from ikman.lk and riyasewana.com.
+- **Vehicles:** the latest car and motorcycle ads from ikman.lk and riyasewana.com.
 - **Companies:** a directory of companies of every kind (US, UK, AU, IN, LK first, then the world) from open data,
   plus what each company's own website says (social links, people, employees, contacts).
 
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-698 tests: 695 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+706 tests: 703 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -30,7 +30,7 @@ Run every command from the project folder, after `source env.sh`.
 | Annual reports | `uv run python -m annualreports run [--file X.pdf] [--dry-run] [--again]`, `show [--id N]`, `stats`, `search WORDS`, `link` | New 2026-11-13. Page at http://localhost:8060/annual-reports/. Every PDF in `Anual reports/` (git-ignored) read completely: page text, sections, tables as rows and cells, key figures, directors; linked to `companies` / CSE shares by exact name. Offline, OCR with Tesseract. **PostgreSQL** (schema `annualreports`). run_all step `annualreports` |
 | Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
-| Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
+| Vehicles | `uv run python -m vehicles run [--category motorcycle]`, `show [--category car\|motorcycle] [--new] [--search X]`, `changes`, `sites` | Working, cars and motorcycles (item 68): Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
 | Companies | `uv run python -m companies collect [--max-minutes 5] [--country LK]`, `update`, `show`, `stats`, `sources` | New 2026-11-05. Sources on: Wikidata, GLEIF, CSE; off: Companies House (UK), ASIC (AU, manual download), SEC (needs a contact email). **PostgreSQL** (schema `companies`, since 2026-11-06). run_all steps `companies_collect`, `companies_update` |
 | Sri Lankan news | `uv run python -m scrapers.news` (step `lknews`) | Working. The original scraper |
 | Web app (new) | `./dashboard.sh` (start in the background and open; `stop`, `status`, `help`), or `uv run python -m webapp runserver 8060` → http://localhost:8060; `migrate`, `createadmin`, `catalog_scan`, `starter_charts` | The user platform, phases 1-7: sign-in, users, roles, menu rights, audit log, automatic catalog, every dataset in the grid with filters, saved views and CSV/Excel, the dashboard, correcting companies and vehicle ads (history, rule A, hide), own tables, own fields, links, lookups, rollups and imports, charts, dashboards and PDF reports, and the AI assistant (needs an API key). Django; schema `app`. The server restarts by itself after a code change |
@@ -608,6 +608,25 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       read as text in both places, with a test.
     - **Decision (Kanchana, 2026-11-13): the PDFs stay offline.** Their text is never sent to the Claude API or any other service, not even
       for better extraction. Don't add it unless Kanchana asks again.
+
+68. **Motorcycles in vehicles (Kanchana, 2026-11-13).** `vehicles/config/sites.json` has two listings per site, each with a `category`:
+    ikman cars + `motorbikes-scooters`, riyasewana `search/cars` + `search/motorcycles`. Both robots.txt allow the bike pages; their
+    cards are laid out like the car pages (ikman 26 ads a page, riyasewana 44), so the same selectors work, `image_by_slug` included.
+    - Every ad and run row has a `category` (`vehicles.ads`, `vehicles.runs`, the three views; `vehicles/store.py`). Ads saved before got
+      one from `warehouse/schema/vehicles.sql`: riyasewana's are cars; ikman read its mixed "vehicles" page until 2026-11-12, and each ad's
+      location ends with ikman's own category, so those are car, motorcycle, three-wheeler, van, lorry, bus, bicycle or other.
+    - Dashboard, Vehicles tab: a switch at the top (All vehicles, Cars, Motorcycles, ...) that the numbers, charts and list all follow,
+      with bike price bands (under 250K to 2M and more); each ad and the Sites table show the type. "New in last run" is now per listing
+      (site + category), since ikman's bikes are read after its cars. CLI: `--category` on `run`, `show`, `changes`; `sites` shows it.
+      Each listing has its own JSON (`output/vehicles_<site>_motorcycles.json`) and log line (`ikman motorcycle: 10 ads in 2.9s`).
+    - Kanchana's own uncommitted edits went in with this: ikman's car listing is `/cars` (was the mixed `/vehicles`), `sites.json`'s
+      longer layout, and `scrape.py`'s default limit 100 (only used by a listing with no `limit`; all four have 10).
+      `automation.conf` (`VEHICLES_ARGS="--limit 120"`) was left uncommitted.
+    - Real run on the Mac after a backup (`data/backups/crawl4ai-20261113-221828.dump`): 40 ads in 13 s, 10 per listing. Now 83
+      motorcycles (73 ikman with the older ones, 10 riyasewana; median Rs 246,700) and 1,002 cars; no row without a category.
+      `catalog_scan` run, so the grid's Vehicle ads have a Category column. The tab checked in the browser on the real data.
+    - Not changed: the briefing and the starter charts still count every vehicle together; riyasewana's location stays inside
+      `mileage` ("Matara · 6,430 km"), as for cars.
 
 ## Open issues and things to watch
 
