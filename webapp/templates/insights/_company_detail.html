@@ -1,6 +1,7 @@
 {% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
 {% if not c %}<div class="muted">Not found.</div>{% else %}
 <h2>{{ c.name }}</h2>
+{% if c.original_name %}<div class="muted">{{ c.original_name }} <span class="small">· the name as registered</span></div>{% endif %}
 <div>{% if c.website %}{% outlink c.website %}{% endif %} {{ status|pill }}</div>
 <h4>Details</h4><div class="kv">
   <div>Country</div><div>{{ c.country_name|default:c.country|default:"—" }}</div>

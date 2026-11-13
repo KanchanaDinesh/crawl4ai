@@ -8,7 +8,11 @@
     refusals    websites that refused us (401/403/429): not results, only "don't ask again before ..."
     cursors     where each source stopped, per country (collect continues there on the next run)
     runs        one row per collect / update run, with its summary
-    v_companies companies with their site check (status, social links, people, employees)
+    v_companies companies with their site check (status, social links, people, employees), and name_en: the name in
+                English letters (the name itself, or the English name the source gives), null when none is known
+    name_script, english_name   set by PostgreSQL (a trigger) from name and extra: which letters the name is written
+                in (null = Latin; mixed, other, none), and the English or Latin name a source gives when it isn't Latin.
+                The dashboard hides companies with neither unless asked; nothing is deleted.
 
 Moved from DuckDB (data/companies/companies.duckdb) on 2026-11-06: in PostgreSQL the dashboard and anyone else
 can read while collect/update write. Every save is its own short transaction, so nothing is locked for long.
@@ -85,7 +89,8 @@ class CompanyStore:
             added = con.execute("""select count(*) from staged s
                                    where not exists (select 1 from companies.companies c where c.id = s.id)""").fetchone()[0]
             con.execute("""
-                insert into companies.companies as c
+                insert into companies.companies as c (id, source, source_id, name, country, website, domain, industry,
+                                                      extra, first_seen, last_seen)
                 select id, source, source_id, name, country, website, domain, industry, extra,
                        %(seen)s::timestamptz, %(seen)s::timestamptz
                 from staged

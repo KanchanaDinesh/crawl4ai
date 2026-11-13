@@ -5,6 +5,8 @@
 <div class="panel"><div class="empty">No companies yet.<br>Run <code>uv run python -m companies collect --max-minutes 5</code>, then refresh this page.</div></div>
 {% else %}
 {% include "insights/_kpis.html" %}
+{% if other_scripts or f.names %}<p class="muted small names-switch"><a href="{{ names_switch }}" role="switch" aria-checked="{% if f.names %}true{% else %}false{% endif %}">{% if f.names %}☑{% else %}☐{% endif %} Show names in other scripts</a>
+  · {{ other_scripts|num }} {% if f.names %}companies whose name is only in another script (Chinese, Cyrillic, Arabic, …) are included{% else %}companies whose name is only in another script (Chinese, Cyrillic, Arabic, …) are hidden: not deleted, and still in Datasets → Companies{% endif %}{% if english_given %}. {{ english_given|num }} more are shown by the English name their source gives{% endif %}.</p>{% endif %}
 <form class="filters" id="filters" method="get" action="{% url 'insights_companies' %}" hx-get="{% url 'insights_company_rows' %}" hx-target="#list" hx-sync="this:replace"
       hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
   <select name="country" title="Country" aria-label="Country"><option value="">All countries ({{ total|num }})</option>{% for r in countries %}<option value="{{ r.country }}"{% if r.country == f.country %} selected{% endif %}>{{ r.name }} · {{ r.n|num }}</option>{% endfor %}</select>
@@ -13,6 +15,7 @@
     {% for v, l in status_choices %}<option value="{{ v }}"{% if v == f.status %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
   <select name="sort" title="Sort" aria-label="Sort"><option value="">Websites read first</option>
     <option value="name"{% if f.sort == "name" %} selected{% endif %}>Name</option><option value="newest"{% if f.sort == "newest" %} selected{% endif %}>Newest added</option><option value="country"{% if f.sort == "country" %} selected{% endif %}>Country</option></select>
+  {% if f.names %}<input type="hidden" name="names" value="all">{% endif %}
   <input type="search" name="q" value="{{ f.q }}" placeholder="Search name, website, industry…" aria-label="Search companies">
 </form>
 <div class="chartgrid">

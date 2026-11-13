@@ -524,8 +524,15 @@ COMPANY_FILTERS = {
     "social": "social is not null and social <> '{}'::jsonb", "linkedin": "linkedin is not null",
     "people": "people > 0", "employees": "employees is not null",
 }
-COMPANY_SORT = {"best": "(website is null), (site_status <> 'ok'), name", "name": "name",
-                "newest": "first_seen desc, name", "country": "country nulls last, name"}
+SHOWN_NAME = "coalesce(name_en, name)"         # the name in English letters when there is one, else the name as given
+COMPANY_SORT = {"best": f"(website is null), (site_status <> 'ok'), {SHOWN_NAME}", "name": SHOWN_NAME,
+                "newest": f"first_seen desc, {SHOWN_NAME}", "country": f"country nulls last, {SHOWN_NAME}"}
+
+
+def _names(everything: bool) -> str:
+    """Companies whose name is only in another script (Chinese, Cyrillic, Arabic, ...) are left out unless `everything`:
+    Kanchana asked for English names only. They stay in the database and in the grid (Datasets → Companies)."""
+    return "true" if everything else "name_en is not null"
 
 
 def _json(value, empty):
@@ -543,34 +550,40 @@ def _country_names() -> dict:
         return {}
 
 
-def companies_summary(con) -> dict:
+def companies_summary(con, everything: bool = False) -> dict:
+    """Counts for the Companies tab. They follow the tab's switch: without `everything`, companies with no name in
+    English letters aren't counted, so the numbers match the list; `other_scripts` says how many that leaves out."""
     names = _country_names()
-    counts = one(con, f"""select count(*) as companies, count(website) as with_website,
-        count(distinct domain) as websites, count(distinct country) as countries, count(distinct source) as sources,
-        count(*) filter (where first_seen >= now() - interval '1 day') as new_24h,
-        {_pg_ts('max(first_seen)')} as last_added from companies.v_companies""")
+    shown = _names(everything)
+    counts = one(con, f"""select count(*) filter (where {shown}) as companies, count(website) filter (where {shown}) as with_website,
+        count(distinct domain) filter (where {shown}) as websites, count(distinct country) filter (where {shown}) as countries,
+        count(distinct source) filter (where {shown}) as sources,
+        count(*) filter (where {shown} and first_seen >= now() - interval '1 day') as new_24h,
+        count(*) filter (where name_en is null) as other_scripts,
+        count(*) filter (where name_en is not null and name_script in ('mixed', 'other')) as english_given,
+        {_pg_ts(f'max(first_seen) filter (where {shown})')} as last_added from companies.v_companies""")
     counts.update(one(con, """select count(*) filter (where status = 'ok') as sites_ok, count(*) as sites_checked,
         count(*) filter (where status = 'ok' and social is not null and social <> '{}'::jsonb) as sites_with_social,
         count(*) filter (where status = 'ok' and jsonb_typeof(people) = 'array' and jsonb_array_length(people) > 0)
             as sites_with_people
         from companies.sites"""))
     counts["refusals"] = one(con, "select count(*) as n from companies.refusals")["n"]
-    by_country = rows(con, """select country, count(*) as n, count(website) as with_website,
-        count(*) filter (where site_status = 'ok') as sites_ok from companies.v_companies
+    by_country = rows(con, f"""select country, count(*) as n, count(website) as with_website,
+        count(*) filter (where site_status = 'ok') as sites_ok from companies.v_companies where {shown}
         group by 1 order by n desc, country""")
     for r in by_country:
         r["name"] = names.get(r["country"] or "", r["country"] or "unknown")
     by_source = rows(con, f"""select source, count(*) as n, count(website) as with_website,
         count(distinct country) as countries, {_pg_ts('max(last_seen)')} as last_seen from companies.v_companies
-        group by 1 order by n desc""")
-    by_status = rows(con, """select site_status as status, count(*) as n from companies.v_companies
-        group by 1 order by n desc""")
+        where {shown} group by 1 order by n desc""")
+    by_status = rows(con, f"""select site_status as status, count(*) as n from companies.v_companies
+        where {shown} group by 1 order by n desc""")
     social = rows(con, """select k as platform, count(*) as n from companies.sites, jsonb_object_keys(social) k
         where status = 'ok' and jsonb_typeof(social) = 'object' group by 1 order by n desc, k""")
-    by_day = rows(con, """select to_char(first_seen at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n,
+    by_day = rows(con, f"""select to_char(first_seen at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n,
         count(website) as with_website
-        from companies.v_companies where first_seen >= current_date - interval '14 days' group by 1 order by 1""")
-    industries = rows(con, """select industry, count(*) as n from companies.v_companies where industry is not null
+        from companies.v_companies where first_seen >= current_date - interval '14 days' and {shown} group by 1 order by 1""")
+    industries = rows(con, f"""select industry, count(*) as n from companies.v_companies where industry is not null and {shown}
         group by 1 order by n desc, industry limit 15""")
     runs = rows(con, f"""select command, {_pg_ts('started_at')} as started_at, seconds, summary from companies.runs
         order by runs.started_at desc limit 10""")
@@ -589,8 +602,12 @@ def companies_summary(con) -> dict:
             "social": social, "by_day": by_day, "industries": industries, "runs": runs, "progress": progress}
 
 
-def companies_list(con, *, country=None, source=None, status=None, q=None, sort="best", limit=100, offset=0) -> dict:
-    where, params = ["true"], []
+def companies_list(con, *, country=None, source=None, status=None, q=None, sort="best", limit=100, offset=0,
+                   everything: bool = False) -> dict:
+    """A page of companies. `name` is the name in English letters when one is known (the source's English name for
+    "国泰金融控股股份有限公司" is "CATHAY FINANCIAL HOLDING CO., LTD."), and `original_name` the name as the source
+    gives it when that's different. Names only in another script are left out unless `everything`."""
+    where, params = [_names(everything)], []
     if country:
         where.append("country = %s")
         params.append(country)
@@ -600,12 +617,12 @@ def companies_list(con, *, country=None, source=None, status=None, q=None, sort=
     if status in COMPANY_FILTERS:
         where.append(COMPANY_FILTERS[status])
     if q:
-        where.append("(lower(name) like %s or domain ilike %s or industry ilike %s)")
+        where.append("(lower(name) like %s or lower(name_en) like %s or domain ilike %s or industry ilike %s)")
         like = "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        params += [like] * 3
+        params += [like] * 4
     base = f"from companies.v_companies where {' and '.join(where)}"
     total = con.execute(f"select count(*) {base}", params).fetchone()[0]
-    items = rows(con, f"""select id, source, name, country, website, domain, industry, site_status, social::text as social,
+    items = rows(con, f"""select id, source, {SHOWN_NAME} as name, nullif(name, {SHOWN_NAME}) as original_name, country, website, domain, industry, site_status, social::text as social,
         people, employees, {_pg_ts('first_seen')} as first_seen, {_pg_ts('checked_at')} as checked_at
         {base} order by {COMPANY_SORT.get(sort, COMPANY_SORT['best'])}, id limit {int(limit)} offset {int(offset)}""",
                  params)
@@ -616,7 +633,8 @@ def companies_list(con, *, country=None, source=None, status=None, q=None, sort=
 
 
 def company_detail(con, company_id: str) -> dict:
-    c = one(con, f"""select id, source, source_id, name, country, website, domain, industry, extra,
+    c = one(con, f"""select id, source, source_id, coalesce(english_name, name) as name, case when english_name is not null then name end as original_name,
+        country, website, domain, industry, extra,
         {_pg_ts('first_seen')} as first_seen, {_pg_ts('last_seen')} as last_seen
         from companies.companies c where id = %s
           and exists (select 1 from companies.v_companies v where v.id = c.id)""", [company_id])
@@ -635,6 +653,6 @@ def company_detail(con, company_id: str) -> dict:
         refusal = one(con, f"""select {_pg_ts('refused_at')} as refused_at, error from companies.refusals
             where domain = %s""", [c["domain"]])
         c["refusal"] = refusal or None
-    same = rows(con, """select id, source, name, country from companies.v_companies where domain = %s and id <> %s
+    same = rows(con, f"""select id, source, {SHOWN_NAME} as name, country from companies.v_companies where domain = %s and id <> %s
         order by source, id limit 20""", [c["domain"], c["id"]]) if c["domain"] else []
     return {"company": c, "site": site, "same_website": same}

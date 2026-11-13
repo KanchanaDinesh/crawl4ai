@@ -15,12 +15,27 @@ cd /Volumes/MAC-DISK2/crawl4ai && source env.sh
 uv run python -m companies collect --max-minutes 5      # add companies (resumable)
 uv run python -m companies update --max-minutes 10      # read company websites
 uv run python -m companies stats                        # counts per country and source
-uv run python -m companies show --country LK --search bank
+uv run python -m companies show --country LK --search bank     # --all-names: also names only in another script
+uv run python -m companies names                        # English names from GLEIF for names in other scripts
 uv run python -m companies sources                      # which sources are on, where each stopped
 ```
 
 Both are steps of `./run_all.sh` (`companies_collect`, `companies_update`, in the default STEPS). Options in
 `automation.conf`: `COMPANIES_COLLECT_ARGS`, `COMPANIES_UPDATE_ARGS`. The dashboard has a **Companies** tab.
+
+## Names in other scripts
+
+Many sources give a name in the country's own script (国泰金融控股股份有限公司, Кургандормаш, ...). Kanchana wants
+English names only on the dashboard, and nothing deleted, so:
+
+- PostgreSQL works out which letters each name is written in (`companies.name_script()`, kept in the column
+  `name_script` by a trigger: empty = Latin letters, accents included; `mixed`, `other`, `none` = no letters).
+- GLEIF often gives an English name or the company's own Latin spelling: `collect` saves them in `extra`
+  (`english_name`, `latin_name`), and the column `english_name` holds the one to show. `companies names` asks GLEIF
+  again for companies saved before this (2026-11-13: 9,538 of 10,800 got one). Machine transliterations aren't used.
+- The Companies tab shows the English name, and leaves out companies with no name in Latin letters (1,262), unless
+  "Show names in other scripts" is ticked. The numbers and charts follow the switch. `v_companies.name_en` is empty
+  for them, so the grid (Datasets → Companies) can filter on "Name in English" too; it still shows every company.
 
 ## Sources
 
@@ -83,7 +98,7 @@ The dashboard and anyone with the read-only login can read while collect and upd
 | `refusals` | websites that refused us, and when |
 | `cursors` | where each source stopped, per country |
 | `runs` | every collect/update run with its summary |
-| `v_companies` | companies joined with their website check |
+| `v_companies` | companies joined with their website check, with `name_script` and `name_en` (the name in English letters, empty when none is known) |
 
 ```bash
 uv run python -m warehouse sql "select country, count(*), count(website) from companies.companies group by 1 order by 2 desc"

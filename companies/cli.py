@@ -4,8 +4,10 @@
              add companies (name, website, country) from open data; continues where the last run stopped
     update   [--max-minutes 10] [--limit 200] [--country LK] [--domain keells.com]
              read company websites (homepage, about, team, contact): social links, people, employees, contacts
-    show     [--country LK] [--search bank] [--source cse] [--limit 20]
-             companies in the database
+    show     [--country LK] [--search bank] [--source cse] [--limit 20] [--all-names]
+             companies in the database (names in English letters only, unless --all-names)
+    names    [--max-minutes 5] [--limit N]
+             English names for GLEIF companies saved with a name in another script (asks GLEIF again; safe to repeat)
     stats    counts by country, source and website status
     sources  the sources, whether they're on, and where each one stopped
 
@@ -63,6 +65,24 @@ def cmd_update(args, settings) -> None:
         print(f"  {s['left_for_next_run']} left for the next run (time limit)")
 
 
+def cmd_names(args, settings) -> None:
+    from .sources.gleif import fill_english_names
+    from .store import CompanyStore
+    store = CompanyStore()
+    try:
+        s = asyncio.run(fill_english_names(settings, store, args.max_minutes, args.limit))
+        hidden = store.count("name_script in ('mixed', 'other') and english_name is null")
+    finally:
+        store.close()
+    print(f"\nAsked GLEIF about {s['asked']:,} companies in {s['requests']} requests: {s['found']:,} have an English "
+          f"or Latin name now.")
+    if s["refused"] or s["error"]:
+        print(f"  Stopped: {s['refused'] or s['error']}. Run the same command later to continue.")
+    elif s["left"]:
+        print(f"  {s['left']:,} left (time limit): run the same command again to continue.")
+    print(f"  Names still only in another script (hidden on the dashboard unless switched on): {hidden:,}")
+
+
 def _db():
     """PostgreSQL, read-only login (works while collect/update are running)."""
     from warehouse.postgres import DatabaseError, connect
@@ -82,7 +102,8 @@ def cmd_show(args, settings) -> None:
     con = _db()
     try:
         country = (_countries([args.country] if args.country else None) or [None])[0]
-        data = queries.companies_list(con, country=country, source=args.source, q=args.search, limit=args.limit)
+        data = queries.companies_list(con, country=country, source=args.source, q=args.search, limit=args.limit,
+                                      everything=args.all_names)
     finally:
         con.close()
     for c in data["items"]:
@@ -96,12 +117,14 @@ def cmd_stats(args, settings) -> None:
     from webapp.insights import queries
     con = _db()
     try:
-        s = queries.companies_summary(con)
+        s = queries.companies_summary(con, everything=True)
     finally:
         con.close()
     c = s["counts"]
     print(f"{c['companies']:,} companies, {c['with_website']:,} with a website, {c['sites_ok']:,} websites read, "
           f"{c['countries']} countries")
+    print(f"Names only in another script (hidden on the dashboard unless switched on): {c['other_scripts']:,}; "
+          f"shown by the English name their source gives: {c['english_given']:,}")
     print("\nBy country (top 15):")
     for r in s["by_country"][:15]:
         print(f"  {r['country'] or '--':<4} {r['name'] or '':<26} {r['n']:>9,}  ({r['with_website']:,} with a website)")
@@ -157,6 +180,11 @@ def main(argv=None) -> None:
     s.add_argument("--source")
     s.add_argument("--search")
     s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--all-names", action="store_true", help="Also companies whose name is only in another script")
+
+    n = sub.add_parser("names", help="English names for GLEIF companies whose name is in another script")
+    n.add_argument("--max-minutes", type=float, default=5, help="Start no new request after this long (default 5)")
+    n.add_argument("--limit", type=int, help="At most this many companies")
 
     sub.add_parser("stats", help="counts by country, source and website status")
     sub.add_parser("sources", help="sources and where each one stopped")
@@ -168,7 +196,7 @@ def main(argv=None) -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
     settings = load_settings(args.config)
     try:
-        {"collect": cmd_collect, "update": cmd_update, "show": cmd_show, "stats": cmd_stats,
+        {"collect": cmd_collect, "update": cmd_update, "show": cmd_show, "names": cmd_names, "stats": cmd_stats,
          "sources": cmd_sources}[args.command](args, settings)
     except KeyboardInterrupt:
         print("\nStopped. What was found is saved; the next run continues where this one stopped.")

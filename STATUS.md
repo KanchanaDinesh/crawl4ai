@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-707 tests: 704 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+713 tests: 710 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -632,6 +632,25 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       `catalog_scan` run, so the grid's Vehicle ads have a Category column. The tab checked in the browser on the real data.
     - Not changed: the briefing and the starter charts still count every vehicle together; riyasewana's location stays inside
       `mileage` ("Matara · 6,430 km"), as for cars.
+
+69. **Companies: English names only on the dashboard (Kanchana, 2026-11-13).** Names in Chinese, Japanese, Korean, Cyrillic,
+    Arabic, Hebrew, Greek, Thai, ... are left out of the Companies tab, never deleted. Details: `companies/README.md` → "Names in other scripts".
+    - **Real data:** of 622,264 companies, 10,800 names aren't in Latin letters (GLEIF 10,783, Wikidata 17): Cyrillic 2,658, Chinese
+      2,487, Arabic 1,344, Korean 857, Hebrew 783, Thai 775, Greek 634, ... (BG, CN, RU, GR, JP, KR, TH, IL, TW, AE most).
+      Accented Latin (Nestlé, Société Générale, ÇELİK: 12,765 names) counts as English letters and stays. A name with both
+      ("SAS Institute Japan株式会社", 776) is "mixed" and counts as not English, unless the other letters are at most 1 in 10
+      (a stray Cyrillic "А" in a Latin name).
+    - **English names instead of hiding:** Wikidata already gives English labels only (its 17 are labels in the local script).
+      GLEIF gives an English name or the company's own Latin spelling for most: `collect` now saves them, and the new
+      `uv run python -m companies names` asked GLEIF again for the 10,783 saved before (54 requests, ~1 minute): **9,538 are now
+      shown by their English name** (国泰金融控股股份有限公司 → CATHAY FINANCIAL HOLDING CO., LTD.), **1,262 are hidden** (CN 717,
+      RU 133, TW 70, ...). The original name is in the details panel ("the name as registered").
+    - How: `companies.name_script()` in SQL; columns `name_script` and `english_name` kept by a trigger (plain columns, not
+      generated ones: those would rewrite the whole 272 MB table, too much for the Mac's 1 GB free); `v_companies.name_en`.
+    - The tab: a switch "Show names in other scripts" (off by default, `?names=all`); **the numbers and charts follow it**, so they
+      match the list, and a line says how many are hidden. `companies show` hides them too (`--all-names`); `companies stats` counts all.
+    - The grid (Datasets → Companies) still shows every company, with new columns "Name script" and "Name in English" to filter on.
+    - Migrated on the Mac after a backup (`data/backups/crawl4ai-20261113-232943.dump`); catalog scanned; checked in the browser.
 
 ## Open issues and things to watch
 

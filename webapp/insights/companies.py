@@ -15,7 +15,8 @@ EXTRA_LABEL = {"type": "Type (Wikidata)", "wikidata": "Wikidata", "city": "City"
                "jurisdiction": "Jurisdiction", "created": "Created", "symbol": "CSE symbol", "established": "Established", "board": "Board",
                "address": "Registered office", "business": "Business", "status": "Status", "category": "Category", "incorporated": "Incorporated",
                "town": "Town", "postcode": "Postcode", "companies_house": "Companies House", "abn": "ABN", "company_class": "Class",
-               "registered": "Registered", "state": "State", "ticker": "Ticker", "edgar": "SEC EDGAR"}
+               "registered": "Registered", "state": "State", "ticker": "Ticker", "edgar": "SEC EDGAR",
+               "english_name": "Name in English", "latin_name": "Name in Latin letters"}
 
 
 STATUS_CHOICES = (("website", "Has a website"), ("read", "Website read"), ("not_read", "Website not read yet"), ("failed", "Website couldn't be read"),
@@ -28,15 +29,17 @@ def source_name(code) -> str:
 
 
 def _filters(request) -> dict:
+    """names=all is the switch "Show names in other scripts" (off: only names in English letters, Kanchana's choice)."""
     status, sort = request.GET.get("status"), request.GET.get("sort")
     return {"country": text_param(request, "country").upper(), "source": text_param(request, "source"),
             "status": status if status in queries.COMPANY_FILTERS else "", "q": text_param(request, "q"),
-            "sort": sort if sort in queries.COMPANY_SORT and sort != "best" else ""}
+            "sort": sort if sort in queries.COMPANY_SORT and sort != "best" else "",
+            "names": "all" if request.GET.get("names") == "all" else ""}
 
 
 def _list(db, f, offset=0):
     return db.get(queries.companies_list, country=f["country"] or None, source=f["source"] or None, status=f["status"] or None,
-                  q=f["q"] or None, sort=f["sort"] or "best", limit=PAGE, offset=offset)
+                  q=f["q"] or None, sort=f["sort"] or "best", limit=PAGE, offset=offset, everything=bool(f["names"]))
 
 
 def _rows_context(f: dict, data, offset: int = 0) -> dict:
@@ -44,8 +47,11 @@ def _rows_context(f: dict, data, offset: int = 0) -> dict:
     end = offset + len(data["items"])
     more = url_with("insights_company_rows", f, offset=end) if end < data["total"] else None
     rest = "scroll the list for more · click a row for details" if more else "click a row for details"
+    # The name as the source gives it ("国泰金融控股股份有限公司") goes under the English one only with the switch on:
+    # otherwise the list shows English names only. The details panel always has it.
     rows = [{**r, "n": offset + i + 1, "status_label": SITE_STATUS.get(r["site_status"], r["site_status"]),
-             "source_label": source_name(r["source"])} for i, r in enumerate(data["items"])]
+             "source_label": source_name(r["source"]), "original_name": r.get("original_name") if f["names"] else None}
+            for i, r in enumerate(data["items"])]
     return {"rows": rows, "more": more, "count": shown(data["total"], end, rest)}
 
 
@@ -53,16 +59,17 @@ def _rows_context(f: dict, data, offset: int = 0) -> dict:
 def page_view(request):
     f = _filters(request)
     with Reader() as db:
-        s = db.get(queries.companies_summary)
-        data = _list(db, f) if s and s["counts"]["companies"] else None
-    context = {"f": f, "s": s if s and s["counts"]["companies"] else None}
+        s = db.get(queries.companies_summary, everything=bool(f["names"]))
+        data = _list(db, f) if s and (s["counts"]["companies"] or s["counts"]["other_scripts"]) else None
+    context = {"f": f, "s": s if s and (s["counts"]["companies"] or s["counts"]["other_scripts"]) else None}
     if context["s"]:
         c = s["counts"]
         countries = [r for r in s["by_country"] if r["country"]]
         context.update(
             kpis=kpis((num(c["companies"]), "Companies"), (num(c["with_website"]), "With a website"), (num(c["sites_ok"]), "Websites read"),
                       (num(c["sites_with_social"]), "With social links"), (num(c["countries"]), "Countries"), (num(c["new_24h"]), "Added in 24 hours")),
-            total=c["companies"], countries=countries, status_choices=STATUS_CHOICES, chips=[{"code": "", "name": "All", "n": c["companies"]}] +
+            total=c["companies"], countries=countries, other_scripts=c["other_scripts"], english_given=c["english_given"],
+            names_switch=url_with("insights_companies", {**f, "names": "" if f["names"] else "all"}), status_choices=STATUS_CHOICES, chips=[{"code": "", "name": "All", "n": c["companies"]}] +
             [{"code": x["source"], "name": source_name(x["source"]), "n": x["n"]} for x in s["by_source"]],
             day_chart=charts.day_columns(s["by_day"], "n", "with_website", "with a website", "without"),
             top_countries=bars(s["by_country"][:12], "name", set_field="country", set_value=lambda r: r["country"] or "",

@@ -1,6 +1,6 @@
 {% load insights_ui %}{% for r in rows %}<tr class="click" tabindex="0" hx-get="{% url 'insights_company' r.id %}" hx-target="#drawer-body" hx-trigger="click[!target.closest('a')], keyup[key=='Enter'&&!target.closest('a')]">
   <td class="num muted">{{ r.n }}</td>
-  <td class="site"><div class="nm">{{ r.name }}</div>{% if r.website %}<div>{% outlink r.website r.domain|default:r.website %}</div>{% endif %}</td>
+  <td class="site"><div class="nm">{{ r.name }}</div>{% if r.original_name %}<div class="muted small" lang="" title="the name as the source gives it">{{ r.original_name }}</div>{% endif %}{% if r.website %}<div>{% outlink r.website r.domain|default:r.website %}</div>{% endif %}</td>
   <td class="nowrap" title="{{ r.country_name|default:'' }}">{{ r.country|default:"–" }}</td>
   <td class="small"><div class="ds" style="max-width:30ch" title="{{ r.industry|default:'' }}">{{ r.industry|default:"" }}</div></td>
   <td>{{ r.status_label|pill }}</td>
