@@ -16,7 +16,7 @@ uv run python -m articles collect --country GB     # read the feeds that are due
 ```
 
 In the web app:
-- **Articles** in the side menu (`/articles/`): read and filter by tag, country, company, date, or words anywhere in the text. A second tab, Companies, shows who we can and can't reach. It needs the menu right, plus the right to see the dataset Tech articles.
+- **Articles** in the side menu (`/articles/`): read and filter by tag, country, company, date, or words anywhere in the text. Click an article to read it on its own page, with its company, tags and the company's other articles on the left. A second tab, Companies, shows who we can and can't reach. It needs the menu right, plus the right to see the dataset Tech articles.
 - **Datasets → Tech articles** and **Tech article companies**: the same data in the grid, for exports, charts and reports.
 
 ## What's stored

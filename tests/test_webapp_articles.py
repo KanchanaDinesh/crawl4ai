@@ -111,9 +111,9 @@ def test_load_more(admin, monkeypatch):
     import webapp.articles.views as v
     monkeypatch.setattr(v, "PAGE", 2)
     first = text_of(admin.get(reverse("articles_rows")))
-    assert first.count('class="news-item click"') == 2 and "Load more" in first and "offset=2" in first
+    assert first.count('class="news-item"') == 2 and "Load more" in first and "offset=2" in first
     last = text_of(admin.get(reverse("articles_rows"), {"offset": 4}))
-    assert last.count('class="news-item click"') == 1 and "Load more" not in last
+    assert last.count('class="news-item"') == 1 and "Load more" not in last
 
 
 def test_reading_an_article(admin):
@@ -123,9 +123,18 @@ def test_reading_an_article(admin):
     assert 'target="_blank"' in html and "noopener" in html
     assert "More from Microsoft" in html and "Azure cloud news" in html and "United States" in html
     assert "Full text, from the page" in html
+    assert 'class="ar-nav' in html and "All articles from Microsoft" in html and "?company=Q1" in html          # a page of its own
+    assert 'hx-target="#drawer-body"' not in text_of(admin.get(reverse("articles_rows")))
     # a row's link survives its own query string
     assert quote("https://q1.test/ai?a=1&b=2", safe="") in text_of(admin.get(reverse("articles_rows")))
     assert admin.get(reverse("articles_read"), {"url": "https://nowhere.test/"}).status_code == 404
+
+
+def test_article_text_gets_its_subheadings():
+    from webapp.articles.views import article_blocks
+    got = article_blocks("Oscar brings AI to health insurance.\nThe industry is complex, they said.\n"
+                         "Doubling productivity with automated documentation\nOscar has used AI to speed things up.\nThe end")
+    assert [b["kind"] for b in got] == ["p", "p", "h", "p", "p"]          # a short last line isn't a heading: nothing follows it
 
 
 def test_an_article_without_text_says_why_and_shows_its_summary(admin):

@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-697 tests: 694 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+698 tests: 695 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -514,7 +514,7 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - **First real runs:** 1,220 articles, all with a date, 1,174 with full text, 7 MB. An article with no tag isn't kept (about half of what the feeds offered). `articles retag` applies changed word lists to what's saved.
     - **Stored for our own analysis, never republished.** robots.txt respected, no browser, and refusals are left alone.
     - Real data found: Wikidata writes year-only dates as 2023-00-00; the same feed at /feed/ and /rss/; comment feeds; job ads in feeds; "outlook" meaning a forecast. All fixed, with tests.
-    - **The page (Kanchana, 2026-11-07):** menu Articles, `/articles/` (`webapp/articles/`, queries in `articles/queries.py`). Read and filter by tag, country, company, date and words in the text; the full text opens in a side panel, with a link to the original. A Companies tab shows who we can't reach. It goes to whoever has Datasets, and follows the rights of the dataset Tech articles. Migrated after a backup (`accounts.0011`), checked in the browser on the real data, including at phone width.
+    - **The page (Kanchana, 2026-11-07):** menu Articles, `/articles/` (`webapp/articles/`, queries in `articles/queries.py`). Read and filter by tag, country, company, date and words in the text; the full text opens on a page of its own (since 2026-11-13, see item 67), with a link to the original. A Companies tab shows who we can't reach. It goes to whoever has Datasets, and follows the rights of the dataset Tech articles. Migrated after a backup (`accounts.0011`), checked in the browser on the real data, including at phone width.
     - `worldnews/cleaning.py` now also cuts WordPress's default "The post ... appeared first on ...". It only caught the other wording before. Run `python -m worldnews clean` to apply it to saved headlines.
     - **Next:** cover more companies (see Open issues).
 
@@ -599,6 +599,8 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       (overview, key figures, statements, people, go to page, sections); sections and pages are pages too, with the text formatted into
       paragraphs, headings and lists (`annualreports/reflow.py`) and an "As printed" switch. Search results open the page with the words
       marked. Checked in the browser; all 5,277 report, section and sample page views on the real data answer 200, none over 1 s.
+    - **Articles got the same (Kanchana, 2026-11-13):** an article opens on its own page (`/articles/read/?url=...`), with its company,
+      tags and the company's other articles on the left, and its subheadings shown as headings. All 1,538 saved articles open (200).
     - Found while checking the page: "Chairperson's Responsibilities" had been taken for a person (a heading). Such words can't be names now;
       `READER_VERSION` 2, so a run reads every PDF again by itself: done on the Mac, people 106 -> 101.
     - Bug fixed in the catalog on the way: a column holding a list of numbers (`people.pages`, an `integer[]`) stopped `catalog_scan`

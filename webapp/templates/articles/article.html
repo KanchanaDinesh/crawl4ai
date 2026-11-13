@@ -1,0 +1,27 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}{{ a.title|default:"Article" }}{% endblock %}
+{% block tab %}{% if a %}
+<div class="ar-detail">
+  <nav class="ar-nav panel" aria-label="This company's articles">
+    <a href="{% url 'articles' %}" class="muted">← All articles</a>
+    <div class="ar-nav-title">{{ a.company }}<br><span class="muted">{{ countries }}{% if a.sector %} · {{ a.sector }}{% endif %}</span></div>
+    <a href="{{ company_url }}">All articles from {{ a.company }}</a>
+    <span style="padding:5px 8px">{% outlink a.url "Read the original ↗" %}</span>
+    {% if tag_links %}<h4>Tags</h4>{% for t in tag_links %}<a href="{{ t.url }}">{{ t.name }}</a>{% endfor %}{% endif %}
+    {% if a.more %}<h4>More from {{ a.company }}</h4>{% for m in a.more %}<a href="{% url 'articles_read' %}?url={{ m.url|urlencode:'' }}"><span class="muted">{{ m.published_at|slice:":10" }}</span> {{ m.title }}</a>{% endfor %}{% endif %}
+  </nav>
+  <main class="ar-main">
+    <div class="panel">
+      <div class="small muted">{% if a.published_at %}{{ a.published_at|slice:":10" }}{% else %}no date given{% endif %} · <b>{{ a.company }}</b> · {{ countries }}{% if a.author %} · {{ a.author }}{% endif %}{% if a.word_count %} · {{ a.word_count|num }} words{% endif %}</div>
+      <h2 class="ar-h">{{ a.title }}</h2>
+      <p style="margin:6px 0 0">{% for t in a.tag_names %}<span class="badge topic">{{ t }}</span> {% empty %}<span class="muted small">No tag</span>{% endfor %}</p>
+    </div>
+    <div class="panel">
+      {% if a.summary and not blocks %}<div class="ar-prose"><p>{{ a.summary }}</p></div>{% endif %}
+      <div class="ar-prose">{% for b in blocks %}{% if b.kind == "h" %}<h3>{{ b.text }}</h3>{% else %}<p>{{ b.text }}</p>{% endif %}{% endfor %}</div>
+      <div class="muted small" style="margin-top:12px">{{ status }}{% if a.word_count %}, {{ a.word_count|num }} words{% endif %}. For our own analysis, never republished. {% outlink a.url "Read the original" %}</div>
+    </div>
+  </main>
+</div>
+{% endif %}{% endblock %}

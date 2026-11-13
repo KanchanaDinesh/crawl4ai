@@ -4,6 +4,7 @@ Who sees it: the menu right Articles, plus the right to see the dataset Tech art
 away from a role in the catalog also closes this page, or it would be a way around the rights.
 """
 
+import re
 from dataclasses import dataclass
 from functools import wraps
 from urllib.parse import urlsplit
@@ -111,17 +112,34 @@ def rows_view(request):
     return list_response(request, "articles/_items.html", context, context["count"], url_with("articles", f) if offset == 0 else None)
 
 
+SUBHEADING_END = re.compile(r"[.!?:;,\"'’”)]$")
+
+
+def article_blocks(text: str | None) -> list[dict]:
+    """The article's text, one paragraph per line as saved, with its subheadings: a short line with no full stop, followed by more text."""
+    lines = [ln.strip() for ln in (text or "").split("\n") if ln.strip()]
+    out = []
+    for i, ln in enumerate(lines):
+        heading = i + 1 < len(lines) and len(ln.split()) <= 12 and not SUBHEADING_END.search(ln) and ln[:1].isupper()
+        out.append({"kind": "h" if heading and i > 0 else "p", "text": ln})
+    return out
+
+
 @readers_only
 def read_view(request):
-    """One article, in the side panel. Its text is the company's work, for reading here: the link goes to the original."""
+    """One article on a page of its own, its company and the company's other articles on the left. Its text is the company's work, for
+    reading here: the link goes to the original."""
     with Reader() as db:
         row = db.get(q.article, request.GET.get("url") or "", default=None)
-    if row is None:
-        if db.error:
-            return render(request, "articles/_read.html", {"banner": db.error})
-        raise Http404
-    return render(request, "articles/_read.html", {"a": _item(row), "paragraphs": [p for p in (row.get("text") or "").split("\n") if p.strip()], "status": q.TEXT_STATUS.get(row["text_status"], row["text_status"]),
-                                                   "countries": ", ".join(q.COUNTRY_NAMES.get(c, c) for c in row["countries"])})
+        if row is None and not db.error:
+            raise Http404
+        context = {}
+        if row:
+            context = {"a": _item(row), "blocks": article_blocks(row.get("text")), "status": q.TEXT_STATUS.get(row["text_status"], row["text_status"]),
+                       "countries": ", ".join(q.COUNTRY_NAMES.get(c, c) for c in row["countries"]),
+                       "company_url": url_with("articles", {"company": row["company_id"]}),
+                       "tag_links": [{"name": tag_label(t), "url": url_with("articles", {"tag": t})} for t in row["tags"]]}
+    return render(request, "articles/article.html", _shell(request, "articles", db, **context))
 
 
 # ── companies ───────────────────────────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
-{% load insights_ui %}{% for i in items %}<div class="news-item click" role="button" tabindex="0" hx-get="{% url 'articles_read' %}?url={{ i.url|urlencode:'' }}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">
-  <div class="title">{{ i.title }}</div>
+{% load insights_ui %}{% for i in items %}<div class="news-item">
+  <div class="title"><a href="{% url 'articles_read' %}?url={{ i.url|urlencode:'' }}">{{ i.title }}</a></div>
   <div class="meta">{% if i.published_at %}{{ i.published_at|slice:":10" }}{% else %}no date{% endif %} · <b>{{ i.company }}</b> · {{ i.countries|join:", " }}{% if i.word_count %} · {{ i.word_count|num }} words{% endif %}{% for t in i.tag_names %} <span class="badge topic">{{ t }}</span>{% endfor %}</div>
   {% if i.summary %}<div class="sum">{{ i.summary }}</div>{% endif %}
 </div>{% empty %}<div class="empty">No articles match these filters.</div>{% endfor %}
