@@ -364,3 +364,31 @@ def test_text_is_reflowed_into_paragraphs_headings_and_lists():
         ("li", "Revenue of $65.9bn was stable."),
         ("quote", "OUR ABILITY TO STAND OUR GROUND, ADAPT AND THRIVE IN AN ENVIRONMENT FRAUGHT WITH OBSTACLES IS A TESTAMENT"),
     ]                                                                    # no running header, no page number "12"
+
+
+def test_reflow_finds_subheadings_labels_and_breaks_long_paragraphs():
+    from annualreports.reflow import blocks
+    text = ("D\nI\nL\n"                                                          # a word printed downwards: left out
+            "Business Values\nTaste\nDilmah's dedication to crafting exceptional tea.\n"
+            "Integrity\nWe act with honesty and fairness, even when\ndifficult.\n"
+            "In 2007 an award was presented to him at the summit.\n"
+            "Areas of expertise: Sustainability\nStrategy and FMCG business\n"
+            "Education: Alumni of the Cambridge University.\n"
+            "Other appointments:\nHe holds directorships in Melsta Corp.\n")
+    got = [(b["kind"], b.get("lead", ""), b["text"]) for b in blocks(text, ["Business Values"])]
+    assert got == [
+        ("h", "", "Business Values"),
+        ("sub", "", "Taste"),
+        ("p", "", "Dilmah's dedication to crafting exceptional tea."),
+        ("sub", "", "Integrity"),
+        ("p", "", "We act with honesty and fairness, even when difficult."),
+        ("p", "", "In 2007 an award was presented to him at the summit."),
+        ("p", "Areas of expertise", "Sustainability Strategy and FMCG business"),
+        ("p", "Education", "Alumni of the Cambridge University."),
+        ("p", "Other appointments", "He holds directorships in Melsta Corp."),
+    ]
+    mid = blocks("We report every year.\nThe Board of Directors met\nCompany officials in March.\n")
+    assert [b["kind"] for b in mid] == ["p"]                                    # "The Board of Directors met" isn't a subheading
+    sentence = "The group grew its revenue in every market it serves this year.\n"
+    long = blocks(sentence * 30)                                                # no gaps in the text: a wall of full lines
+    assert len(long) > 1 and all(len(b["text"]) < 800 for b in long)

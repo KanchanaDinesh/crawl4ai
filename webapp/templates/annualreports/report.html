@@ -1,36 +1,58 @@
 {% extends "insights/_shell.html" %}
 {% load insights_ui %}
-{% block title %}{{ doc.company|default:"Annual report" }} {{ doc.fiscal_year|default:"" }}{% endblock %}
-{% block tab %}{% if doc %}
-<div class="ar-detail">
-  {% include "annualreports/_nav.html" %}
-  <main class="ar-main">{% if d %}
-    <div class="panel">
-      <h2 class="ar-h">{{ d.company|default:"(company not found)" }} {{ d.fiscal_year|default:"" }}</h2>
+{% block title %}{{ d.company|default:"Annual report" }} {{ d.fiscal_year|default:"" }}{% endblock %}
+{% block tab %}{% if d %}
+<div class="ar-doc">
+  <div class="ar-bar panel">
+    <a href="{% url 'annualreports' %}">← All reports</a>
+    <b class="ar-bar-title">{{ d.company|default:"(company not found)" }} {{ d.fiscal_year|default:"" }}</b>
+    <span class="sp"></span>
+    <a href="#contents">Contents</a><a href="#figures">Key figures</a><a href="#people">People</a>
+    <form method="get" class="ar-go">
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}{% if raw %}<input type="hidden" name="raw" value="1">{% endif %}
+      <label>Page <input type="number" name="page" min="1" max="{{ d.page_count }}" aria-label="Page number"></label>
+      <button class="btn" type="submit">Go</button>
+    </form>
+    {% if raw %}<a href="?{% if q %}q={{ q|urlencode }}{% endif %}">Formatted</a>{% else %}<a href="?raw=1{% if q %}&amp;q={{ q|urlencode }}{% endif %}">As printed</a>{% endif %}
+  </div>
+
+  <article class="ar-sheet">
+    <header class="ar-cover">
+      <h1>{{ d.company|default:"(company not found)" }} <span class="muted">{{ d.fiscal_year|default:"" }}</span></h1>
       <div class="muted">{{ d.title }}{% if d.period_end %} · period ended {{ d.period_end|date:"j F Y" }}{% endif %}</div>
-      <div class="kpis" style="margin-top:12px">
-        <div class="kpi"><b>{{ d.page_count|num }}</b><span>Pages</span></div><div class="kpi"><b>{{ d.sections|num }}</b><span>Sections</span></div>
-        <div class="kpi"><b>{{ d.tables|num }}</b><span>Tables</span></div><div class="kpi"><b>{{ d.figures|num }}</b><span>Key figures</span></div>
-        <div class="kpi"><b>{{ d.people|num }}</b><span>People</span></div>
-      </div>
-      <p class="small muted" style="margin:12px 0 0">File: {{ d.paths|join:", "|default:d.file_name }}{% if d.pages_ocr %} · {{ d.pages_ocr }} page{{ d.pages_ocr|pluralize }} read by OCR{% endif %}{% if d.pages_needs_ocr %} · {{ d.pages_needs_ocr }} unreadable{% endif %}<br>
-      Linked to: {% if d.cse_symbol %}CSE share <b>{{ d.cse_symbol }}</b>{% endif %}{% if d.company_id %}{% if d.cse_symbol %}, {% endif %}company <b>{{ d.company_id }}</b>{% endif %}{% if not d.cse_symbol and not d.company_id %}nothing{% endif %} <span>({{ d.link_how }})</span></p>
-    </div>
+      <p class="small muted">{{ d.page_count|num }} pages · {{ d.sections|num }} sections · {{ d.tables|num }} tables · {{ d.figures|num }} key figures · {{ d.people|num }} people{% if d.pages_ocr %} · {{ d.pages_ocr }} page{{ d.pages_ocr|pluralize }} read by OCR{% endif %}<br>
+      File: {{ d.paths|join:", "|default:d.file_name }} · Linked to: {% if d.cse_symbol %}CSE share <b>{{ d.cse_symbol }}</b>{% endif %}{% if d.company_id %}{% if d.cse_symbol %}, {% endif %}company <b>{{ d.company_id }}</b>{% endif %}{% if not d.cse_symbol and not d.company_id %}nothing{% endif %}{% if q %}<br>Marked: <mark>{{ q }}</mark> · <a href="?{% if raw %}raw=1{% endif %}">clear</a>{% endif %}</p>
 
-    <div class="panel" id="figures"><h3>Key figures <small>as printed, with the page each is on</small></h3>
-    {% if figures %}<div style="overflow-x:auto"><table class="plain">
-      <thead><tr><th>Figure</th><th class="num">As printed</th><th>Unit</th><th>Column</th><th>From</th><th class="num">Page</th></tr></thead><tbody>
-      {% for k in figures %}<tr><td title="Printed as: {{ k.label }}">{{ k.name }}</td><td class="num"><b>{{ k.value_text }}</b></td><td>{{ k.unit_text|default:"" }}</td><td class="muted">{{ k.column_header|default:"" }}</td><td class="muted">{{ k.statement_name }}</td>
-      <td class="num"><a href="{% url 'annualreports_page' d.id k.page_no %}">{{ k.page_no }}</a></td></tr>{% endfor %}</tbody></table></div>
-    {% else %}<div class="muted">None found: this report's statements don't use the usual names, or it has none (a governance or risk part). Its tables are still all saved: open its pages or sections.</div>{% endif %}</div>
+      <details class="ar-box" id="figures" open><summary>Key figures <small class="muted">as printed, with the page each is on</small></summary>
+      {% if figures %}<div style="overflow-x:auto"><table class="plain">
+        <thead><tr><th>Figure</th><th class="num">As printed</th><th>Unit</th><th>Column</th><th>From</th><th class="num">Page</th></tr></thead><tbody>
+        {% for k in figures %}<tr><td title="Printed as: {{ k.label }}">{{ k.name }}</td><td class="num"><b>{{ k.value_text }}</b></td><td>{{ k.unit_text|default:"" }}</td><td class="muted">{{ k.column_header|default:"" }}</td><td class="muted">{{ k.statement_name }}</td>
+        <td class="num"><a href="#page-{{ k.page_no }}">{{ k.page_no }}</a></td></tr>{% endfor %}</tbody></table></div>
+        {% if statements %}<p class="small muted">Financial statements: {% for s in statements %}{{ s.name }} {% for n in s.pages %}<a href="#page-{{ n }}">p. {{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+      {% else %}<div class="muted small">None found: this report's statements don't use the usual names, or it has none (a governance or risk part). Its tables are all below with their pages.</div>{% endif %}</details>
 
-    <div class="panel" id="statements"><h3>Financial statements</h3>
-    {% if statements %}<table class="plain"><tbody>{% for s in statements %}<tr><td>{{ s.name }}</td><td>{% for n in s.pages %}<a href="{% url 'annualreports_page' d.id n %}">page {{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
-    {% else %}<div class="muted">No statement pages recognised in this one.</div>{% endif %}</div>
+      <details class="ar-box" id="contents"><summary>Contents <small class="muted">{{ d.section_list|length }} section{{ d.section_list|length|pluralize }}</small></summary>
+      {% if d.section_list %}<ol class="ar-toc">{% for s in d.section_list %}<li><a href="#section-{{ s.section_no }}">{{ s.title }}</a><span class="muted">{{ s.page_no }}</span></li>{% endfor %}</ol>
+      {% else %}<div class="muted small">No sections found in this one.</div>{% endif %}</details>
 
-    <div class="panel" id="people"><h3>People <small>from the board and management pages, as printed</small></h3>
-    {% if d.people_list %}<table class="plain"><thead><tr><th>Name</th><th>Roles</th><th class="num">Pages</th></tr></thead><tbody>{% for p in d.people_list %}<tr><td>{{ p.honorific|default:"" }} <b>{{ p.name }}</b></td><td>{{ p.roles|join:" / " }}</td><td class="num">{% for n in p.pages %}<a href="{% url 'annualreports_page' d.id n %}">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
-    {% else %}<div class="muted">No board or management names found in this one.</div>{% endif %}</div>
-  {% endif %}</main>
+      <details class="ar-box" id="people"><summary>People <small class="muted">{{ d.people_list|length }} from the board and management pages</small></summary>
+      {% if d.people_list %}<table class="plain"><tbody>{% for p in d.people_list %}<tr><td>{{ p.honorific|default:"" }} <b>{{ p.name }}</b></td><td>{{ p.roles|join:" / " }}</td><td class="num">{% for n in p.pages %}<a href="#page-{{ n }}">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+      {% else %}<div class="muted small">No board or management names found in this one.</div>{% endif %}</details>
+    </header>
+
+    {% for p in pages %}
+    {% for s in p.sections %}<span class="ar-anchor" id="section-{{ s.section_no }}"></span>{% endfor %}
+    <section class="ar-page{% if p.empty %} is-empty{% endif %}" id="page-{{ p.no }}">
+      <div class="ar-rule"><span class="ar-pno">Page {{ p.no }}</span>{% if p.chapter %}<small>{{ p.chapter|truncatechars:70 }}</small>{% endif %}{% if p.source %}<small>{{ p.source }}{% if p.ocr_confidence %} ({{ p.ocr_confidence|floatformat:0 }}% sure){% endif %}</small>{% endif %}</div>
+      {% if p.note %}<div class="small muted">{{ p.note }}</div>{% endif %}
+      {% if p.tables %}{% include "annualreports/_tables.html" with tables=p.tables %}{% endif %}
+      {% if p.raw %}{% if p.text.strip %}<div class="ar-raw">{{ p.text }}</div>{% endif %}{% if p.ocr_text %}<div class="ar-raw">{{ p.ocr_text }}</div>{% endif %}
+      {% else %}{% if p.prose %}{% include "annualreports/_prose.html" with blocks=p.prose %}{% endif %}
+      {% if p.ocr_prose %}<div class="small muted">Read by OCR (this page has no text layer; OCR can misread):</div>{% include "annualreports/_prose.html" with blocks=p.ocr_prose %}{% endif %}{% endif %}
+      {% if p.empty %}<div class="small muted">Nothing to read on this page (a picture or a blank page).</div>{% endif %}
+    </section>
+    {% endfor %}
+    <div class="ar-rule ar-end"><span>End of the report</span></div>
+  </article>
 </div>
-{% endif %}{% endblock %}
+{% elif missing %}<div class="panel muted">This report isn't there any more.</div>{% endif %}{% endblock %}

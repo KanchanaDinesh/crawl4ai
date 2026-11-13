@@ -87,51 +87,52 @@ def test_reports_list_shows_the_figures_as_printed(admin, saved):
     assert "TEST HOLDINGS PLC" in text_of(admin.get(reverse("annualreports_rows"), {"company": "TEST HOLDINGS PLC"}))
 
 
-def test_a_report_opens_as_a_page_with_navigation(admin, saved):
+def test_a_report_is_one_page_with_every_page_under_a_line(admin, saved):
     html = text_of(admin.get(reverse("annualreports_report", args=[saved])))
-    assert 'class="ar-nav' in html and "All reports" in html
+    assert "All reports" in html and "ar-nav" not in html                                  # no left-hand column
     assert "Revenue" in html and "Profit before tax" in html and "Earnings per share (basic)" in html
-    assert "<b>6</b><span>Pages</span>" in html and "<b>2</b><span>People</span>" in html     # the counts, not the lists' lengths
-    assert reverse("annualreports_page", args=[saved, 2]) in html                       # the page each figure is on
+    assert "6 pages" in html and "2 people" in html                                       # the counts, not the lists' lengths
+    assert all(f'id="page-{n}"' in html and f'<span class="ar-pno">Page {n}</span>' in html for n in range(1, 7))
+    assert html.index('id="page-1"') < html.index('id="page-2"') < html.index('id="page-6"')
+    assert 'href="#page-2"' in html                                                       # each figure links to its page here
     assert "Nimal Silva" in html and "Independent Non-Executive Director" in html and "Income statement" in html
-    assert reverse("annualreports_section", args=[saved, 1]) in html and "STATEMENT OF PROFIT OR LOSS" in html    # sections on the left
+    assert ">Group</th>" in html and ">Cost of Sales</td>" in html                       # tables cell by cell
+    assert html.count("(4,420,119)") == 1                                                 # in the table, not again in the text
+    assert "<h3>STATEMENT OF PROFIT OR LOSS</h3>" in html and "<p>For the year ended 31 March 2025</p>" in html
+    assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html            # the PDF's text is only text
     assert admin.get(reverse("annualreports_report", args=[999999])).status_code == 404
-    res = admin.get(reverse("annualreports_report", args=[saved]), {"page": "3"})          # "Go to page"
-    assert res.status_code == 302 and res["Location"] == reverse("annualreports_page", args=[saved, 3])
     reports = text_of(admin.get(reverse("annualreports")))
     assert f'href="{reverse("annualreports_report", args=[saved])}"' in reports and "hx-target=\"#drawer-body\"" not in reports
 
 
-def test_a_page_shows_its_tables_then_its_text_formatted(admin, saved):
-    html = text_of(admin.get(reverse("annualreports_page", args=[saved, 2])))
-    assert "Page 2 <small" in html and "of 6" in html and ">Group</th>" in html and ">Cost of Sales</td>" in html
-    assert html.count("(4,420,119)") == 1                                                # in the table, not again in the text
-    assert "<h3>STATEMENT OF PROFIT OR LOSS</h3>" in html and "<p>For the year ended 31 March 2025</p>" in html
-    assert reverse("annualreports_page", args=[saved, 1]) in html and reverse("annualreports_page", args=[saved, 3]) in html
-    raw = text_of(admin.get(reverse("annualreports_page", args=[saved, 2]), {"raw": "1"}))
+def test_as_printed_and_marked_words(admin, saved):
+    raw = text_of(admin.get(reverse("annualreports_report", args=[saved]), {"raw": "1"}))
     assert 'class="ar-raw"' in raw and raw.count("(4,420,119)") == 2                     # as printed: the text has the numbers too
-    first = text_of(admin.get(reverse("annualreports_page", args=[saved, 1])))
-    assert "<script>alert(1)</script>" not in first and "&lt;script&gt;" in first           # the PDF's text is only text
-    marked = text_of(admin.get(reverse("annualreports_page", args=[saved, 1]), {"q": "zebra"}))
+    assert "<script>alert(1)</script>" not in raw
+    marked = text_of(admin.get(reverse("annualreports_report", args=[saved]), {"q": "zebra"}))
     assert "<mark>zebra</mark>" in marked
-    assert admin.get(reverse("annualreports_page", args=[saved, 99])).status_code == 404
+    raw_marked = text_of(admin.get(reverse("annualreports_report", args=[saved]), {"q": "zebra", "raw": "1"}))
+    assert "<mark>zebra</mark>" in raw_marked and "&lt;script&gt;" in raw_marked
 
 
-def test_a_section_reads_from_its_heading_to_the_next(admin, saved):
+def test_old_page_and_section_links_go_to_their_place(admin, saved):
+    url = reverse("annualreports_report", args=[saved])
+    res = admin.get(reverse("annualreports_page", args=[saved, 3]), {"q": "zebra"})
+    assert res.status_code == 302 and res["Location"] == f"{url}?q=zebra#page-3"
+    assert admin.get(url, {"page": "4"})["Location"] == f"{url}#page-4"                      # "Go to page"
     from warehouse import postgres
     con = postgres.connect("reader")
     no = con.execute("select section_no from annualreports.sections where document_id = %s and title = 'BOARD OF DIRECTORS'", [saved]).fetchone()[0]
     con.close()
-    html = text_of(admin.get(reverse("annualreports_section", args=[saved, no])))
-    assert "<h2 class=\"ar-h\">BOARD OF DIRECTORS</h2>" in html and "Nimal Silva" in html and "STATEMENT OF PROFIT OR LOSS" in html   # nav too
-    assert 'class="on"' in html and admin.get(reverse("annualreports_section", args=[saved, 9999])).status_code == 404
+    assert admin.get(reverse("annualreports_section", args=[saved, no]))["Location"] == f"{url}#section-{no}"
+    assert f'id="section-{no}"' in text_of(admin.get(url)) and f'href="#section-{no}"' in text_of(admin.get(url))
 
 
 def test_search_marks_the_words_and_escapes_the_rest(admin, saved):
     assert "Type words above" in text_of(admin.get(reverse("annualreports_search")))
     html = text_of(admin.get(reverse("annualreports_search"), {"q": "zebra policy"}))
     assert "<mark>zebra</mark>" in html and "<script>alert" not in html and "page 1" in html
-    assert reverse("annualreports_page", args=[saved, 1]) + "?q=zebra%20policy" in html     # the page opens with the words marked
+    assert reverse("annualreports_page", args=[saved, 1]) + "?q=zebra%20policy" in html     # the report opens there, words marked
     assert "No page has all of those words" in text_of(admin.get(reverse("annualreports_hits"), {"q": "zebra giraffe"}))
     assert "page 2" in text_of(admin.get(reverse("annualreports_hits"), {"q": '"cost of sales"'}))      # a phrase
     assert "No page has all" in text_of(admin.get(reverse("annualreports_hits"), {"q": "zebra -policy"}))

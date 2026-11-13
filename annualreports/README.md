@@ -23,14 +23,22 @@ To add reports: put the PDFs in `Anual reports/` and run `run`. A file that's al
 - **Reports:** every report with its headline figures as printed (revenue, profit before tax, profit for the year, total assets, EPS) and its
   CSE share. Click one to open its own page.
 - **Search the pages:** words on any page of any report, with the words marked. `"going concern"` for a phrase, `-tax` to leave a word out.
-  A result opens that page with the words marked there too.
+  A result opens the report at that page with the words marked.
 - **People:** directors and managers with their roles as printed, and the pages they're on.
 
-**A report's page** has its navigation on the left: Overview, Key figures, Financial statements, People, *Go to page*, and its sections.
-- **Overview:** all key figures with the page each is on, the statements' pages, the people.
-- **A section** reads from its heading to the next one; **a page** shows its tables cell by cell, then its text. The text is formatted
-  (`annualreports/reflow.py`): lines joined into paragraphs, headings, bullet lists, words split by a hyphen mended, running header and page
-  number left out, and lines that are table rows left out because they're in the table above. **As printed** shows the PDF's text exactly.
+**A report opens as one long page** with all of it, nothing on the side: at the top its key figures (each with a link to its page),
+contents and people, then **every page in order, each under a line with its number** ("PAGE 14", and the section it starts). A bar
+stays at the top: All reports, Contents, Key figures, People, *Page [n] Go*, and **As printed**. Each page shows its tables cell by
+cell, then its text, formatted (`annualreports/reflow.py`):
+- lines joined into paragraphs, and long walls of text broken at sentence ends;
+- headings, subheadings (a short Title-like line such as "Taste" or "Our Vision") and bullet lists;
+- a label before a colon in bold ("**Education:** ...");
+- words split by a hyphen mended;
+- the running header, the page number, and letters printed one per line, left out;
+- lines that are table rows left out, because they're in the table above.
+
+**As printed** shows the PDF's text exactly. Search results and older page links open the report at that page, with the words marked.
+The biggest PDF (HSBC's 491-page 20-F) is a 4 MB page that takes about 3 seconds.
 
 It needs the menu right Annual reports (given to whoever has Datasets) and the right to see the dataset Annual reports.
 

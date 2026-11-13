@@ -1,4 +1,4 @@
 {% for t in tables %}<div class="ar-table">
-<h4>{% if t.title %}{{ t.title }}{% else %}Table{% endif %} <small class="muted">page {{ t.page_no }}{% if t.statement_name %} · {{ t.statement_name }}{% endif %}{% if t.unit_text %} · {{ t.unit_text }}{% endif %}</small></h4>
+<h4>{% if t.title %}{{ t.title }}{% else %}Table{% endif %} <small class="muted">{% if t.statement_name %}{{ t.statement_name }}{% endif %}{% if t.statement_name and t.unit_text %} · {% endif %}{% if t.unit_text %}{{ t.unit_text }}{% endif %}</small></h4>
 <div style="overflow-x:auto"><table class="plain small">{% for r in t.rows %}<tr{% if r.kind == "text" %} class="sub"{% endif %}>{% for c in r.cells %}{% if r.kind == "header" %}<th{% if not forloop.first %} class="num"{% endif %}>{{ c }}</th>{% elif forloop.first %}<td class="label">{{ c }}</td>{% else %}<td class="num">{{ c }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</table></div>
 </div>{% endfor %}

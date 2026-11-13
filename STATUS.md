@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-706 tests: 703 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+707 tests: 704 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -599,6 +599,11 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       (overview, key figures, statements, people, go to page, sections); sections and pages are pages too, with the text formatted into
       paragraphs, headings and lists (`annualreports/reflow.py`) and an "As printed" switch. Search results open the page with the words
       marked. Checked in the browser; all 5,277 report, section and sample page views on the real data answer 200, none over 1 s.
+    - **One page per report (Kanchana, 2026-11-13, later):** the left-hand column is gone. A report opens as one long page: key figures,
+      contents and people at the top, then every page in order under a line with its number, its tables, then its formatted text;
+      a bar at the top (contents, page jump, As printed). Old page and section links, and search results, go to their place on it.
+      Formatting got better (`reflow.py`): subheadings, bold labels ("Education:"), long paragraphs broken, letter-per-line words
+      left out. All 26 reports open (200), the biggest (HSBC 20-F, 491 pages) in about 3 s and 4 MB.
     - **Articles got the same (Kanchana, 2026-11-13):** an article opens on its own page (`/articles/read/?url=...`), with its company,
       tags and the company's other articles on the left, and its subheadings shown as headings. All 1,538 saved articles open (200).
     - Found while checking the page: "Chairperson's Responsibilities" had been taken for a person (a heading). Such words can't be names now;

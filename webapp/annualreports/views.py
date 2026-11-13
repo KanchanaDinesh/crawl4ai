@@ -118,7 +118,7 @@ def rows_view(request):
                          url_with("annualreports", {"company": f["company"], "q": f["q"]}))
 
 
-# ── the detail pages: a report, a section, a page, each with the report's navigation on the left ─────────────
+# ── a report: one long page with every page of it, each under a line with its number ─────────────────────────
 NUMBER = re.compile(r"^\(?[-–−]?[\d,.]+\)?%?$|^[-–—]$")
 
 
@@ -139,7 +139,7 @@ def _table_rows_text(tables: list[dict]) -> set[str]:
     return {re.sub(r"\s+", "", " ".join(r["cells"])) for t in tables for r in t["rows"]}
 
 
-def _prose(text: str, headings: list[str], doc: dict, tables: list[dict], terms: list[str]) -> list[dict]:
+def _prose(text: str, headings: list[str], running_headers: set[str], tables: list[dict], terms: list[str]) -> list[dict]:
     """The text as paragraphs, headings and lists. Lines that are rows of the tables shown above it are left out (they'd be the same
     numbers twice, without their columns); "as printed" shows everything."""
     rows = _table_rows_text(tables)
@@ -156,8 +156,9 @@ def _prose(text: str, headings: list[str], doc: dict, tables: list[dict], terms:
                                  or bool(words) and all(w in heading_words for w in words))      # "Group  Company" over the columns
 
     out: list[dict] = []
-    for b in reflow.blocks(text, headings, set(doc.get("running_headers") or []), skip=table_line if tables else None):
+    for b in reflow.blocks(text, headings, running_headers, skip=table_line if tables else None):
         b["html"] = _marked_html(b["text"], terms)
+        b["lead_html"] = _marked_html(b["lead"], terms) if b.get("lead") else ""
         if b["kind"] == "li":                               # bullet points in a row are one list
             if out and out[-1]["kind"] == "ul":
                 out[-1]["items"].append(b)
@@ -168,79 +169,79 @@ def _prose(text: str, headings: list[str], doc: dict, tables: list[dict], terms:
     return out
 
 
-def _detail(request, db, doc_id: int, here: str, **context) -> dict:
-    doc = db.get(q.document, doc_id, default=None)
-    if doc is None:
-        if db.error:
-            return _shell(request, "reports", db, missing=True)
-        raise Http404
-    sections = [{**s, "here_key": f"section-{s['section_no']}"} for s in db.get(q.nav_sections, doc_id, default=[])]
-    context.update(doc=doc, nav_sections=sections, here=here)
-    return _shell(request, "reports", db, **context)
-
-
-@readers_only
-def report_view(request, doc_id: int):
-    """One report: its key figures, statements, people and sections. ?page=N goes to that page."""
-    wanted = request.GET.get("page", "")
-    if wanted.isdigit():
-        return redirect("annualreports_page", doc_id=doc_id, page_no=max(1, int(wanted)))
-    with Reader() as db:
-        d = db.get(q.report, doc_id, default=None)
-        if d is None and not db.error:
-            raise Http404
-        context = _detail(request, db, doc_id, "overview")
-    if d:
-        order = list(q.METRICS)
-        figures = sorted(d["key_figures"], key=lambda k: order.index(k["metric"]) if k["metric"] in order else 99)
-        for k in figures:
-            k["name"] = q.METRICS.get(k["metric"], k["metric"])
-            k["statement_name"] = STATEMENTS.get(k["statement"], k["statement"])
-        context.update(d=d, figures=figures, statements=[{**s, "name": STATEMENTS.get(s["statement"], s["statement"])} for s in d["statements"]])
-    return render(request, "annualreports/report.html", context)
-
-
 def _tables_named(tables: list[dict]) -> list[dict]:
     for t in tables:
         t["statement_name"] = STATEMENTS.get(t["statement"], "")
     return tables
 
 
+def _at(request, doc_id: int, anchor: str):
+    """The report's page, keeping its search words and "as printed", at one place on it."""
+    keep = {k: request.GET[k] for k in ("q", "raw") if request.GET.get(k)}
+    return redirect(url_with("annualreports_report", keep, doc_id) + f"#{anchor}")
+
+
+def _whole(d: dict, whole: dict, terms: list[str], raw: bool) -> list[dict]:
+    """Every page in order, with its tables, its text (formatted, or as printed) and the sections that start on it."""
+    headers = set(d.get("running_headers") or [])
+    top = min((s["level"] for s in whole["sections"]), default=0)
+    starts: dict[int, list[dict]] = {}
+    for s in whole["sections"]:
+        starts.setdefault(s["page_no"], []).append({**s, "top": s["level"] == top})
+    tables: dict[int, list[dict]] = {}
+    for t in _tables_named(whole["tables"]):
+        tables.setdefault(t["page_no"], []).append(t)
+    out = []
+    for p in whole["pages"]:
+        n, own = p["page_no"], tables.get(p["page_no"], [])
+        firsts = [s["title"] for s in starts.get(n, []) if s["top"]]
+        page = {"no": n, "sections": starts.get(n, []), "chapter": firsts[0] if firsts else "", "tables": own, "note": p["note"], "raw": raw,
+                "text": p["text"] or "", "ocr_text": p["ocr_text"] or "", "ocr_confidence": p["ocr_confidence"],
+                "source": q.TEXT_SOURCE.get(p["text_source"], p["text_source"]) if p["text_source"] != "pdf" else ""}
+        if not raw:
+            page["prose"] = _prose(page["text"], p["headings"] or [], headers, own, terms)
+            page["ocr_prose"] = _prose(page["ocr_text"], [], headers, [], terms) if page["ocr_text"] else []
+        elif terms:
+            page["text"], page["ocr_text"] = _marked_html(page["text"], terms), _marked_html(page["ocr_text"], terms)
+        page["empty"] = not (own or page.get("prose") or page.get("ocr_prose") or (raw and (page["text"].strip() or page["ocr_text"])))
+        out.append(page)
+    return out
+
+
 @readers_only
-def section_view(request, doc_id: int, section_no: int):
-    terms = _terms(text_param(request, "q"))
+def report_view(request, doc_id: int):
+    """A whole report on one page: its key figures and contents at the top, then every page in order, each under a line with its
+    number. ?page=N goes to that page's place on it; ?q= marks words; ?raw=1 shows the text as printed."""
+    wanted = request.GET.get("page", "")
+    if wanted.isdigit():
+        return _at(request, doc_id, f"page-{max(1, int(wanted))}")
+    terms, raw = _terms(text_param(request, "q")), request.GET.get("raw") == "1"
     with Reader() as db:
-        sec = db.get(q.section, doc_id, section_no, default=None)
-        if sec is None and not db.error:
+        d = db.get(q.report, doc_id, default=None)
+        if d is None and not db.error:
             raise Http404
-        context = _detail(request, db, doc_id, f"section-{section_no}")
-    if sec and "doc" in context:
-        tables = _tables_named(sec["tables"])
-        context.update(sec=sec, tables=tables, raw=request.GET.get("raw") == "1",
-                       prose=_prose(sec["text"], sec["headings"], context["doc"], tables, terms))
-    return render(request, "annualreports/section.html", context)
+        whole = db.get(q.pages, doc_id, default=None) if d else None
+        context = _shell(request, "reports", db, missing=d is None)
+    if d and whole:
+        order = list(q.METRICS)
+        figures = sorted(d["key_figures"], key=lambda k: order.index(k["metric"]) if k["metric"] in order else 99)
+        for k in figures:
+            k["name"] = q.METRICS.get(k["metric"], k["metric"])
+            k["statement_name"] = STATEMENTS.get(k["statement"], k["statement"])
+        context.update(d=d, figures=figures, raw=raw, q=text_param(request, "q"), pages=_whole(d, whole, terms, raw),
+                       statements=[{**s, "name": STATEMENTS.get(s["statement"], s["statement"])} for s in d["statements"]])
+    return render(request, "annualreports/report.html", context)
 
 
 @readers_only
 def page_text_view(request, doc_id: int, page_no: int):
-    """One page: its tables cell by cell, then its text, formatted (or as printed), OCR text apart."""
-    terms = _terms(text_param(request, "q"))
-    with Reader() as db:
-        p = db.get(q.page, doc_id, page_no, default=None)
-        if p is None and not db.error:
-            raise Http404
-        context = _detail(request, db, doc_id, f"page-{page_no}")
-    if p and "doc" in context:
-        doc = context["doc"]
-        tables = _tables_named(p["tables"])
-        here = f"section-{p['section']['section_no']}" if p["section"] else context["here"]
-        context.update(p=p, tables=tables, here=here, raw=request.GET.get("raw") == "1",
-                       source=q.TEXT_SOURCE.get(p["text_source"], p["text_source"]),
-                       prose=_prose(p["text"], p["headings"], doc, tables, terms),
-                       ocr_prose=_prose(p["ocr_text"] or "", [], doc, [], terms),
-                       q=text_param(request, "q"),
-                       prev=page_no - 1 if page_no > 1 else None, next=page_no + 1 if page_no < doc["page_count"] else None)
-    return render(request, "annualreports/page_text.html", context)
+    """Older links to one page (and search results): the report's page, at that page."""
+    return _at(request, doc_id, f"page-{page_no}")
+
+
+@readers_only
+def section_view(request, doc_id: int, section_no: int):
+    return _at(request, doc_id, f"section-{section_no}")
 
 
 # ── search ──────────────────────────────────────────────────────────────────────────────────────────────────
