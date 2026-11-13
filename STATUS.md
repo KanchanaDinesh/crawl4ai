@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-686 tests: 683 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+695 tests: 692 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -27,7 +27,7 @@ Run every command from the project folder, after `source env.sh`.
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
 | Articles | `uv run python -m articles run`, `show`, `stats`, `retag`, `companies`, `feeds`, `collect` | New 2026-11-07. Articles and blogs of the most valuable companies (US, GB, IN, AU, CA), tagged by service, linked to each company. Page at http://localhost:8060/articles/. **PostgreSQL** (schema `articles`) |
-| Annual reports | `uv run python -m annualreports run [--file X.pdf] [--dry-run] [--again]`, `show [--id N]`, `stats`, `search WORDS`, `link` | New 2026-11-13. Every PDF in `Anual reports/` (git-ignored) read completely: page text, sections, tables as rows and cells, key figures, directors; linked to `companies` / CSE shares by exact name. Offline, OCR with Tesseract. **PostgreSQL** (schema `annualreports`). run_all step `annualreports` |
+| Annual reports | `uv run python -m annualreports run [--file X.pdf] [--dry-run] [--again]`, `show [--id N]`, `stats`, `search WORDS`, `link` | New 2026-11-13. Page at http://localhost:8060/annual-reports/. Every PDF in `Anual reports/` (git-ignored) read completely: page text, sections, tables as rows and cells, key figures, directors; linked to `companies` / CSE shares by exact name. Offline, OCR with Tesseract. **PostgreSQL** (schema `annualreports`). run_all step `annualreports` |
 | Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
@@ -588,7 +588,15 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Fixed by hand in settings: the Chamber report (a member company's name repeats with "Annual Report 2023/24"), HSBC's link.
     - **In the web app: Datasets → "Annual reports", "Annual report key figures", "... people", "... pages", "... sections",
       "... tables", "... table cells", "... figures (every column)"** (labels in `webapp/catalog/defaults.py`; raw tables off). Visible to
-      Editors, Analysts and Viewers. No dashboard tab or own page yet. All 8 checked as an administrator through Django's test client.
+      Editors, Analysts and Viewers. All 8 checked as an administrator through Django's test client.
+    - **The page (Kanchana, 2026-11-13):** menu **Annual reports**, `/annual-reports/` (`webapp/annualreports/`, queries in
+      `annualreports/queries.py`), like the Articles page: tabs Reports (headline figures per report, a side panel with every key figure, its
+      page, people, sections), Search the pages (full-text search with the words marked, phrases, -word), People. A page number opens that
+      page: tables cell by cell, then its text. Menu right for whoever has Datasets (`accounts.0012`), and it follows the rights of the
+      dataset Annual reports. Migrated after a backup; checked in the browser on the real data (as test-admin), including at phone width,
+      no console errors. Every view answers in under 0.1 s.
+    - Found while checking the page: "Chairperson's Responsibilities" had been taken for a person (a heading). Such words can't be names now;
+      `READER_VERSION` 2, so a run reads every PDF again by itself: done on the Mac, people 106 -> 101.
     - Bug fixed in the catalog on the way: a column holding a list of numbers (`people.pages`, an `integer[]`) stopped `catalog_scan`
       ("descriptor 'casefold' ... 'int'"), and filtering on one in the grid would have been an SQL error (`int[] && text[]`). Lists are now
       read as text in both places, with a test.

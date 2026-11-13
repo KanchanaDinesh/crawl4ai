@@ -18,7 +18,7 @@ from pathlib import Path
 
 logger = logging.getLogger("annualreports")
 
-READER_VERSION = 1          # raise when what's extracted changes: documents read by an older version are read again on the next run
+READER_VERSION = 2          # raise when what's extracted changes: documents read by an older version are read again on the next run
 
 BOLD = re.compile(r"bold|heavy|black|semibold|demi|-hv|-bd|extrabold", re.I)
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")

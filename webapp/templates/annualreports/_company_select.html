@@ -1,0 +1,1 @@
+{% load insights_ui %}<select name="company" title="Company" aria-label="Company"><option value="">All companies</option>{% for c in f.choices %}<option value="{{ c.name }}"{% if c.name == f.company %} selected{% endif %}>{{ c.name }} · {{ c.n|num }}</option>{% endfor %}</select>

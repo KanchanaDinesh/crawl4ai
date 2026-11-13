@@ -1,0 +1,10 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}Annual reports: search{% endblock %}
+{% block tab %}
+<form class="filters" id="filters" method="get" action="{% url 'annualreports_search' %}" hx-get="{% url 'annualreports_hits' %}" hx-target="#list" hx-sync="this:replace" hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:400ms">
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Words on any page, e.g. dividend policy, &quot;going concern&quot;, solar -tax" aria-label="Search the pages" style="min-width:min(100%,420px)" autofocus>
+  {% include "annualreports/_company_select.html" %}
+</form>
+<div class="panel"><h3><span>Pages <small data-count>{{ count }}</small></span><small>every word must be there · "quotes" for a phrase · -word to leave it out</small></h3><div id="list">{% include "annualreports/_hits.html" %}</div></div>
+{% endblock %}

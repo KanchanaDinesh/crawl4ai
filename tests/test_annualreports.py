@@ -159,7 +159,9 @@ def test_names_and_roles_from_tables_of_directors():
     text = ("Board of Directors\nMr. Sumal Joseph\nSanjiva Perera Executive - 01 43\nMr. Suresh Dilhan Perera Non-Executive\n"
             "Mrs. N.C. Madanayake Non-Independent Non\nExecutive Director 6\nMr. Nissanka B Weerasekara - Director, Mr.U. G.Madanayake - Chairman,\n"
             "Mr. C V Kulatilaka\nThe Board considered the annual declaration made by the Non-\n")
-    found = {p["name"]: p["role"] for p in people_on_page(Page(1, 1, 1, text, "pdf"))}
+    page = Page(1, 1, 1, text + "Chairperson's Responsibilities\nThe Chairperson leads the Board and is\n", "pdf",
+                headings=[{"text": "Chairperson's Responsibilities", "size": 14, "top": 1}])
+    found = {p["name"]: p["role"] for p in people_on_page(page)}
     assert found == {"Sumal Joseph Sanjiva Perera": "Executive", "Suresh Dilhan Perera": "Non-Executive",       # a name over two lines
                      "N.C. Madanayake": "Non-Independent Non Executive Director",                             # no attendance count
                      "Nissanka B Weerasekara": None, "C V Kulatilaka": None}                                  # a list, a sentence: no role

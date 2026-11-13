@@ -19,7 +19,16 @@ To add reports: put the PDFs in `Anual reports/` and run `run`. A file that's al
 
 ## In the web app
 
-Side menu **Datasets** (http://localhost:8060/datasets/), then any of these. Each opens in the grid, with filters, sorting, saved views and CSV/Excel,
+**Annual reports** in the side menu (http://localhost:8060/annual-reports/), three tabs:
+- **Reports:** every report with its headline figures as printed (revenue, profit before tax, profit for the year, total assets, EPS) and its
+  CSE share. Click one for its side panel: all key figures with the page each is on, the financial statements' pages, people, sections.
+  Any page number opens that page: its tables cell by cell, then its full text (OCR text apart), with the pages before and after.
+- **Search the pages:** words on any page of any report, with the words marked. `"going concern"` for a phrase, `-tax` to leave a word out.
+- **People:** directors and managers with their roles as printed, and the pages they're on.
+
+It needs the menu right Annual reports (given to whoever has Datasets) and the right to see the dataset Annual reports.
+
+The same data is also under side menu **Datasets** (http://localhost:8060/datasets/), then any of these. Each opens in the grid, with filters, sorting, saved views and CSV/Excel,
 and works in Charts and Reports like every other dataset. Editors, Analysts and Viewers can see them (Catalog page to change that).
 
 | Dataset | What's in it |
@@ -31,8 +40,6 @@ and works in Charts and Reports like every other dataset. Editors, Analysts and 
 | **Annual report pages** | every page's full text (filter on Full text to search) |
 | **Annual report sections** | sections with their text |
 | **Annual report tables** / **table cells** | every table, and every cell of it as printed |
-
-There's no dashboard tab for them yet: the Dashboard's five tabs are fixed pages.
 
 ## What's stored
 

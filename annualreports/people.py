@@ -19,7 +19,9 @@ HEADING_NAME = re.compile(rf"^(?:{HON}\s+)?{TOKEN}(?:\s+{TOKEN}){{1,4}}$")
 ROLE = re.compile(r"\b(?:chairman|chairperson|chair|director|chief|ceo|cfo|coo|cto|president|secretary|managing|executive|independent|"
                   r"non[- ]executive|deputy|vice|officer|head of|general manager|manager|founder|treasurer|board member|senior|group)\b", re.I)
 NOT_NAME = re.compile(r"\b(?:annual|report|board|company|plc|limited|ltd|committee|statement|directors?|management|group|bank|holdings|"
-                      r"policy|review|profile|governance|audit|risk|information|chairman|message|the|of|and|for|our)\b", re.I)
+                      r"policy|review|profile|governance|audit|risk|information|chairman|chairperson|chairwoman|message|the|of|and|for|our|"
+                      r"responsibilit\w*|duties|attendance|meetings?|members?|composition|remuneration|nomination|sustainability|"
+                      r"highlights|year|statement|corporate|financial|terms|reference|charter)\b", re.I)
 
 
 def norm(text: str) -> str:

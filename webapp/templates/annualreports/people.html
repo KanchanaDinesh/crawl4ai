@@ -1,0 +1,11 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}Annual reports: people{% endblock %}
+{% block tab %}
+<form class="filters" id="filters" method="get" action="{% url 'annualreports_people' %}" hx-get="{% url 'annualreports_people_rows' %}" hx-target="#list" hx-sync="this:replace" hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+  {% include "annualreports/_company_select.html" %}
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Name or role, e.g. chairman…" aria-label="Search people">
+</form>
+<div class="panel"><h3><span>People <small data-count>{{ count }}</small></span></h3><div id="list">{% include "annualreports/_people.html" %}</div>
+<div class="muted small">Names are taken only from the board and management pages, as printed. One person written two ways ("Mr. S. D. Amarasinghe", "Dr. Anush Amarasinghe") shows twice: matching them would be a guess.</div></div>
+{% endblock %}

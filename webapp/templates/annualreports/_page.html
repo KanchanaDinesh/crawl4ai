@@ -1,0 +1,13 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}{% if p %}
+<h2>{{ p.company|default:"(company not found)" }} {{ p.fiscal_year|default:"" }}: page {{ p.page_no }} of {{ p.page_count }}</h2>
+<div class="muted small">{{ p.title }} · {{ source }}{% if p.ocr_confidence %} (confidence {{ p.ocr_confidence|floatformat:0 }}%){% endif %}{% if p.note %} · {{ p.note }}{% endif %}</div>
+<p class="small">{% if prev %}<a href="#" hx-get="{% url 'annualreports_page' p.document_id prev %}" hx-target="#drawer-body">← page {{ prev }}</a>{% endif %}
+{% if next %}{% if prev %} · {% endif %}<a href="#" hx-get="{% url 'annualreports_page' p.document_id next %}" hx-target="#drawer-body">page {{ next }} →</a>{% endif %}
+· <a href="#" hx-get="{% url 'annualreports_report' p.document_id %}" hx-target="#drawer-body">the whole report</a></p>
+{% for t in p.tables %}<h4>Table {{ forloop.counter }}{% if t.title %}: {{ t.title }}{% endif %} <small class="muted">{{ t.statement_name }}{% if t.unit_text %} · {{ t.unit_text }}{% endif %}</small></h4>
+<div style="overflow-x:auto"><table class="plain small">{% for r in t.rows %}<tr>{% for c in r.cells %}{% if r.kind == "header" %}<th{% if not forloop.first %} class="num" style="white-space:nowrap"{% endif %}>{{ c }}</th>{% else %}<td{% if not forloop.first %} class="num" style="white-space:nowrap"{% elif r.kind == "text" %} style="font-weight:600; min-width:140px"{% else %} style="min-width:140px"{% endif %}>{{ c }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</table></div>
+{% endfor %}
+<h4>The page's text</h4>
+<div class="art-text" style="white-space:pre-wrap">{{ p.text }}</div>
+{% if p.ocr_text %}<h4>Read by OCR</h4><div class="art-text" style="white-space:pre-wrap">{{ p.ocr_text }}</div>{% endif %}
+{% endif %}

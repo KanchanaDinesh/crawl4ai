@@ -1,0 +1,24 @@
+{% load insights_ui %}{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}{% if d %}
+<h2>{{ d.company|default:"(company not found)" }} {{ d.fiscal_year|default:"" }}</h2>
+<div class="muted">{{ d.title }}{% if d.period_end %} · period ended {{ d.period_end|date:"j F Y" }}{% endif %}</div>
+<p class="small">{{ d.page_count|num }} pages · {{ d.tables|num }} tables · {{ d.figures|num }} key figures · {{ d.people|num }} people · {{ d.sections|num }} sections<br>
+<span class="muted">File: {{ d.paths|join:", "|default:d.file_name }}{% if d.pages_ocr %} · {{ d.pages_ocr }} page{{ d.pages_ocr|pluralize }} read by OCR{% endif %}{% if d.pages_needs_ocr %} · {{ d.pages_needs_ocr }} unreadable{% endif %}</span><br>
+<span class="muted">Linked to: {% if d.cse_symbol %}CSE share <b>{{ d.cse_symbol }}</b>{% endif %}{% if d.company_id %}{% if d.cse_symbol %}, {% endif %}company <b>{{ d.company_id }}</b>{% endif %}{% if not d.cse_symbol and not d.company_id %}nothing{% endif %} ({{ d.link_how }})</span></p>
+
+<h4>Key figures</h4>
+{% if figures %}<table class="plain small"><thead><tr><th>Figure</th><th class="num">As printed</th><th>Column</th><th class="num">Page</th></tr></thead><tbody>
+{% for k in figures %}<tr><td title="{{ k.label }}">{{ k.name }}</td><td class="num"><b>{{ k.value_text }}</b> {{ k.unit_text|default:"" }}</td><td class="muted">{{ k.column_header|default:"" }}<br>{{ k.statement_name }}</td>
+<td class="num"><a href="#" hx-get="{% url 'annualreports_page' d.id k.page_no %}" hx-target="#drawer-body">{{ k.page_no }}</a></td></tr>{% endfor %}</tbody></table>
+{% else %}<div class="muted small">None found: this report's statements don't use the usual names, or it has none (a governance or risk part). Its tables are still saved.</div>{% endif %}
+
+{% if statements %}<h4>Financial statements</h4><div class="small">{% for s in statements %}<div>{{ s.name }}: page{{ s.pages|length|pluralize }} {% for n in s.pages %}<a href="#" hx-get="{% url 'annualreports_page' d.id n %}" hx-target="#drawer-body">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endfor %}</div>{% endif %}
+
+<h4>People</h4>
+{% if d.people_list %}<table class="plain small"><tbody>{% for p in d.people_list %}<tr><td>{{ p.honorific|default:"" }} <b>{{ p.name }}</b></td><td class="muted">{{ p.roles|join:" / " }}</td><td class="num">{% for n in p.pages %}<a href="#" hx-get="{% url 'annualreports_page' d.id n %}" hx-target="#drawer-body">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+{% else %}<div class="muted small">No board or management names found in this one.</div>{% endif %}
+
+<h4>Sections</h4>
+{% if d.section_list %}<div class="small">{% for s in d.section_list %}<div class="art-more" role="button" tabindex="0" hx-get="{% url 'annualreports_page' d.id s.page_no %}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']"><span class="muted">p{{ s.page_no }}</span> {{ s.title }}</div>{% endfor %}</div>
+{% else %}<div class="muted small">No sections found.</div>{% endif %}
+<p class="small"><a href="#" hx-get="{% url 'annualreports_page' d.id 1 %}" hx-target="#drawer-body">Read it from page 1</a></p>
+{% endif %}

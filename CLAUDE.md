@@ -51,6 +51,7 @@ webapp/          the user platform (Django + HTMX): python -m webapp runserver 8
                  charts/ = chart builder, dashboards; reports/ = PDFs: dashboards and newsletters (sections of a dataset's latest rows), report templates for how they look (WeasyPrint needs Pango: brew install pango);
                  articles/ = the Articles page, reading what `python -m articles` saved;
                  foresight/ = the Foresight page, a thin view of what `python -m foresight` saved;
+                 annualreports/ = the Annual reports page (reports, full-text search, people), reading what `python -m annualreports` saved;
                  assistant/ = AI assistant (Claude sees the catalog, never rows; sqlcheck.py + login crawl4ai_agent; saved answers are views userdata.a_*)
 dashboard.sh     start/stop/status of the web app in the background (port 8060, log logs/webapp.log); never migrates by itself
 run_all.sh       run steps/profiles once, with per-tool locks and logs in logs/

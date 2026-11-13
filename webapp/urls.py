@@ -15,6 +15,7 @@ urlpatterns = [
     path("dashboard/", include("webapp.insights.urls")),
     path("foresight/", include("webapp.foresight.urls")),
     path("articles/", include("webapp.articles.urls")),
+    path("annual-reports/", include("webapp.annualreports.urls")),
     # pages of later phases: the menu items exist now, so rights can be set up front
     path("my-tables/", include("webapp.userdata.urls")),
     path("charts/", include("webapp.charts.urls")),

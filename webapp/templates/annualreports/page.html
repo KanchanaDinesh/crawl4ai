@@ -1,0 +1,23 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}Annual reports{% endblock %}
+{% block tab %}
+{% if not s %}
+<div class="panel"><div class="empty">No annual reports yet.<br>Put the PDFs in the <code>Anual reports</code> folder, run <code>uv run python -m annualreports run</code>, then refresh this page.</div></div>
+{% else %}
+{% include "insights/_kpis.html" %}
+<form class="filters" id="filters" method="get" action="{% url 'annualreports' %}" hx-get="{% url 'annualreports_rows' %}" hx-target="#list" hx-sync="this:replace" hx-trigger="change[target.type!=='search'], input[target.type==='search'] delay:300ms">
+  {% include "annualreports/_company_select.html" %}
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Company, title or file name…" aria-label="Search reports">
+</form>
+<div class="panel"><h3><span>Reports <small data-count>{{ count }}</small></span></h3><div id="list">{% include "annualreports/_reports.html" %}</div></div>
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin-top:14px">
+    <div class="panel"><h3>How to read the figures</h3>
+      <div class="small">Each figure is printed as the report prints it, with its unit: <b>5,537,934 Rs. '000</b> means Rs. 5,537,934 thousand.
+      Brackets are a loss. They come from the financial statements, the group's column for the report's own year. Open a report for its page numbers.</div>
+      <div class="muted small" style="margin-top:8px">A report that words a line differently has no figure for it here, but every table is saved whole: see <b>Search the pages</b>.</div></div>
+    <div class="panel"><h3>Where it comes from</h3><div class="small">The PDFs in the project's <code>Anual reports</code> folder, read on this computer by <code>python -m annualreports run</code>. Nothing is sent anywhere.{% if s.last_read %} Last read {{ s.last_read|slice:":10" }}.{% endif %}</div>
+      <div class="muted small" style="margin-top:8px">In the grid too: Datasets → Annual reports, Annual report key figures, … people, … pages, … table cells.</div></div>
+</div>
+{% endif %}
+{% endblock %}
