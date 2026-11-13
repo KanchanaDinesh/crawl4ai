@@ -71,11 +71,48 @@ def report(con, doc_id: int) -> dict | None:
         from annualreports.v_key_figures where document_id = %s""", [doc_id])
     d["people_list"] = _rows(con, """select name, honorific, roles, pages from annualreports.people where document_id = %s
         order by pages[1], name""", [doc_id])
-    d["section_list"] = _rows(con, """select section_no, title, page_no, page_to from annualreports.sections where document_id = %s
-        and level = (select min(level) from annualreports.sections where document_id = %s) order by section_no limit 80""", [doc_id, doc_id])
+    d["section_list"] = nav_sections(con, doc_id)
     d["statements"] = _rows(con, """select statement, array_agg(distinct page_no order by page_no) as pages from annualreports.tables
         where document_id = %s and statement is not null group by 1 order by min(page_no)""", [doc_id])
     return d
+
+
+def nav_sections(con, doc_id: int) -> list[dict]:
+    """The sections for the left-hand navigation: the top level only (a report can have hundreds of headings)."""
+    return _rows(con, """select section_no, title, page_no, page_to from annualreports.sections where document_id = %s
+        and level = (select min(level) from annualreports.sections where document_id = %s) order by section_no limit 400""", [doc_id, doc_id])
+
+
+def document(con, doc_id: int) -> dict | None:
+    """What every detail page needs about its report: names, page count, running headers (left out of the formatted text)."""
+    found = _rows(con, """select id, company, fiscal_year, title, page_count, running_headers, cse_symbol from annualreports.documents
+        where id = %s""", [doc_id])
+    return found[0] if found else None
+
+
+def _tables(con, doc_id: int, first: int, last: int) -> list[dict]:
+    tables = _rows(con, """select table_no, page_no, title, statement, method, columns, unit_text from annualreports.tables
+        where document_id = %s and page_no between %s and %s order by table_no""", [doc_id, first, last])
+    cells = _rows(con, """select table_no, row_no, kind, cells from annualreports.table_rows where document_id = %s
+        and table_no = any(%s) order by table_no, row_no""", [doc_id, [t["table_no"] for t in tables]])
+    for t in tables:
+        t["rows"] = [c for c in cells if c["table_no"] == t["table_no"]]
+    return tables
+
+
+def section(con, doc_id: int, section_no: int) -> dict | None:
+    """One section with its text, the tables on its pages, and the sections before and after it (any level)."""
+    found = _rows(con, """select section_no, title, level, page_no, page_to, source, text from annualreports.sections
+        where document_id = %s and section_no = %s""", [doc_id, section_no])
+    if not found:
+        return None
+    s = found[0]
+    s["tables"] = _tables(con, doc_id, s["page_no"], s["page_to"])
+    s["headings"] = [r[0] for r in con.execute("""select distinct unnest(headings) from annualreports.pages
+        where document_id = %s and page_no between %s and %s""", [doc_id, s["page_no"], s["page_to"]]).fetchall()]
+    s["prev"], s["next"] = (con.execute(f"""select section_no, title from annualreports.sections where document_id = %s and section_no {op} %s
+        order by section_no {order} limit 1""", [doc_id, section_no]).fetchone() for op, order in (("<", "desc"), (">", "asc")))
+    return s
 
 
 def search(con, words: str, company=None, limit=100, offset=0) -> dict:
@@ -96,20 +133,15 @@ def search(con, words: str, company=None, limit=100, offset=0) -> dict:
 
 
 def page(con, doc_id: int, page_no: int) -> dict | None:
-    found = _rows(con, """select p.document_id, p.page_no, p.text, p.ocr_text, p.text_source, p.ocr_confidence, p.note, p.headings, p.word_count,
-            d.company, d.fiscal_year, d.title, d.page_count
-        from annualreports.pages p join annualreports.documents d on d.id = p.document_id where p.document_id = %s and p.page_no = %s""",
-                  [doc_id, page_no])
+    found = _rows(con, """select p.document_id, p.page_no, p.text, p.ocr_text, p.text_source, p.ocr_confidence, p.note, p.headings, p.word_count
+        from annualreports.pages p where p.document_id = %s and p.page_no = %s""", [doc_id, page_no])
     if not found:
         return None
     row = found[0]
-    tables = _rows(con, """select table_no, title, statement, method, columns, unit_text from annualreports.tables
-        where document_id = %s and page_no = %s order by table_no""", [doc_id, page_no])
-    cells = _rows(con, """select table_no, row_no, kind, cells from annualreports.table_rows where document_id = %s
-        and table_no = any(%s) order by table_no, row_no""", [doc_id, [t["table_no"] for t in tables]])
-    for t in tables:
-        t["rows"] = [c for c in cells if c["table_no"] == t["table_no"]]
-    row["tables"] = tables
+    row["tables"] = _tables(con, doc_id, page_no, page_no)
+    row["section"] = (_rows(con, """select section_no, title from annualreports.sections where document_id = %s and page_no <= %s
+        and level = (select min(level) from annualreports.sections where document_id = %s) order by page_no desc, section_no desc limit 1""",
+                            [doc_id, page_no, doc_id]) or [None])[0]
     return row
 
 

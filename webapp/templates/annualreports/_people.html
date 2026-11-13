@@ -1,6 +1,6 @@
 {% load insights_ui %}{% for p in rows %}<div class="news-item">
   <div class="title">{{ p.honorific|default:"" }} {{ p.name }}{% if p.roles %} <span class="muted">· {{ p.roles|join:" / " }}</span>{% endif %}</div>
-  <div class="meta"><a href="#" hx-get="{% url 'annualreports_report' p.document_id %}" hx-target="#drawer-body">{{ p.company }} {{ p.fiscal_year|default:"" }}</a> · page{{ p.pages|length|pluralize }}
-  {% for n in p.pages %}<a href="#" hx-get="{% url 'annualreports_page' p.document_id n %}" hx-target="#drawer-body">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+  <div class="meta"><a href="{% url 'annualreports_report' p.document_id %}#people">{{ p.company }} {{ p.fiscal_year|default:"" }}</a> · page{{ p.pages|length|pluralize }}
+  {% for n in p.pages %}<a href="{% url 'annualreports_page' p.document_id n %}">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>
 </div>{% empty %}<div class="empty">No people match these filters.</div>{% endfor %}
 {% if more %}<button class="btn more" type="button" hx-get="{{ more }}" hx-target="this" hx-swap="outerHTML">Load more</button>{% endif %}

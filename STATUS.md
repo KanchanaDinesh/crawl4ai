@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-695 tests: 692 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
+697 tests: 694 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -595,6 +595,10 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
       page: tables cell by cell, then its text. Menu right for whoever has Datasets (`accounts.0012`), and it follows the rights of the
       dataset Annual reports. Migrated after a backup; checked in the browser on the real data (as test-admin), including at phone width,
       no console errors. Every view answers in under 0.1 s.
+    - **Detail pages instead of the side panel (Kanchana, 2026-11-13):** a report opens on its own page with a navigation column on the left
+      (overview, key figures, statements, people, go to page, sections); sections and pages are pages too, with the text formatted into
+      paragraphs, headings and lists (`annualreports/reflow.py`) and an "As printed" switch. Search results open the page with the words
+      marked. Checked in the browser; all 5,277 report, section and sample page views on the real data answer 200, none over 1 s.
     - Found while checking the page: "Chairperson's Responsibilities" had been taken for a person (a heading). Such words can't be names now;
       `READER_VERSION` 2, so a run reads every PDF again by itself: done on the Mac, people 106 -> 101.
     - Bug fixed in the catalog on the way: a column holding a list of numbers (`people.pages`, an `integer[]`) stopped `catalog_scan`

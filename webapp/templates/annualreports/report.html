@@ -1,0 +1,36 @@
+{% extends "insights/_shell.html" %}
+{% load insights_ui %}
+{% block title %}{{ doc.company|default:"Annual report" }} {{ doc.fiscal_year|default:"" }}{% endblock %}
+{% block tab %}{% if doc %}
+<div class="ar-detail">
+  {% include "annualreports/_nav.html" %}
+  <main class="ar-main">{% if d %}
+    <div class="panel">
+      <h2 class="ar-h">{{ d.company|default:"(company not found)" }} {{ d.fiscal_year|default:"" }}</h2>
+      <div class="muted">{{ d.title }}{% if d.period_end %} · period ended {{ d.period_end|date:"j F Y" }}{% endif %}</div>
+      <div class="kpis" style="margin-top:12px">
+        <div class="kpi"><b>{{ d.page_count|num }}</b><span>Pages</span></div><div class="kpi"><b>{{ d.sections|num }}</b><span>Sections</span></div>
+        <div class="kpi"><b>{{ d.tables|num }}</b><span>Tables</span></div><div class="kpi"><b>{{ d.figures|num }}</b><span>Key figures</span></div>
+        <div class="kpi"><b>{{ d.people|num }}</b><span>People</span></div>
+      </div>
+      <p class="small muted" style="margin:12px 0 0">File: {{ d.paths|join:", "|default:d.file_name }}{% if d.pages_ocr %} · {{ d.pages_ocr }} page{{ d.pages_ocr|pluralize }} read by OCR{% endif %}{% if d.pages_needs_ocr %} · {{ d.pages_needs_ocr }} unreadable{% endif %}<br>
+      Linked to: {% if d.cse_symbol %}CSE share <b>{{ d.cse_symbol }}</b>{% endif %}{% if d.company_id %}{% if d.cse_symbol %}, {% endif %}company <b>{{ d.company_id }}</b>{% endif %}{% if not d.cse_symbol and not d.company_id %}nothing{% endif %} <span>({{ d.link_how }})</span></p>
+    </div>
+
+    <div class="panel" id="figures"><h3>Key figures <small>as printed, with the page each is on</small></h3>
+    {% if figures %}<div style="overflow-x:auto"><table class="plain">
+      <thead><tr><th>Figure</th><th class="num">As printed</th><th>Unit</th><th>Column</th><th>From</th><th class="num">Page</th></tr></thead><tbody>
+      {% for k in figures %}<tr><td title="Printed as: {{ k.label }}">{{ k.name }}</td><td class="num"><b>{{ k.value_text }}</b></td><td>{{ k.unit_text|default:"" }}</td><td class="muted">{{ k.column_header|default:"" }}</td><td class="muted">{{ k.statement_name }}</td>
+      <td class="num"><a href="{% url 'annualreports_page' d.id k.page_no %}">{{ k.page_no }}</a></td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="muted">None found: this report's statements don't use the usual names, or it has none (a governance or risk part). Its tables are still all saved: open its pages or sections.</div>{% endif %}</div>
+
+    <div class="panel" id="statements"><h3>Financial statements</h3>
+    {% if statements %}<table class="plain"><tbody>{% for s in statements %}<tr><td>{{ s.name }}</td><td>{% for n in s.pages %}<a href="{% url 'annualreports_page' d.id n %}">page {{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<div class="muted">No statement pages recognised in this one.</div>{% endif %}</div>
+
+    <div class="panel" id="people"><h3>People <small>from the board and management pages, as printed</small></h3>
+    {% if d.people_list %}<table class="plain"><thead><tr><th>Name</th><th>Roles</th><th class="num">Pages</th></tr></thead><tbody>{% for p in d.people_list %}<tr><td>{{ p.honorific|default:"" }} <b>{{ p.name }}</b></td><td>{{ p.roles|join:" / " }}</td><td class="num">{% for n in p.pages %}<a href="{% url 'annualreports_page' d.id n %}">{{ n }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<div class="muted">No board or management names found in this one.</div>{% endif %}</div>
+  {% endif %}</main>
+</div>
+{% endif %}{% endblock %}

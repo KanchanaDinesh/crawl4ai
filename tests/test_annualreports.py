@@ -344,3 +344,23 @@ def test_a_sideways_page_keeps_its_text_but_no_cells(tmp_path, settings):
     page = build(path, settings)["pages"][0]
     assert "printed sideways" in page.note and not page.tables
     assert "Crane 3" in page.text                                                   # PDFium's text is still the right way round
+
+
+def test_text_is_reflowed_into_paragraphs_headings_and_lists():
+    from annualreports.reflow import blocks
+    text = ("6 BPPL HOLDINGS PLC | ANNUAL REPORT 2024/25\n"
+            "The monofilaments segment too performed in line with\nexpectations, recording an increase in sales to key\nmarkets.\n"
+            "Sales of monofilaments to India is being re-\nstrategized to focus on higher margin segments and a\nbetter recov-\nery of costs.\n"
+            "GROUP FINANCIAL PERFORMANCE\nA consolidated revenue of Rs. 5.9 billion was recorded\nfor the year.\n"
+            "– Profit before tax rose by $2.0bn to $32.3bn, including\na net favourable impact.\n– Revenue of $65.9bn was stable.\n"
+            "OUR ABILITY TO\nSTAND OUR GROUND, ADAPT AND THRIVE IN AN\nENVIRONMENT FRAUGHT WITH OBSTACLES IS A TESTAMENT\n12\n")
+    got = [(b["kind"], b["text"]) for b in blocks(text, ["Group financial performance"], {"# BPPL HOLDINGS PLC | ANNUAL REPORT #/#"})]
+    assert got == [
+        ("p", "The monofilaments segment too performed in line with expectations, recording an increase in sales to key markets."),
+        ("p", "Sales of monofilaments to India is being re-strategized to focus on higher margin segments and a better recovery of costs."),
+        ("h", "GROUP FINANCIAL PERFORMANCE"),
+        ("p", "A consolidated revenue of Rs. 5.9 billion was recorded for the year."),
+        ("li", "Profit before tax rose by $2.0bn to $32.3bn, including a net favourable impact."),
+        ("li", "Revenue of $65.9bn was stable."),
+        ("quote", "OUR ABILITY TO STAND OUR GROUND, ADAPT AND THRIVE IN AN ENVIRONMENT FRAUGHT WITH OBSTACLES IS A TESTAMENT"),
+    ]                                                                    # no running header, no page number "12"

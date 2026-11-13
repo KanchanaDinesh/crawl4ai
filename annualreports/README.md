@@ -21,10 +21,16 @@ To add reports: put the PDFs in `Anual reports/` and run `run`. A file that's al
 
 **Annual reports** in the side menu (http://localhost:8060/annual-reports/), three tabs:
 - **Reports:** every report with its headline figures as printed (revenue, profit before tax, profit for the year, total assets, EPS) and its
-  CSE share. Click one for its side panel: all key figures with the page each is on, the financial statements' pages, people, sections.
-  Any page number opens that page: its tables cell by cell, then its full text (OCR text apart), with the pages before and after.
+  CSE share. Click one to open its own page.
 - **Search the pages:** words on any page of any report, with the words marked. `"going concern"` for a phrase, `-tax` to leave a word out.
+  A result opens that page with the words marked there too.
 - **People:** directors and managers with their roles as printed, and the pages they're on.
+
+**A report's page** has its navigation on the left: Overview, Key figures, Financial statements, People, *Go to page*, and its sections.
+- **Overview:** all key figures with the page each is on, the statements' pages, the people.
+- **A section** reads from its heading to the next one; **a page** shows its tables cell by cell, then its text. The text is formatted
+  (`annualreports/reflow.py`): lines joined into paragraphs, headings, bullet lists, words split by a hyphen mended, running header and page
+  number left out, and lines that are table rows left out because they're in the table above. **As printed** shows the PDF's text exactly.
 
 It needs the menu right Annual reports (given to whoever has Datasets) and the right to see the dataset Annual reports.
 

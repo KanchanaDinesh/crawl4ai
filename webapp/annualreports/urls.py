@@ -7,6 +7,7 @@ urlpatterns = [
     path("rows/", views.rows_view, name="annualreports_rows"),
     path("report/<int:doc_id>/", views.report_view, name="annualreports_report"),
     path("report/<int:doc_id>/page/<int:page_no>/", views.page_text_view, name="annualreports_page"),
+    path("report/<int:doc_id>/section/<int:section_no>/", views.section_view, name="annualreports_section"),
     path("search/", views.search_view, name="annualreports_search"),
     path("search/rows/", views.hits_view, name="annualreports_hits"),
     path("people/", views.people_view, name="annualreports_people"),

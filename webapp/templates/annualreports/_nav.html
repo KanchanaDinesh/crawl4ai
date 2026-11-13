@@ -1,0 +1,15 @@
+<nav class="ar-nav panel" aria-label="This report">
+  <a href="{% url 'annualreports' %}" class="muted">← All reports</a>
+  <div class="ar-nav-title">{{ doc.company|default:"(company not found)" }}<br><span class="muted">{{ doc.fiscal_year|default:"" }} · {{ doc.page_count }} pages</span></div>
+  <h4>This report</h4>
+  <a href="{% url 'annualreports_report' doc.id %}"{% if here == "overview" %} class="on" aria-current="page"{% endif %}>Overview</a>
+  <a href="{% url 'annualreports_report' doc.id %}#figures">Key figures</a>
+  <a href="{% url 'annualreports_report' doc.id %}#statements">Financial statements</a>
+  <a href="{% url 'annualreports_report' doc.id %}#people">People</a>
+  <form method="get" action="{% url 'annualreports_report' doc.id %}" class="ar-go">
+    <label>Go to page <input type="number" name="page" min="1" max="{{ doc.page_count }}" value="{{ p.page_no|default:'' }}" aria-label="Page number"></label>
+    <button class="btn" type="submit">Go</button>
+  </form>
+  {% if nav_sections %}<h4>Sections</h4>
+  {% for s in nav_sections %}<a href="{% url 'annualreports_section' doc.id s.section_no %}"{% if here == s.here_key %} class="on"{% endif %} title="Pages {{ s.page_no }}–{{ s.page_to }}"><span class="muted">{{ s.page_no }}</span> {{ s.title }}</a>{% endfor %}{% endif %}
+</nav>

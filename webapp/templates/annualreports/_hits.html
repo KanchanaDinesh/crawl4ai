@@ -1,5 +1,5 @@
-{% load insights_ui %}{% for h in hits %}<div class="news-item click" role="button" tabindex="0" hx-get="{% url 'annualreports_page' h.document_id h.page_no %}" hx-target="#drawer-body" hx-trigger="click, keyup[key=='Enter']">
-  <div class="title">{{ h.company|default:"(company not found)" }} {{ h.fiscal_year|default:"" }} · page {{ h.page_no }}{% if h.headings %} · <span class="muted">{{ h.headings.0 }}</span>{% endif %}</div>
+{% load insights_ui %}{% for h in hits %}<div class="news-item">
+  <div class="title"><a href="{% url 'annualreports_page' h.document_id h.page_no %}?q={{ q|urlencode }}">{{ h.company|default:"(company not found)" }} {{ h.fiscal_year|default:"" }} · page {{ h.page_no }}</a>{% if h.headings %} · <span class="muted">{{ h.headings.0 }}</span>{% endif %}</div>
   <div class="sum">{{ h.snippet_html }}</div>
   <div class="meta">{{ h.title }}</div>
 </div>{% empty %}{% if searched %}<div class="empty">No page has all of those words.</div>{% else %}<div class="empty">Type words above to search the text of every page of every report.</div>{% endif %}{% endfor %}
