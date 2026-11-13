@@ -38,6 +38,8 @@ techintel/  worldnews/  markets/  vehicles/  companies/   one package per tool, 
                                                __init__.py (calls project_paths.apply_local_env()), __main__.py,
                                                cli.py, store.py, config/, README.md. Run: python -m <tool> <command>
 articles/        articles and blogs from the most valuable companies, tagged by service; schema articles, each article linked to its company. Text is for our own analysis, never republished
+annualreports/   the PDFs in "Anual reports/" (real spelling; git-ignored): every page's text, sections, tables as rows and cells, key figures,
+                 directors; schema annualreports, one document per file content (SHA-256). pdfplumber + pypdfium2, Tesseract OCR; offline
 foresight/       predictions: analysts/ has one file per section; forecasts are append-only and scored afterwards (docs/foresight-plan.md). Reads other tools with the read-only login, writes only to schema foresight
 scrapers/        older single-file scrapers (Sri Lankan news, products, IMDb, CSE) + common.py helpers
 warehouse/       PostgreSQL: postgres.py (connect, setup, migrate, check), schema/<schema>.sql, python -m warehouse;
@@ -61,7 +63,7 @@ data/  output/  logs/  .local/  .venv/       git-ignored
 
 - **Database: PostgreSQL** (since 2026-11-06; it replaced one DuckDB file per tool, which allowed only one
   program at a time). Database `crawl4ai` on the Mac's Homebrew PostgreSQL 18, one schema per tool: news, tech,
-  markets, vehicles, companies, scrapers, foresight, articles. Logins `crawl4ai` (writer), `crawl4ai_reader` (read-only, 30 s query
+  markets, vehicles, companies, scrapers, foresight, articles, annualreports. Logins `crawl4ai` (writer), `crawl4ai_reader` (read-only, 30 s query
   limit), `crawl4ai_app` (web app) and `crawl4ai_agent` (the AI's queries: read-only, collected data only); settings `CRAWL4AI_DATABASE_URL` / `CRAWL4AI_READER_URL` / `CRAWL4AI_ADMIN_URL` or `.local/database.env`.
   Each store opens a writer connection, runs `postgres.migrate` for its schema (only when the .sql file changed)
   and saves in short transactions; the dashboard tabs and CLIs read with the reader login. Placeholders are `%s`,

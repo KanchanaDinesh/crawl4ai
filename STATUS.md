@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-11. Update this file whenever something meaningful changes._
+_Last updated: 2026-11-13. Update this file whenever something meaningful changes._
 
 ## In one paragraph
 
@@ -16,7 +16,7 @@ A personal data-collection system on Kanchana's Mac (`/Volumes/MAC-DISK2/crawl4a
 Everything is saved in one PostgreSQL database, `crawl4ai` (one schema per tool; since 2026-11-06, before that
 DuckDB files), backed up by the `backup` step, and shown in a web app with sign-in (dashboard, grids). Collectors write
 while the web app and others read. It runs by hand (`./run_all.sh`) or on a schedule (`./schedule.sh recommended`).
-All 671 tests pass.
+685 tests: 682 pass (3 tech-intel tests fail while `techintel/config` has uncommitted edits: see Open issues).
 
 ## Parts and how to run them
 
@@ -27,6 +27,7 @@ Run every command from the project folder, after `source env.sh`.
 | Tech intel | Two parts: `uv run python -m techintel collect` (discover, qualify, enrich: fast, no browser) and `update` (profile, monitor, report: browser). `run` = both. `company` = company facts (social links, people, employees, GitHub). `quick` is the fast run; `watch` is the live listener | Working, but the browser crashes in Kanchana's Terminal runs (see Open issues). run_all.sh steps `tech_collect` + `tech_update`. **PostgreSQL** (schema `tech`, since 2026-11-06) |
 | World news | `uv run python -m worldnews run`, `check`, `list`, `add HOMEPAGE --name N --group CODE`, `analyze [--days N] [--group LK]` | Working. Groups: US, IN, LK (priority), then AU, CA, CN, GLOBAL, TECH, MARKETS, CRYPTO. Sources: `worldnews/config/sources.json`. **PostgreSQL** (schema `news`, since 2026-11-06) |
 | Articles | `uv run python -m articles run`, `show`, `stats`, `retag`, `companies`, `feeds`, `collect` | New 2026-11-07. Articles and blogs of the most valuable companies (US, GB, IN, AU, CA), tagged by service, linked to each company. Page at http://localhost:8060/articles/. **PostgreSQL** (schema `articles`) |
+| Annual reports | `uv run python -m annualreports run [--file X.pdf] [--dry-run] [--again]`, `show [--id N]`, `stats`, `search WORDS`, `link` | New 2026-11-13. Every PDF in `Anual reports/` (git-ignored) read completely: page text, sections, tables as rows and cells, key figures, directors; linked to `companies` / CSE shares by exact name. Offline, OCR with Tesseract. **PostgreSQL** (schema `annualreports`). run_all step `annualreports` |
 | Foresight | `uv run python -m foresight run`, `test`, `show`, `score` | New 2026-11-06, phases 1-3: Markets and World news, no AI, page at http://localhost:8060/foresight/ (administrators). News has no odds until about 20 November. Forecasts with odds, saved first and scored afterwards. On the past year StochRSI zones gave no edge. **PostgreSQL** (schema `foresight`) |
 | Markets | `uv run python -m markets run`, `check`, `show`, `history SYMBOL`; `closes` (daily closes + Stochastic RSI), `stochrsi [--class] [--zone]` | Working: 50 of 50 sources, 2s. Yahoo first; Stooq now shows a bot check, so only FX has a backup (open.er-api.com). CoinGecko first, CoinPaprika as backup. Stochastic RSI for the CSE and crypto (item 59), run_all step `markets_closes`. **PostgreSQL** (schema `markets`, since 2026-11-06) |
 | Vehicles | `uv run python -m vehicles run`, `show [--new] [--search X]`, `changes`, `sites` | Working: Kanchana confirmed 5 ads from ikman. Became its own module on 2026-11-02 (was `scrapers.vehicles`). **PostgreSQL** (schema `vehicles`, since 2026-11-06), with all the older history |
@@ -557,7 +558,42 @@ in the code but was never confirmed on the Mac. To turn off the jobs still insta
     - Tests start and stop a stand-in server through a fake `uv`. Checked on the Mac with the real app: it started in 5 s, /login/
       answered 200 and the pages 302 to sign in, then it was stopped again.
 
+67. **Annual reports, a new section (Kanchana, 2026-11-13).** `python -m annualreports run`, schema `annualreports`, run_all step `annualreports`
+    (in the default STEPS, before `catalog`). Reads every PDF in the project's `Anual reports/` folder (that spelling; the folder is git-ignored)
+    and keeps **everything**: each page's text as the PDF has it, sections, every table as rows and cells exactly as printed, key figures with
+    their page, directors and other named people. Details: `annualreports/README.md`.
+    - **Libraries:** pypdfium2 (Apache-2.0 / BSD-3) for text in reading order, pdfplumber (MIT) for word positions and ruled tables, Tesseract
+      (Apache-2.0, already on the Mac, English only) for pages without a text layer. OCR text is kept apart (`ocr_text`, with confidence);
+      a page OCR can't read is flagged (`needs_ocr`, `empty`), never filled in. **No Claude API**: the AI step stays last.
+    - **The 18 PDFs (2026-11-13):** 2,531 pages, all with a text layer except about 20 covers and picture pages. Sri Lanka: Access Engineering,
+      BPPL Holdings, Abans Electricals, Abans Finance, ACL Cables, Colombo Dockyard (all 2024/25, Dockyard 2024), the Ceylon Chamber of
+      Commerce 2023/24. HSBC Holdings plc 2024: the Annual Report and Accounts in 8 parts, the Form 20-F, Pillar 3, the glossary, and the
+      Strategic Report in English and Chinese.
+    - **Tables:** pdfplumber's own finder split and merged cells on the financial statements (they have no ruling lines), so ours reads
+      columns of numbers by position, with the lines above as headings ("Group 2025 Rs. '000"); a table carried on below a gap or onto the
+      next page takes those headings (`columns_from`). Note columns, footnote marks and pages printed sideways are handled.
+    - **Key figures** (`v_key_figures`) only from rows named exactly as usual on pages that say which statement they are, and only from
+      columns headed by a year / group / company / unit (so a segment column like "Commercial Banking" is never taken). Checked against the
+      PDFs: BPPL revenue Rs. 5,537,934,000, loss before tax Rs. 12,407,000; HSBC profit before tax $32,309m, total assets $3,017,048m.
+    - **Company and year** from the line repeated on every page ("BPPL HOLDINGS PLC | ANNUAL REPORT 2024/25"); settings can set them per
+      file. **Links** only on the exact same name: 6 Sri Lankan reports to their CSE share and `companies` row; HSBC by hand in settings
+      (`wikidata:Q190464`); the Chamber has none (not a company).
+    - **Safe to repeat:** an unchanged file is skipped in a second (SHA-256); the same PDF under two names is one document; a changed file
+      replaces its document in one transaction; a file removed from the folder keeps its data (`missing_since`).
+    - Read into the real database after a backup (`data/backups/crawl4ai-20261113-171335.dump`): **18 documents,
+      2,531 pages (1.34 million words; 22 read by OCR, 18 empty, none unreadable), 4,889 sections, 2,212 tables with 29,722 rows, 646 figures,
+      106 people, 17 of 18 linked.** The first full read takes ~5 minutes; a run with nothing new takes under a second.
+    - Not every figure is found: a report that words a row differently has none for it (e.g. no total assets for Access Engineering), and
+      its table is still saved whole. People are only taken from board/management pages; one person written two ways stays two rows.
+    - Fixed by hand in settings: the Chamber report (a member company's name repeats with "Annual Report 2023/24"), HSBC's link.
+    - **Open question for Kanchana:** may the PDFs' text go to the Claude API for better extraction (directors in running text, figures
+      worded differently)? Default no, as the AI step is last.
+
 ## Open issues and things to watch
+
+- **3 tech-intel tests fail with the uncommitted edits in `techintel/config/settings.json` and `fingerprints.json` (seen 2026-11-13):**
+  `test_domain_filter`, `test_certstream_parse`, `test_watch_queues_new_domains_and_quick_picks_them_up`. The new keyword list makes
+  e.g. grandmasbakery.com "interesting". Whoever owns those edits should update the tests or the lists before committing them.
 
 - **CoinGecko, for Kanchana to decide (found 2026-11-06, nothing changed).** Its API terms discourage storing data and bar deriving from it, except under conditions (refresh at least every 24 hours, strong encryption, delete on request). They also require a "Powered by CoinGecko" credit, and `api.coingecko.com/robots.txt` disallows `/api/v3`. `markets run` has stored its prices since 2026-11-03 and shows no credit. Options: add the credit and accept the risk for personal use, take a free key under their Demo plan and re-read the terms, or make CoinPaprika the main source (fewer calls allowed, but its `/v1/tickers` is one call for all coins).
 - **CoinPaprika's free plan is personal use only.** If the platform goes to colleagues, it needs a paid plan or another source.

@@ -1,0 +1,26 @@
+{
+  "folder": "Anual reports",
+  "ocr": {
+    "enabled": true,
+    "min_chars": 30,
+    "min_words": 3,
+    "dpi": 300,
+    "lang": "eng",
+    "timeout_seconds": 120
+  },
+  "tables": {
+    "ruled": true
+  },
+  "documents": {
+    "annual-report-2023-2024-18.pdf": {
+      "company": "The Ceylon Chamber of Commerce",
+      "why": "a member company's name is printed with 'Annual Report 2023/24' on 2 pages, so the automatic pick was wrong"
+    }
+  },
+  "links": {
+    "HSBC Holdings plc": {
+      "company_id": "wikidata:Q190464",
+      "why": "Wikidata's HSBC (Q190464, LSE: HSBA, hsbc.com) is HSBC Holdings plc; its name there is just 'HSBC'"
+    }
+  }
+}

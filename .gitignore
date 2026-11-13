@@ -21,3 +21,6 @@ venv/
 
 # Run logs (run_all.sh)
 logs/
+
+# Annual report PDFs Kanchana puts here (read by python -m annualreports); large, and not ours to publish
+Anual reports/

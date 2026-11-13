@@ -21,6 +21,7 @@ dependencies = [
     "anthropic>=2.4,<3",
     "sqlglot>=30,<31",
     "tinycss2>=1.5,<2",
+    "pdfplumber>=0.11,<0.12",
 ]
 
 [tool.uv]
